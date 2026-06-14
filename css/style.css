@@ -1,0 +1,345 @@
+/* ===========================================================
+   Blocky World — Creative Mode
+   A chunky, Minecraft-flavoured UI.
+   =========================================================== */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #87ceeb;
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+#game canvas { display: block; }
+
+/* ---------- Crosshair ---------- */
+#crosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 0 3px #000;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ---------- Vitals (health + food) ---------- */
+#vitals {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  pointer-events: none;
+}
+.bar-row {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+.pip {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ---------- Top buttons ---------- */
+#top-buttons {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 7;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.menu-btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  background: rgba(30, 30, 30, 0.7);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.menu-btn:active { background: rgba(80, 80, 80, 0.8); }
+
+/* ---------- Hand display ---------- */
+#hand-display {
+  position: fixed;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+#hand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 18px;
+}
+.swatch {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* ---------- Hotbar ---------- */
+#hotbar {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5px;
+  border-radius: 8px;
+}
+.slot {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  background: rgba(180, 180, 180, 0.25);
+  border: 3px solid rgba(40, 40, 40, 0.6);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 26px;
+}
+.slot.selected {
+  border-color: #fff;
+  box-shadow: 0 0 8px #fff;
+}
+.slot .count {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 13px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+}
+.slot .swatch {
+  width: 30px;
+  height: 30px;
+}
+
+/* ---------- On-screen controls ---------- */
+.ctrl-btn {
+  font: inherit;
+  font-weight: bold;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.55);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ctrl-btn:active { background: rgba(120, 120, 120, 0.7); }
+
+#move-controls {
+  position: fixed;
+  left: 14px;
+  bottom: 80px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#move-controls .turn { width: 64px; height: 64px; font-size: 30px; }
+#move-controls .fwd { width: 74px; height: 74px; font-size: 34px; }
+
+#action-controls {
+  position: fixed;
+  right: 14px;
+  bottom: 80px;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 8px;
+}
+#action-controls .ctrl-btn {
+  width: 86px;
+  height: 56px;
+  font-size: 15px;
+}
+#action-controls .jump { background: rgba(40, 90, 160, 0.65); }
+#action-controls .place { background: rgba(40, 130, 70, 0.65); }
+#action-controls .mine { background: rgba(150, 90, 30, 0.65); }
+#action-controls .eat { background: rgba(160, 40, 50, 0.65); }
+
+/* ---------- Toast message ---------- */
+#toast {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 15px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  max-width: 80%;
+  text-align: center;
+}
+#toast.show { opacity: 1; }
+
+/* ---------- Panels / overlays ---------- */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.panel-overlay.hidden { display: none; }
+
+.panel {
+  background: #c8c8c8;
+  color: #222;
+  border: 4px solid #555;
+  border-radius: 10px;
+  padding: 18px 22px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.panel h1 { margin: 0 0 4px; text-align: center; }
+.panel h2 { margin: 0 0 8px; text-align: center; }
+.panel .hint { text-align: center; color: #555; margin: 0 0 12px; font-size: 14px; }
+.panel .subtitle { text-align: center; color: #555; margin: 0 0 16px; }
+
+.big-btn {
+  font: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 12px 16px;
+  width: 100%;
+  margin: 6px 0;
+  background: #6a9a4a;
+  color: #fff;
+  border: 3px solid #3f5f2c;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.big-btn:hover { background: #79ab57; }
+.big-btn:active { background: #5a8a3c; }
+.close-btn { background: #888; border-color: #555; margin-top: 14px; }
+.close-btn:hover { background: #999; }
+
+/* ---------- Inventory grid ---------- */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.inv-grid .slot { width: 100%; height: 58px; }
+.inv-grid .slot .swatch { width: 32px; height: 32px; }
+
+/* ---------- Crafting ---------- */
+.recipe-list { display: flex; flex-direction: column; gap: 10px; }
+.recipe {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #e2e2e2;
+  border: 2px solid #999;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.recipe .result-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  flex: none;
+}
+.recipe .result-icon .swatch { width: 30px; height: 30px; }
+.recipe .recipe-info { flex: 1; }
+.recipe .recipe-info .r-name { font-weight: bold; }
+.recipe .recipe-info .r-cost { font-size: 13px; color: #555; }
+.recipe .craft-go {
+  font: inherit;
+  font-weight: bold;
+  padding: 10px 14px;
+  background: #6a9a4a;
+  color: #fff;
+  border: 2px solid #3f5f2c;
+  border-radius: 8px;
+  cursor: pointer;
+  flex: none;
+}
+.recipe .craft-go:disabled {
+  background: #aaa;
+  border-color: #888;
+  cursor: not-allowed;
+}
+
+/* ---------- Start & death panels ---------- */
+.start-panel { max-width: 600px; }
+.start-buttons { margin-bottom: 12px; }
+.instructions {
+  background: #e2e2e2;
+  border: 2px solid #999;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.instructions h3 { margin: 4px 0 8px; }
+.instructions ul { margin: 0; padding-left: 20px; }
+.instructions li { margin-bottom: 5px; font-size: 14px; line-height: 1.35; }
+
+.death-panel { max-width: 380px; text-align: center; }
+.death-panel h1 { color: #a01b1b; }
+.death-panel p { color: #333; margin-bottom: 14px; }
+
+/* Hide controls while a panel is open */
+body.menu-open #move-controls,
+body.menu-open #action-controls,
+body.menu-open #hand-display,
+body.menu-open #crosshair { display: none; }
