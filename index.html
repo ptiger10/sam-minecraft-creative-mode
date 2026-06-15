@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Blocky World — Creative Mode</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- The 3D world is rendered into this container -->
+  <div id="game"></div>
+
+  <!-- Crosshair in the middle of the screen -->
+  <div id="crosshair">+</div>
+
+  <!-- Health and food bars (top-left) -->
+  <div id="vitals">
+    <div class="bar-row" id="health-row" title="Health"></div>
+    <div class="bar-row" id="food-row" title="Food"></div>
+  </div>
+
+  <!-- Top-right menu buttons -->
+  <div id="top-buttons">
+    <button class="menu-btn" id="btn-inventory">🎒 Inventory</button>
+    <button class="menu-btn" id="btn-craft">🛠️ Craft</button>
+    <button class="menu-btn" id="btn-save">💾 Save</button>
+    <button class="menu-btn" id="btn-menu">☰ Menu</button>
+  </div>
+
+  <!-- What is currently in your hand -->
+  <div id="hand-display">
+    <span id="hand-icon"></span>
+    <span id="hand-name">Empty hand</span>
+  </div>
+
+  <!-- The hotbar along the bottom -->
+  <div id="hotbar"></div>
+
+  <!-- Movement controls (bottom-left) -->
+  <div id="move-controls">
+    <button class="ctrl-btn turn" id="btn-left" title="Turn left">⟲</button>
+    <button class="ctrl-btn fwd" id="btn-forward" title="Walk forward">⬆</button>
+    <button class="ctrl-btn turn" id="btn-right" title="Turn right">⟳</button>
+  </div>
+
+  <!-- Action controls (bottom-right) -->
+  <div id="action-controls">
+    <button class="ctrl-btn jump" id="btn-jump" title="Jump">⤒ Jump</button>
+    <button class="ctrl-btn place" id="btn-place" title="Place / Use">▣ Place</button>
+    <button class="ctrl-btn mine" id="btn-mine" title="Punch / Mine">⛏ Mine</button>
+    <button class="ctrl-btn eat" id="btn-eat" title="Eat an apple">🍎 Eat</button>
+  </div>
+
+  <!-- Floating message toast -->
+  <div id="toast"></div>
+
+  <!-- ============ Inventory panel ============ -->
+  <div class="panel-overlay hidden" id="inventory-panel">
+    <div class="panel">
+      <h2>🎒 Inventory</h2>
+      <p class="hint">Click an item to put it in your hand.</p>
+      <div class="inv-grid" id="inv-grid"></div>
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Crafting panel ============ -->
+  <div class="panel-overlay hidden" id="craft-panel">
+    <div class="panel">
+      <h2>🛠️ Crafting</h2>
+      <p class="hint" id="craft-hint">Some items need a Crafting Table nearby.</p>
+      <div class="recipe-list" id="recipe-list"></div>
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Start / Menu screen ============ -->
+  <div class="panel-overlay" id="start-panel">
+    <div class="panel start-panel">
+      <h1>⛏️ Blocky World</h1>
+      <p class="subtitle">A tiny creative-mode sandbox</p>
+      <div class="start-buttons">
+        <button class="big-btn" id="btn-new-forest">🌳 New World — Forest</button>
+        <button class="big-btn" id="btn-new-desert">🏜️ New World — Desert</button>
+        <button class="big-btn" id="btn-new-random">🎲 New World — Surprise me</button>
+        <button class="big-btn" id="btn-continue">▶️ Continue saved world</button>
+      </div>
+      <div class="instructions">
+        <h3>How to play</h3>
+        <ul>
+          <li><b>⬆ / ⟲ / ⟳</b> walk forward, turn left, turn right.</li>
+          <li><b>Jump</b> to hop up blocks. Drag the screen to look up &amp; down.</li>
+          <li>Pick an item from the hotbar — it goes <b>in your hand</b>.</li>
+          <li>Holding a <b>block</b>? Tap the world (or <b>Place</b>) to build.</li>
+          <li>Empty hand or pickaxe? Tap the world (or <b>Mine</b>) to break things.</li>
+          <li><b>Punch trees</b> for wood. Craft sticks, a table &amp; a pickaxe.</li>
+          <li>Stone &amp; ores need a <b>pickaxe</b>. Animals can't be hurt 🐷.</li>
+          <li>Eat 🍎 apples from apple trees so you don't starve!</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Death screen ============ -->
+  <div class="panel-overlay hidden" id="death-panel">
+    <div class="panel death-panel">
+      <h1>💀 You Died</h1>
+      <p id="death-reason">You ran out of health.</p>
+      <button class="big-btn" id="btn-respawn">Respawn</button>
+    </div>
+  </div>
+
+  <!-- Three.js (UMD build exposes a global "THREE"); vendored so it works offline -->
+  <script src="vendor/three.min.js"></script>
+  <!-- Game code -->
+  <script src="js/data.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

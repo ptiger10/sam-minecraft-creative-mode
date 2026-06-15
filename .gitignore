@@ -1,0 +1,7 @@
+# Generated test artifacts
+test/screenshot*.png
+
+# Editor / OS noise
+.DS_Store
+*.swp
+node_modules/
