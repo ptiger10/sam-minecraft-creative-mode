@@ -49,12 +49,17 @@ buttons **or** the keyboard.
 | Pick a hotbar slot | tap a slot | `1`–`9` |
 
 A quick **tap** on the world acts at the crosshair; **dragging** looks around.
+A small label by the crosshair always tells you what a tap will do to whatever
+you're pointing at. Tapping a **tree, leaves or an 🍎 apple always grabs/punches
+it** — even with a block in your hand — so you never "place" by accident. To
+**build**, tap the ground or press **Place** (which builds anywhere).
 
 ## ✨ What's in the game
 
 - 🌍 An open, fully blocky world you spawn into — **forest** or **desert**.
 - 👤 First-person view with a blocky character (you can see the item in your hand).
-- 🌳 **Punch trees** to collect wood. Apple trees grow red apples.
+- 🌳 **Punch trees** to collect wood. Apple trees dangle red apples down low —
+  aim the crosshair at one and tap to pick it (even with a block in your hand).
 - 🍎 **Health and food bars.** Food slowly drops over time — eat apples so you
   don't starve. If your food runs out you start losing health.
 - 🪨 **Fall damage:** jumping off something too tall hurts.

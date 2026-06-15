@@ -299,8 +299,17 @@
     }
   }
 
-  // A tap on the world is "use" when holding a block, otherwise "hit".
+  // A tap on the world acts on whatever the crosshair is pointing at.
+  // Trees, leaves, cactus and apples are *always* grabbed/punched — even with a
+  // block in your hand — so holding a block never turns "punch the tree" into an
+  // accidental "place". You build by tapping the ground (or with the Place
+  // button). Empty hand / pickaxe on anything else digs or mines.
   function doTap() {
+    const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
+    if (hit && Game.harvestOnTap(S.world.get(hit.block.x, hit.block.y, hit.block.z))) {
+      doHit();
+      return;
+    }
     const s = selectedSlot();
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) doUse();
     else doHit();
@@ -373,13 +382,55 @@
     return box;
   }
 
-  function updateHighlight() {
+  // Highlights the targeted block AND tells you, in plain words, what a tap will
+  // do to it ("tap to pick it up", "tap to place Dirt", "needs a pickaxe"…).
+  // This makes it obvious you must put the thing in your crosshair, and removes
+  // the "wait, am I placing or breaking?" confusion.
+  let lastLookText = "";
+  function updateTargeting() {
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
+    let text = "", color = 0x000000, opacity = 0.5;
+
     if (hit) {
       S.highlight.visible = true;
       S.highlight.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
+
+      const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
+      const def = Game.BlockDefs[id];
+      const sel = selectedSlot();
+      const holdingPlaceable = sel && Game.itemDef(sel.id) && Game.itemDef(sel.id).placeable;
+      const holdingPick = sel && sel.id === "pickaxe";
+      const name = def ? def.name : id;
+
+      if (Game.harvestOnTap(id)) {
+        if (id === "apple") {
+          text = "🍎 " + name + " — tap to pick it up!";
+          color = 0xffd23b; opacity = 0.95;          // glow gold so apples are easy to spot
+        } else {
+          text = name + " — tap to grab";
+          color = 0x9be36a; opacity = 0.9;           // leafy green for trees/plants
+        }
+      } else if (holdingPlaceable) {
+        text = "Tap to place " + Game.itemName(sel.id);
+        color = 0x3fae4a; opacity = 0.7;             // green = you'll build here
+      } else if (id === "crafting_table" && !holdingPick) {
+        text = "🛠️ " + name + " — tap to open";
+      } else if (def && def.tool === "pickaxe" && !holdingPick) {
+        text = name + " — needs a pickaxe ⛏️";
+      } else if (def) {
+        text = name + " — tap to " + (def.tool === "hand" ? "dig" : "mine");
+      }
     } else {
       S.highlight.visible = false;
+    }
+
+    S.highlight.material.color.setHex(color);
+    S.highlight.material.opacity = opacity;
+    if (text !== lastLookText) {
+      lastLookText = text;
+      const el = $("look-label");
+      el.textContent = text;
+      el.classList.toggle("show", !!text);
     }
   }
 
@@ -412,7 +463,7 @@
     if (!S.paused && !S.player.dead) {
       S.player.update(dt, S.input);
       S.world.updateAnimals(dt);
-      updateHighlight();
+      updateTargeting();
       renderVitals();
 
       // hand swing / bob

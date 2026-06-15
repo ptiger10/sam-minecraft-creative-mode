@@ -31,6 +31,40 @@ const errors = [];
 const checks = [];
 function check(name, cond) { checks.push({ name, ok: !!cond }); }
 
+// Simulate a quick tap at the crosshair (centre of the screen) — the same path
+// a real player's tap takes through #game's pointer handlers.
+function worldTap(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById("game");
+    const o = { clientX: Math.round(innerWidth / 2), clientY: Math.round(innerHeight / 2), bubbles: true };
+    el.dispatchEvent(new PointerEvent("pointerdown", o));
+    el.dispatchEvent(new PointerEvent("pointerup", o));
+  });
+}
+
+// Plant a block straight ahead of the player (looking along -Z) with a clear
+// path, then hand the player some dirt to hold. Returns where the ray hits.
+function aimAt(page, blockId) {
+  return page.evaluate((id) => {
+    const S = window.Game.S, W = S.world, p = S.player;
+    const key = (a, b, c) => a + "," + b + "," + c;
+    p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+    const eye = p.eyePosition(), dir = p.lookDir();
+    for (let i = 0; i <= 5; i++) {
+      W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+    }
+    const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+    W.blocks.set(key(bx, by, bz), id);
+    W.buildMeshes();
+    S.inv[0] = { id: "dirt", count: 5 };          // hold a placeable block
+    document.querySelectorAll("#hotbar .slot")[0].click();
+    const hit = W.raycast(eye, dir);
+    const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+    return { block: { x: bx, y: by, z: bz }, hit, place: hit ? hit.place : null,
+      dirt: count("dirt"), apples: count("apple") };
+  }, blockId);
+}
+
 const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
@@ -210,6 +244,40 @@ await page.click("#btn-respawn");
 await page.waitForTimeout(250);
 const resp = await page.evaluate(() => ({ dead: window.Game.S.player.dead, hp: window.Game.S.player.hp, food: window.Game.S.player.food }));
 check("respawn revives the player", resp.dead === false && resp.hp === 20 && resp.food === 20);
+
+// --- Tapping an apple grabs it even with a block in hand (no accidental place),
+//     and the crosshair label names what you're pointing at ---
+const appleAim = await aimAt(page, "apple");
+check("apple sits in the crosshair", appleAim.hit
+  && appleAim.hit.block.x === appleAim.block.x
+  && appleAim.hit.block.y === appleAim.block.y
+  && appleAim.hit.block.z === appleAim.block.z);
+await page.waitForTimeout(90);
+const lookText = await page.evaluate(() => document.getElementById("look-label").textContent);
+check("crosshair label names the apple", /apple/i.test(lookText));
+await worldTap(page);
+await page.waitForTimeout(90);
+const appleHit = await page.evaluate((cell) => {
+  const S = window.Game.S, W = S.world;
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  return { gone: W.blocks.get(cell.x + "," + cell.y + "," + cell.z) !== "apple",
+    apples: count("apple"), dirt: count("dirt") };
+}, appleAim.block);
+check("tapping an apple harvested it (did NOT place)", appleHit.gone);
+check("the tap gave +1 apple", appleHit.apples === appleAim.apples + 1);
+check("the held block was not used up", appleHit.dirt === appleAim.dirt);
+
+// --- ...but tapping a plain block while holding one still builds ---
+const buildAim = await aimAt(page, "stone");
+await worldTap(page);
+await page.waitForTimeout(90);
+const built = await page.evaluate((place) => {
+  const S = window.Game.S, W = S.world;
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  return { placed: W.blocks.get(place.x + "," + place.y + "," + place.z) === "dirt", dirt: count("dirt") };
+}, buildAim.place);
+check("tapping the ground/blocks still builds", built.placed);
+check("building used up one held block", built.dirt === buildAim.dirt - 1);
 
 await browser.close();
 server.close();

@@ -77,11 +77,11 @@ window.Game = window.Game || {};
     dirt:         { name: "Dirt",        all: 0x7d5a36, tool: "hand", drop: "dirt" },
     sand:         { name: "Sand",        all: 0xe3d8a3, tool: "hand", drop: "sand" },
     stone:        { name: "Stone",       all: 0x8a8a8d, tool: "pickaxe", drop: "stone" },
-    wood:         { name: "Wood",        top: 0x9c7a48, side: 0x6f5230, bottom: 0x9c7a48, tool: "hand", drop: "wood" },
+    wood:         { name: "Wood",        top: 0x9c7a48, side: 0x6f5230, bottom: 0x9c7a48, tool: "hand", drop: "wood", harvestOnTap: true },
     planks:       { name: "Wood Planks", all: 0xb18a4f, tool: "hand", drop: "planks" },
-    leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: null },
-    cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus" },
-    apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple" },
+    leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: null, harvestOnTap: true },
+    cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
+    apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     crafting_table:{ name: "Crafting Table", top: 0xa06a32, side: 0x8a5a2c, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
     coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal_ore" },
     iron_ore:     { name: "Iron Ore",    all: 0xb9846a, base: 0x8a8a8d, tool: "pickaxe", drop: "iron_ore" },
@@ -120,6 +120,12 @@ window.Game = window.Game || {};
 
   Game.BlockDefs = B;
   Game.isBlock = (id) => Object.prototype.hasOwnProperty.call(B, id);
+  // "Natural" blocks (trees, leaves, cactus, apples) that a tap always
+  // grabs/punches — even when you're holding a block. Intent is read from what
+  // you're pointing at, so a block in your hand never turns a "punch the tree"
+  // into an accidental "place a block in front of it". You build by tapping the
+  // ground / your own structures, or with the Place button.
+  Game.harvestOnTap = (id) => !!(B[id] && B[id].harvestOnTap);
 
   // ---- Item definitions (blocks + non-block items) ----------------
   // Non-block items: stick, pickaxe, and the food apple item.

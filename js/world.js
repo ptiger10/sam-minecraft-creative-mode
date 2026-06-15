@@ -150,15 +150,33 @@
           if (dist > 3) continue;
           const lx = x + dx, ly = top + dy, lz = z + dz;
           if (this.occupied(lx, ly, lz)) continue; // don't overwrite the trunk
-          // Sprinkle apples on the edge of apple-tree canopies.
+          // Sprinkle apples on the edge of apple-tree canopies — more of them on
+          // the lower edge (dy < 0) so they're easier to see and reach.
           let id = "leaves";
-          if (apple && dist >= 2 && Game.hash(this.seed, lx, ly, lz) < 0.28) id = "apple";
+          if (apple && dist >= 2) {
+            const chance = dy < 0 ? 0.5 : 0.28;
+            if (Game.hash(this.seed, lx, ly, lz) < chance) id = "apple";
+          }
           this.blocks.set(World.key(lx, ly, lz), id);
         }
       }
     }
     // a leaf cap on top
     if (!this.occupied(x, top + 1, z)) this.blocks.set(World.key(x, top + 1, z), "leaves");
+
+    // Apple trees also dangle a few apples low around the trunk (about eye
+    // level) so even little explorers can reach one without climbing.
+    if (apple) {
+      const hangY = top - 2;
+      const ring = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (let i = 0; i < ring.length; i++) {
+        const ax = x + ring[i][0], az = z + ring[i][1];
+        if (this.occupied(ax, hangY, az)) continue;
+        if (Game.hash(this.seed ^ 0x5a17, ax, hangY, az) < 0.55) {
+          this.blocks.set(World.key(ax, hangY, az), "apple");
+        }
+      }
+    }
   };
 
   // ---- Editing ---------------------------------------------------
