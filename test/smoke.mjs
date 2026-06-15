@@ -48,7 +48,8 @@ const info = await page.evaluate(() => {
   const S = window.Game.S;
   return {
     running: S.running, biome: S.world.biome, blockCount: S.world.blocks.size,
-    meshTypes: Object.keys(S.world.meshes).length, animals: S.world.animals.length,
+    meshTypes: (() => { const t = new Set(); S.world.meshChunks.forEach((m) => Object.keys(m).forEach((id) => t.add(id))); return t.size; })(),
+    animals: S.world.animals.length,
     hp: S.player.hp, food: S.player.food,
     spawnStuck: S.player.collides(S.player.pos.x, S.player.pos.y, S.player.pos.z)
   };
