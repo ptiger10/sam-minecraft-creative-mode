@@ -1,0 +1,11 @@
+{
+  "name": "Blocky World — Creative Mode",
+  "short_name": "Blocky World",
+  "description": "A tiny creative-mode blocky sandbox you play in the browser.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#87ceeb",
+  "theme_color": "#87ceeb"
+}

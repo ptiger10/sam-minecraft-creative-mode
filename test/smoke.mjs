@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(join(process.env.PW_ROOT, "playwright"));
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 
 const server = createServer(async (req, res) => {
   try {

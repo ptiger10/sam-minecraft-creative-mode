@@ -31,6 +31,13 @@ npx serve
 Everything (Three.js included) is bundled in this folder, so it works
 completely offline.
 
+**On an iPhone/iPad:** play in **landscape**. For a true full-screen game with
+**no Safari address bar or bottom toolbar**, open the page in Safari, tap
+**Share → Add to Home Screen**, then launch it from the new icon — it runs
+edge-to-edge with the on-screen controls kept clear of the notch and home
+indicator. (A normal Safari tab can't hide its toolbar; only Home-Screen apps
+can.)
+
 ## 🎮 Controls
 
 On a phone/tablet use the on-screen buttons. On a computer you can use the
