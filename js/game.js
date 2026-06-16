@@ -195,14 +195,23 @@
   // ===============================================================
   //  Eating
   // ===============================================================
-  function eatApple() {
-    if (countItem("apple") <= 0) { toast("No apples to eat. Find an apple tree!"); return; }
+  function eatFood() {
+    // Eat the held item if it's food; otherwise eat the first food we're carrying.
+    const sel = selectedSlot();
+    let id = sel && Game.itemDef(sel.id) && Game.itemDef(sel.id).food ? sel.id : null;
+    if (!id) {
+      for (const s of S.inv) {
+        if (s && Game.itemDef(s.id) && Game.itemDef(s.id).food) { id = s.id; break; }
+      }
+    }
+    if (!id) { toast("No food to eat. Find apples or watermelon!"); return; }
     if (S.player.food >= C.MAX_FOOD) { toast("You're full!"); return; }
-    removeItems({ apple: 1 });
-    S.player.eat(Game.ItemDefs.apple.food);
+    removeItems({ [id]: 1 });
+    S.player.eat(Game.itemDef(id).food);
     renderHotbar();
     updateHand();
-    toast("Yum! 🍎");
+    setViewmodel(selectedSlot() ? selectedSlot().id : null);
+    toast("Yum! " + (Game.itemDef(id).emoji || "😋"));
   }
 
   // ===============================================================
@@ -299,8 +308,17 @@
     }
   }
 
-  // A tap on the world is "use" when holding a block, otherwise "hit".
+  // A tap on the world acts on whatever the crosshair is pointing at.
+  // Trees, leaves, cactus and apples are *always* grabbed/punched — even with a
+  // block in your hand — so holding a block never turns "punch the tree" into an
+  // accidental "place". You build by tapping the ground (or with the Place
+  // button). Empty hand / pickaxe on anything else digs or mines.
   function doTap() {
+    const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
+    if (hit && Game.harvestOnTap(S.world.get(hit.block.x, hit.block.y, hit.block.z))) {
+      doHit();
+      return;
+    }
     const s = selectedSlot();
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) doUse();
     else doHit();
@@ -373,14 +391,22 @@
     return box;
   }
 
-  function updateHighlight() {
+  // Outlines the block under the crosshair. The outline is tinted so ripe food
+  // (apples, watermelons) and plants stand out — but nothing is written on the
+  // screen, so the view stays clean.
+  function updateTargeting() {
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
-    if (hit) {
-      S.highlight.visible = true;
-      S.highlight.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
-    } else {
-      S.highlight.visible = false;
-    }
+    if (!hit) { S.highlight.visible = false; return; }
+
+    S.highlight.visible = true;
+    S.highlight.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
+
+    const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
+    let color = 0x000000, opacity = 0.5;
+    if (id === "apple" || id === "watermelon") { color = 0xffd23b; opacity = 0.95; }
+    else if (Game.harvestOnTap(id)) { color = 0x9be36a; opacity = 0.85; }
+    S.highlight.material.color.setHex(color);
+    S.highlight.material.opacity = opacity;
   }
 
   // ===============================================================
@@ -412,7 +438,7 @@
     if (!S.paused && !S.player.dead) {
       S.player.update(dt, S.input);
       S.world.updateAnimals(dt);
-      updateHighlight();
+      updateTargeting();
       renderVitals();
 
       // hand swing / bob
@@ -485,6 +511,7 @@
     updateHand();
     renderVitals();
     setViewmodel(selectedSlot() ? selectedSlot().id : null);
+    onResize(); // make sure the canvas matches the current screen/orientation
 
     S.paused = false;
     document.body.classList.remove("menu-open");
@@ -498,9 +525,19 @@
     if (!restore) toast("Punch a tree to get wood! 🌳");
   }
 
+  // A genuinely random 32-bit number (crypto-backed when available, so the
+  // "Surprise me" button is truly random rather than a predictable pattern).
+  function randomSeed() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      return window.crypto.getRandomValues(new Uint32Array(1))[0] >>> 0;
+    }
+    return (Math.random() * 0xffffffff) >>> 0;
+  }
+
   function newWorld(biome) {
-    if (biome === "random") biome = Math.random() < 0.5 ? "forest" : "desert";
-    const seed = (Math.random() * 0xffffffff) >>> 0;
+    // "Surprise me" rolls a fresh biome AND a fresh seed every single time.
+    if (biome === "random") biome = (randomSeed() & 1) ? "forest" : "desert";
+    const seed = randomSeed();
     const world = new Game.World(null, seed, biome);
     world.generate();
     startWorld(world, null);
@@ -586,13 +623,11 @@
 
   function wireControls() {
     holdButton($("btn-forward"), "forward");
-    holdButton($("btn-left"), "turnLeft");
-    holdButton($("btn-right"), "turnRight");
     holdButton($("btn-jump"), "jump");
 
     tapButton($("btn-place"), doUse);
     tapButton($("btn-mine"), doHit);
-    tapButton($("btn-eat"), eatApple);
+    tapButton($("btn-eat"), eatFood);
 
     // Top buttons
     tapButton($("btn-inventory"), () => { renderInventory(); showPanel("inventory-panel"); });
@@ -617,6 +652,9 @@
     wirePointerLook();
     wireKeyboard();
     window.addEventListener("resize", onResize);
+    // Some mobile browsers report stale sizes right when orientation flips, so
+    // resize again a moment later.
+    window.addEventListener("orientationchange", () => { onResize(); setTimeout(onResize, 200); });
     window.addEventListener("pagehide", () => { if (S.running) saveGame(true); });
   }
 
@@ -649,7 +687,7 @@
       ArrowRight: "turnRight", KeyD: "turnRight", Space: "jump" };
     window.addEventListener("keydown", (e) => {
       if (map[e.code]) { S.input[map[e.code]] = true; e.preventDefault(); }
-      if (e.code === "KeyE") eatApple();
+      if (e.code === "KeyE") eatFood();
       if (e.code === "KeyQ") doHit();
       if (e.code === "KeyF") doUse();
       if (e.code >= "Digit1" && e.code <= "Digit9") selectSlot(+e.code.slice(5) - 1);
@@ -657,11 +695,16 @@
     window.addEventListener("keyup", (e) => { if (map[e.code]) { S.input[map[e.code]] = false; e.preventDefault(); } });
   }
 
+  // Keep the canvas filling the screen in any orientation. This must resize the
+  // renderer even before a world (and camera) exists — otherwise rotating the
+  // device on the title screen leaves the canvas at its old size and half the
+  // screen shows the page background.
   function onResize() {
-    if (!S.camera) return;
-    S.camera.aspect = window.innerWidth / window.innerHeight;
-    S.camera.updateProjectionMatrix();
-    S.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (S.renderer) S.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (S.camera) {
+      S.camera.aspect = window.innerWidth / window.innerHeight;
+      S.camera.updateProjectionMatrix();
+    }
   }
 
   function refreshStartPanel() {

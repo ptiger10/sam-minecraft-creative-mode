@@ -31,6 +31,40 @@ const errors = [];
 const checks = [];
 function check(name, cond) { checks.push({ name, ok: !!cond }); }
 
+// Simulate a quick tap at the crosshair (centre of the screen) — the same path
+// a real player's tap takes through #game's pointer handlers.
+function worldTap(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById("game");
+    const o = { clientX: Math.round(innerWidth / 2), clientY: Math.round(innerHeight / 2), bubbles: true };
+    el.dispatchEvent(new PointerEvent("pointerdown", o));
+    el.dispatchEvent(new PointerEvent("pointerup", o));
+  });
+}
+
+// Plant a block straight ahead of the player (looking along -Z) with a clear
+// path, then hand the player some dirt to hold. Returns where the ray hits.
+function aimAt(page, blockId) {
+  return page.evaluate((id) => {
+    const S = window.Game.S, W = S.world, p = S.player;
+    const key = (a, b, c) => a + "," + b + "," + c;
+    p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+    const eye = p.eyePosition(), dir = p.lookDir();
+    for (let i = 0; i <= 5; i++) {
+      W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+    }
+    const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+    W.blocks.set(key(bx, by, bz), id);
+    W.buildMeshes();
+    S.inv[0] = { id: "dirt", count: 5 };          // hold a placeable block
+    document.querySelectorAll("#hotbar .slot")[0].click();
+    const hit = W.raycast(eye, dir);
+    const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+    return { block: { x: bx, y: by, z: bz }, hit, place: hit ? hit.place : null,
+      dirt: count("dirt"), apples: count("apple") };
+  }, blockId);
+}
+
 const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
@@ -45,11 +79,16 @@ await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, {
 await page.waitForTimeout(400);
 
 const info = await page.evaluate(() => {
-  const S = window.Game.S;
+  const S = window.Game.S, G = window.Game;
+  let melonOnGround = false;
+  for (const id of S.world.blocks.values()) { if (id === "watermelon") { melonOnGround = true; break; } }
   return {
     running: S.running, biome: S.world.biome, blockCount: S.world.blocks.size,
     meshTypes: (() => { const t = new Set(); S.world.meshChunks.forEach((m) => Object.keys(m).forEach((id) => t.add(id))); return t.size; })(),
     animals: S.world.animals.length,
+    animalKinds: S.world.animals.map((a) => a.userData.kind),
+    melonOnGround, melonEdible: !!(G.ItemDefs.watermelon && G.ItemDefs.watermelon.food),
+    melonHarvest: G.harvestOnTap("watermelon"),
     hp: S.player.hp, food: S.player.food,
     spawnStuck: S.player.collides(S.player.pos.x, S.player.pos.y, S.player.pos.z)
   };
@@ -58,6 +97,11 @@ check("world running", info.running);
 check("world has many blocks", info.blockCount > 1000);
 check("multiple block types rendered", info.meshTypes >= 3);
 check("animals spawned", info.animals > 0);
+check("monkeys swing in the forest", info.animalKinds.includes("monkey"));
+check("ground animals walk around too", info.animalKinds.some((k) => k && k !== "monkey"));
+check("watermelons grow on the ground", info.melonOnGround);
+check("watermelon is edible", info.melonEdible);
+check("watermelon is grabbed on tap", info.melonHarvest);
 check("player NOT stuck at spawn", info.spawnStuck === false);
 check("full health", info.hp === 20);
 check("full food", info.food === 20);
@@ -131,6 +175,19 @@ const eat = await page.evaluate(async () => {
 });
 check("eating an apple restored food", eat.food > 10);
 check("an apple was consumed", eat.applesLeft === 1);
+
+// --- Watermelon is a placeable block you can also eat ---
+const eatMelon = await page.evaluate(async () => {
+  const S = window.Game.S;
+  S.player.food = 8;
+  S.inv[5] = { id: "watermelon", count: 2 };
+  document.querySelectorAll("#hotbar .slot")[5].click(); // hold the melon
+  document.getElementById("btn-eat").click();
+  await new Promise((r) => setTimeout(r, 30));
+  return { food: S.player.food, melonLeft: S.inv[5] ? S.inv[5].count : 0 };
+});
+check("eating a watermelon restored food", eatMelon.food > 8);
+check("a watermelon was consumed", eatMelon.melonLeft === 1);
 
 // --- Saving ---
 const save = await page.evaluate(async () => {
@@ -211,6 +268,70 @@ await page.click("#btn-respawn");
 await page.waitForTimeout(250);
 const resp = await page.evaluate(() => ({ dead: window.Game.S.player.dead, hp: window.Game.S.player.hp, food: window.Game.S.player.food }));
 check("respawn revives the player", resp.dead === false && resp.hp === 20 && resp.food === 20);
+
+// --- Tapping an apple grabs it even with a block in hand (no accidental place),
+//     and the crosshair label names what you're pointing at ---
+const appleAim = await aimAt(page, "apple");
+check("apple sits in the crosshair", appleAim.hit
+  && appleAim.hit.block.x === appleAim.block.x
+  && appleAim.hit.block.y === appleAim.block.y
+  && appleAim.hit.block.z === appleAim.block.z);
+await page.waitForTimeout(50);
+await worldTap(page);
+await page.waitForTimeout(90);
+const appleHit = await page.evaluate((cell) => {
+  const S = window.Game.S, W = S.world;
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  return { gone: W.blocks.get(cell.x + "," + cell.y + "," + cell.z) !== "apple",
+    apples: count("apple"), dirt: count("dirt") };
+}, appleAim.block);
+check("tapping an apple harvested it (did NOT place)", appleHit.gone);
+check("the tap gave +1 apple", appleHit.apples === appleAim.apples + 1);
+check("the held block was not used up", appleHit.dirt === appleAim.dirt);
+
+// --- ...but tapping a plain block while holding one still builds ---
+const buildAim = await aimAt(page, "stone");
+await worldTap(page);
+await page.waitForTimeout(90);
+const built = await page.evaluate((place) => {
+  const S = window.Game.S, W = S.world;
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  return { placed: W.blocks.get(place.x + "," + place.y + "," + place.z) === "dirt", dirt: count("dirt") };
+}, buildAim.place);
+check("tapping the ground/blocks still builds", built.placed);
+check("building used up one held block", built.dirt === buildAim.dirt - 1);
+
+// --- Diamond ore can be mined with a pickaxe ---
+const diamondAim = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  const eye = p.eyePosition(), dir = p.lookDir();
+  for (let i = 0; i <= 5; i++) {
+    W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+  }
+  const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+  W.blocks.set(key(bx, by, bz), "diamond_ore");
+  W.buildMeshes();
+  S.inv[0] = { id: "pickaxe", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  const hit = W.raycast(eye, dir);
+  const diamonds = S.inv.reduce((n, s) => n + (s && s.id === "diamond_ore" ? s.count : 0), 0);
+  return { block: { x: bx, y: by, z: bz }, hit, diamonds };
+});
+check("diamond ore sits in the crosshair", diamondAim.hit
+  && diamondAim.hit.block.x === diamondAim.block.x
+  && diamondAim.hit.block.y === diamondAim.block.y
+  && diamondAim.hit.block.z === diamondAim.block.z);
+await page.evaluate(() => document.getElementById("btn-mine").click());
+await page.waitForTimeout(60);
+const diamondMined = await page.evaluate((cell) => {
+  const S = window.Game.S, W = S.world;
+  return { gone: W.blocks.get(cell.x + "," + cell.y + "," + cell.z) !== "diamond_ore",
+    diamonds: S.inv.reduce((n, s) => n + (s && s.id === "diamond_ore" ? s.count : 0), 0) };
+}, diamondAim.block);
+check("a pickaxe mines diamond ore", diamondMined.gone);
+check("mining diamond ore drops a diamond", diamondMined.diamonds === diamondAim.diamonds + 1);
 
 await browser.close();
 server.close();
