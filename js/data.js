@@ -23,6 +23,7 @@ window.Game = window.Game || {};
     GRAVITY: 26,      // blocks / s^2
     JUMP_V: 8.4,      // jump velocity
     MOVE_SPEED: 4.3,  // walking speed (blocks / s)
+    CLIMB_SPEED: 3.4, // up/down speed while on a ladder (blocks / s)
     TURN_SPEED: 1.9,  // turn speed (radians / s)
     FALL_SAFE: 3,     // falls shorter than this do no damage
     MAX_HP: 20,

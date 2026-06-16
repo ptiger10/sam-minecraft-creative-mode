@@ -47,6 +47,7 @@ buttons **or** the keyboard.
 | --- | --- | --- |
 | Walk forward | ⬆ | `W` / `↑` |
 | Jump | ⤒ (right next to ⬆) | `Space` |
+| Climb a ladder | face it &amp; hold ⬆ (or ⤒) | `W` / `Space` |
 | Look around / turn | drag the screen | `A` `D` / `←` `→` |
 | Place / Use | **Place** (or tap the world) | `F` |
 | Punch / Mine | **Mine** (or tap the world) | `Q` |
@@ -88,7 +89,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - **Wooden Pickaxe** = 3 wood across the top + 2 sticks down the middle *(3×3
     table only — place a table and tap it)*
   - **Stone Pickaxe** = the same shape with 3 stone across the top
-  - **Ladder** (×3) = sticks down both sides + one in the middle (an H shape)
+  - **Ladder** (×3) = sticks down both sides + one in the middle (an H shape).
+    Place ladders up a wall, then **face one and hold forward (or jump)** to
+    climb; let go to slide back down. Ladders never cause fall damage.
 - 💾 **Save your progress** to the browser's local storage with the Save button
   (it also autosaves every 30 seconds). Press **Continue** on the title screen
   to come back to your world later.

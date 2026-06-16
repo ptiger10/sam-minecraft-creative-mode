@@ -374,6 +374,30 @@ const diamondMined = await page.evaluate((cell) => {
 check("a pickaxe mines diamond ore", diamondMined.gone);
 check("mining diamond ore drops a diamond", diamondMined.diamonds === diamondAim.diamonds + 1);
 
+// --- Ladders: stand at the foot of a ladder, hold forward, and climb up ---
+const climb = await page.evaluate(async () => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  const bx = 5, bz = 5;
+  // Clear the ladder column and the player's own column beside it.
+  for (let y = 1; y <= 12; y++) { W.blocks.delete(key(bx, y, bz)); W.blocks.delete(key(bx, y, bz + 1)); }
+  W.blocks.set(key(bx, 0, bz + 1), "stone");          // floor to start on
+  for (let y = 1; y <= 10; y++) W.blocks.set(key(bx, y, bz), "ladder"); // the ladder
+  W.buildMeshes();
+  p.pos.set(bx + 0.5, 1, bz + 1.5);
+  p.yaw = 0; p.pitch = 0; p.vel.set(0, 0, 0); p.onGround = true; p.fallPeak = 1; p.hp = 20;
+  p.syncCamera();
+  const startY = p.pos.y;
+  const front = p.ladderInFront();
+  S.input.forward = true;
+  await new Promise((r) => setTimeout(r, 600));
+  S.input.forward = false;
+  return { front, startY, climbedY: p.pos.y, hp: p.hp };
+});
+check("a ladder is detected in front of you", climb.front === true);
+check("holding forward climbs the ladder", climb.climbedY > climb.startY + 1);
+check("climbing causes no fall damage", climb.hp === 20);
+
 await browser.close();
 server.close();
 
