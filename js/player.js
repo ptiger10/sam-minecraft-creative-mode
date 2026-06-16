@@ -135,9 +135,9 @@
 
   // ---- Health & food --------------------------------------------
   Player.prototype.updateVitals = function (dt) {
-    // Hunger slowly drains over time.
+    // Hunger slowly drains over time (gently — a quarter of the old rate).
     this.foodTimer += dt;
-    if (this.foodTimer >= 6) {
+    if (this.foodTimer >= C.FOOD_DRAIN) {
       this.foodTimer = 0;
       if (this.food > 0) this.food -= 1;
     }

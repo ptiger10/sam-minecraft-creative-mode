@@ -39,20 +39,18 @@ buttons **or** the keyboard.
 | Action | On-screen | Keyboard |
 | --- | --- | --- |
 | Walk forward | ⬆ | `W` / `↑` |
-| Turn left | ⟲ | `A` / `←` |
-| Turn right | ⟳ | `D` / `→` |
-| Jump | **Jump** | `Space` |
-| Look up / down | drag the screen | drag the screen |
+| Jump | ⤒ (right next to ⬆) | `Space` |
+| Look around / turn | drag the screen | `A` `D` / `←` `→` |
 | Place / Use | **Place** (or tap the world) | `F` |
 | Punch / Mine | **Mine** (or tap the world) | `Q` |
-| Eat an apple | **Eat** | `E` |
+| Eat (apple / watermelon) | **Eat** | `E` |
 | Pick a hotbar slot | tap a slot | `1`–`9` |
 
 A quick **tap** on the world acts at the crosshair; **dragging** looks around.
-A small label by the crosshair always tells you what a tap will do to whatever
-you're pointing at. Tapping a **tree, leaves or an 🍎 apple always grabs/punches
-it** — even with a block in your hand — so you never "place" by accident. To
-**build**, tap the ground or press **Place** (which builds anywhere).
+Tapping a **tree, leaves, cactus or an 🍎 apple always grabs/punches it** — even
+with a block in your hand — so you never "place" by accident. To **build**, tap
+the ground or press **Place** (which builds anywhere). The targeted block gets a
+coloured outline (gold for food) so you can tell what you're pointing at.
 
 ## ✨ What's in the game
 
@@ -60,11 +58,14 @@ it** — even with a block in your hand — so you never "place" by accident. To
 - 👤 First-person view with a blocky character (you can see the item in your hand).
 - 🌳 **Punch trees** to collect wood. Apple trees dangle red apples down low —
   aim the crosshair at one and tap to pick it (even with a block in your hand).
-- 🍎 **Health and food bars.** Food slowly drops over time — eat apples so you
-  don't starve. If your food runs out you start losing health.
+- 🍉 **Watermelons** grow on the ground (light green with dark-green stripes) —
+  pick them up, build with them, or eat them.
+- 🍎 **Health and food bars.** Food drips down *slowly* — eat apples or
+  watermelons so you don't starve. If your food runs out you start losing health.
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 💀 If your health runs out, you die — then you can respawn.
-- 🐷 **Animals** (pigs & sheep) wander around. You *can't* hurt them.
+- 🐷 **Animals** — pigs, sheep, donkeys, horses and dogs wander the ground, and
+  🐒 **monkeys** swing in the trees. You *can't* hurt any of them.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald.
   Stone and ores need a **pickaxe**.
 - 🎒 An **inventory** + hotbar. Whatever you select goes into your hand.

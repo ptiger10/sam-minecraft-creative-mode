@@ -26,7 +26,8 @@ window.Game = window.Game || {};
     TURN_SPEED: 1.9,  // turn speed (radians / s)
     FALL_SAFE: 3,     // falls shorter than this do no damage
     MAX_HP: 20,
-    MAX_FOOD: 20
+    MAX_FOOD: 20,
+    FOOD_DRAIN: 24    // seconds between losing one food point (slow & forgiving)
   };
 
   // ---- Tiny seeded PRNG (mulberry32) -----------------------------
@@ -82,6 +83,7 @@ window.Game = window.Game || {};
     leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: null, harvestOnTap: true },
     cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
+    watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
     crafting_table:{ name: "Crafting Table", top: 0xa06a32, side: 0x8a5a2c, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
     coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal_ore" },
     iron_ore:     { name: "Iron Ore",    all: 0xb9846a, base: 0x8a8a8d, tool: "pickaxe", drop: "iron_ore" },
@@ -146,6 +148,8 @@ window.Game = window.Game || {};
   Game.ItemDefs.stick   = { name: "Stick", emoji: "🥢", placeable: false };
   Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true };
   Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6 };
+  // Watermelon stays a normal placeable block, but you can also eat it.
+  Game.ItemDefs.watermelon.food = 8;
 
   Game.itemName = (id) => (Game.ItemDefs[id] ? Game.ItemDefs[id].name : id);
   Game.itemDef = (id) => Game.ItemDefs[id];

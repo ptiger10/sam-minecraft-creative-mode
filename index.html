@@ -13,9 +13,6 @@
   <!-- Crosshair in the middle of the screen -->
   <div id="crosshair">+</div>
 
-  <!-- Tells you what the crosshair is pointing at and what a tap will do -->
-  <div id="look-label"></div>
-
   <!-- Health and food bars (top-left) -->
   <div id="vitals">
     <div class="bar-row" id="health-row" title="Health"></div>
@@ -39,19 +36,17 @@
   <!-- The hotbar along the bottom -->
   <div id="hotbar"></div>
 
-  <!-- Movement controls (bottom-left) -->
+  <!-- Movement controls (bottom-left): walk + jump, styled the same -->
   <div id="move-controls">
-    <button class="ctrl-btn turn" id="btn-left" title="Turn left">⟲</button>
     <button class="ctrl-btn fwd" id="btn-forward" title="Walk forward">⬆</button>
-    <button class="ctrl-btn turn" id="btn-right" title="Turn right">⟳</button>
+    <button class="ctrl-btn fwd" id="btn-jump" title="Jump">⤒</button>
   </div>
 
   <!-- Action controls (bottom-right) -->
   <div id="action-controls">
-    <button class="ctrl-btn jump" id="btn-jump" title="Jump">⤒ Jump</button>
     <button class="ctrl-btn place" id="btn-place" title="Place / Use">▣ Place</button>
     <button class="ctrl-btn mine" id="btn-mine" title="Punch / Mine">⛏ Mine</button>
-    <button class="ctrl-btn eat" id="btn-eat" title="Eat an apple">🍎 Eat</button>
+    <button class="ctrl-btn eat" id="btn-eat" title="Eat">🍎 Eat</button>
   </div>
 
   <!-- Floating message toast -->
@@ -91,17 +86,17 @@
       <div class="instructions">
         <h3>How to play</h3>
         <ul>
-          <li><b>⬆ / ⟲ / ⟳</b> walk forward, turn left, turn right.</li>
-          <li><b>Jump</b> to hop up blocks. Drag the screen to look up &amp; down.</li>
+          <li><b>⬆</b> walks forward, <b>⤒</b> jumps (right next to it).</li>
+          <li><b>Drag the screen</b> to look around and turn (or <b>A</b>/<b>D</b>).</li>
           <li>Pick an item from the hotbar — it goes <b>in your hand</b>.</li>
           <li>Point the <b>+</b> at a tree or 🍎 apple and tap to <b>grab it</b> —
-              even with a block in your hand. The label tells you what a tap does.</li>
+              even with a block in your hand.</li>
           <li>Want to <b>build</b>? Tap the <b>ground</b>, or press <b>Place</b> to
               build anywhere (even onto a tree).</li>
           <li>Empty hand or pickaxe? Tap the ground (or <b>Mine</b>) to dig.</li>
           <li><b>Punch trees</b> for wood. Craft sticks, a table &amp; a pickaxe.</li>
-          <li>Stone &amp; ores need a <b>pickaxe</b>. Animals can't be hurt 🐷.</li>
-          <li>Eat 🍎 apples from apple trees so you don't starve!</li>
+          <li>Stone &amp; ores need a <b>pickaxe</b>. Animals can't be hurt 🐾.</li>
+          <li>Eat 🍎 apples and 🍉 watermelons so you don't starve!</li>
         </ul>
       </div>
     </div>
