@@ -147,49 +147,211 @@
   }
 
   // ===============================================================
-  //  Crafting
+  //  Crafting — a real shaped grid (2x2 from the Craft button, 3x3 at a table)
   // ===============================================================
+  // The grid is filled by tapping an ingredient (the "brush") and then tapping
+  // squares; ingredients are pulled from your inventory as you place them and
+  // returned if you take them back out or close the panel. The result square
+  // shows what the current arrangement makes; tap it to craft.
+  const CR = { size: 2, grid: [], brush: null };
+  S.craft = CR;
+
+  // ---- Shaped-recipe matching -----------------------------------
+  function trimPattern(rows) {
+    const rowHas = (r) => rows[r].some((c) => c);
+    let top = 0, bottom = rows.length - 1;
+    while (top <= bottom && !rowHas(top)) top++;
+    while (bottom >= top && !rowHas(bottom)) bottom--;
+    if (top > bottom) return [];
+    let left = Infinity, right = -Infinity;
+    for (let r = top; r <= bottom; r++)
+      for (let c = 0; c < rows[r].length; c++)
+        if (rows[r][c]) { left = Math.min(left, c); right = Math.max(right, c); }
+    const out = [];
+    for (let r = top; r <= bottom; r++) {
+      const row = [];
+      for (let c = left; c <= right; c++) row.push(rows[r][c] || null);
+      out.push(row);
+    }
+    return out;
+  }
+
+  function patternsEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let r = 0; r < a.length; r++) {
+      if (a[r].length !== b[r].length) return false;
+      for (let c = 0; c < a[r].length; c++)
+        if ((a[r][c] || null) !== (b[r][c] || null)) return false;
+    }
+    return true;
+  }
+
+  function gridRows() {
+    const rows = [];
+    for (let r = 0; r < CR.size; r++) {
+      const row = [];
+      for (let c = 0; c < CR.size; c++) row.push(CR.grid[r * CR.size + c] || null);
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  // The recipe the current grid makes (or null). Recipes that need a table are
+  // only matched when one is in use.
+  function currentRecipe() {
+    const gp = trimPattern(gridRows());
+    if (!gp.length) return null;
+    for (const r of Game.Recipes) {
+      if (r.table && !CR.table) continue;
+      if (!r._trim) r._trim = trimPattern(r.pattern);
+      if (patternsEqual(gp, r._trim)) return r;
+    }
+    return null;
+  }
+  Game._currentRecipe = currentRecipe; // (used by the smoke test)
+
   function openCrafting(table) {
+    returnGrid();                 // tidy up anything left from a previous open
+    CR.table = !!table;
     S.craftTable = !!table;
-    renderRecipes();
+    CR.size = table ? 3 : 2;
+    CR.grid = new Array(CR.size * CR.size).fill(null);
+    CR.brush = null;
     $("craft-hint").textContent = table
-      ? "Crafting Table ready — you can build everything!"
-      : "Tip: stand by a Crafting Table to make a pickaxe.";
+      ? "Crafting Table — full 3×3 grid. Tap an item, then tap the squares."
+      : "2×2 crafting. Tap an item below, then a square. Make a table for tools!";
+    renderCraft();
     showPanel("craft-panel");
   }
+  Game._openCrafting = openCrafting; // (used by the smoke test)
 
-  function renderRecipes() {
-    const list = $("recipe-list");
-    list.innerHTML = "";
-    Game.Recipes.forEach((r) => {
-      const haveAll = Object.keys(r.need).every((id) => countItem(id) >= r.need[id]);
-      const tableOK = !r.table || S.craftTable;
-      const row = document.createElement("div");
-      row.className = "recipe";
-      const cost = Object.keys(r.need)
-        .map((id) => r.need[id] + " " + Game.itemName(id))
-        .join(" + ");
-      row.innerHTML =
-        '<div class="result-icon">' + iconHTML(r.gives.id) + "</div>" +
-        '<div class="recipe-info"><div class="r-name">' + Game.itemName(r.gives.id) +
-        (r.gives.count > 1 ? " x" + r.gives.count : "") + "</div>" +
-        '<div class="r-cost">Needs: ' + cost + (r.table ? " (+ table)" : "") + "</div></div>";
-      const btn = document.createElement("button");
-      btn.className = "craft-go";
-      btn.textContent = "Craft";
-      btn.disabled = !(haveAll && tableOK);
-      btn.addEventListener("click", () => craft(r));
-      row.appendChild(btn);
-      list.appendChild(row);
-    });
+  // Put every ingredient sitting in the grid back into the inventory.
+  function returnGrid() {
+    if (!CR.grid || !CR.grid.length) return;
+    for (let i = 0; i < CR.grid.length; i++) {
+      if (CR.grid[i]) { addItem(CR.grid[i], 1); CR.grid[i] = null; }
+    }
   }
 
-  function craft(r) {
-    if (r.table && !S.craftTable) { toast("You need a Crafting Table!"); return; }
-    if (!removeItems(r.need)) { toast("Not enough materials."); return; }
+  // Tap a square: drop the brush in (consuming one from the inventory) or, if
+  // the square is already full, take that ingredient back out.
+  function tapCell(i) {
+    if (CR.grid[i]) {
+      addItem(CR.grid[i], 1);
+      CR.grid[i] = null;
+    } else if (CR.brush) {
+      if (countItem(CR.brush) <= 0) { toast("You're out of " + Game.itemName(CR.brush) + "."); }
+      else { removeItems({ [CR.brush]: 1 }); CR.grid[i] = CR.brush; }
+    } else {
+      toast("Pick an item below first.");
+    }
+    renderCraft();
+  }
+
+  // Auto-arrange a recipe in the grid from your inventory (the recipe book).
+  function autoFill(r) {
+    if (r.table && !CR.table) { toast("Make & place a Crafting Table, then tap it."); return; }
+    const trimmed = r._trim || (r._trim = trimPattern(r.pattern));
+    if (trimmed.length > CR.size || trimmed[0].length > CR.size) {
+      toast("That needs a bigger (3×3) table."); return;
+    }
+    // Count what the recipe needs, including what's already in the grid.
+    returnGrid();
+    const need = {};
+    trimmed.forEach((row) => row.forEach((id) => { if (id) need[id] = (need[id] || 0) + 1; }));
+    for (const id in need) {
+      if (countItem(id) < need[id]) {
+        toast("Need " + need[id] + " " + Game.itemName(id) + "."); renderCraft(); return;
+      }
+    }
+    // Place it (top-left aligned).
+    for (let r2 = 0; r2 < trimmed.length; r2++) {
+      for (let c2 = 0; c2 < trimmed[r2].length; c2++) {
+        const id = trimmed[r2][c2];
+        if (!id) continue;
+        removeItems({ [id]: 1 });
+        CR.grid[r2 * CR.size + c2] = id;
+      }
+    }
+    renderCraft();
+  }
+
+  function doCraft() {
+    const r = currentRecipe();
+    if (!r) { toast("That doesn't make anything yet."); return; }
+    // The ingredients were already taken from the inventory as they were placed,
+    // so crafting just clears the grid and hands over the result.
+    CR.grid.fill(null);
     addItem(r.gives.id, r.gives.count);
-    toast("Crafted " + Game.itemName(r.gives.id) + "!");
-    renderRecipes();
+    toast("Crafted " + Game.itemName(r.gives.id) +
+      (r.gives.count > 1 ? " x" + r.gives.count : "") + "!");
+    renderCraft();
+  }
+
+  function renderCraft() {
+    // The crafting grid.
+    const grid = $("craft-grid");
+    grid.style.gridTemplateColumns = "repeat(" + CR.size + ", 1fr)";
+    grid.innerHTML = "";
+    for (let i = 0; i < CR.size * CR.size; i++) {
+      const cell = document.createElement("div");
+      cell.className = "craft-cell" + (CR.grid[i] ? " filled" : "");
+      if (CR.grid[i]) { cell.innerHTML = iconHTML(CR.grid[i]); cell.title = Game.itemName(CR.grid[i]); }
+      cell.addEventListener("click", () => tapCell(i));
+      grid.appendChild(cell);
+    }
+
+    // The result square.
+    const r = currentRecipe();
+    const res = $("craft-result");
+    res.className = "craft-result" + (r ? " ready" : "");
+    res.innerHTML = r
+      ? iconHTML(r.gives.id) + (r.gives.count > 1 ? '<span class="count">' + r.gives.count + "</span>" : "")
+      : "";
+    res.title = r ? "Craft " + Game.itemName(r.gives.id) : "Result";
+
+    // Your ingredients (tap to pick a brush).
+    const inv = $("craft-inv");
+    inv.innerHTML = "";
+    const seen = {};
+    S.inv.forEach((s) => { if (s) seen[s.id] = (seen[s.id] || 0) + s.count; });
+    const ids = Object.keys(seen);
+    if (!ids.length) {
+      inv.innerHTML = '<span class="craft-empty">Collect some wood, stone or sticks to craft with.</span>';
+    } else {
+      ids.forEach((id) => {
+        const chip = document.createElement("button");
+        chip.className = "craft-chip" + (CR.brush === id ? " active" : "");
+        chip.dataset.item = id;
+        chip.innerHTML = iconHTML(id) + '<span class="count">' + seen[id] + "</span>";
+        chip.title = Game.itemName(id);
+        chip.addEventListener("click", () => { CR.brush = (CR.brush === id ? null : id); renderCraft(); });
+        inv.appendChild(chip);
+      });
+    }
+
+    // The recipe book (tap to auto-arrange).
+    const book = $("recipe-book");
+    book.innerHTML = "";
+    Game.Recipes.forEach((rec) => {
+      if (!rec._trim) rec._trim = trimPattern(rec.pattern);
+      const tooBig = rec._trim.length > CR.size || rec._trim[0].length > CR.size;
+      const needTable = rec.table && !CR.table;
+      const btn = document.createElement("button");
+      btn.className = "recipe-book-item";
+      btn.dataset.recipe = rec.id;
+      btn.disabled = tooBig || needTable;
+      const cost = {};
+      rec._trim.forEach((row) => row.forEach((id) => { if (id) cost[id] = (cost[id] || 0) + 1; }));
+      const costStr = Object.keys(cost).map((id) => cost[id] + " " + Game.itemName(id)).join(" + ");
+      btn.innerHTML =
+        '<span class="rb-icon">' + iconHTML(rec.gives.id) + "</span>" +
+        '<span class="rb-text"><b>' + Game.itemName(rec.gives.id) +
+        (rec.gives.count > 1 ? " ×" + rec.gives.count : "") + "</b><br><small>" +
+        costStr + (needTable ? " · needs a table" : "") + "</small></span>";
+      btn.addEventListener("click", () => autoFill(rec));
+      book.appendChild(btn);
+    });
   }
 
   // ===============================================================
@@ -290,7 +452,7 @@
     if (!def) return;
     S.swing = 0.18;
 
-    const holdingPick = selectedSlot() && selectedSlot().id === "pickaxe";
+    const holdingPick = selectedSlot() && Game.isPickaxe(selectedSlot().id);
 
     // Tapping a crafting table (without a pickaxe) opens it instead of breaking it.
     if (id === "crafting_table" && !holdingPick) { openCrafting(true); return; }
@@ -343,11 +505,11 @@
       vm.add(mesh);
       return;
     }
-    if (id === "pickaxe") {
+    if (id === "pickaxe" || id === "stone_pickaxe") {
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08),
         new THREE.MeshLambertMaterial({ color: 0x7a5a30 }));
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.1, 0.1),
-        new THREE.MeshLambertMaterial({ color: 0x9a9a9a }));
+        new THREE.MeshLambertMaterial({ color: id === "stone_pickaxe" ? 0x808086 : 0xb78a52 }));
       head.position.y = 0.22;
       vm.add(handle); vm.add(head);
       vm.rotation.z = 0.4;
@@ -600,6 +762,7 @@
     if (S.running) S.paused = true;
   }
   function hideAllPanels() {
+    returnGrid(); // never swallow ingredients left in the crafting grid
     document.querySelectorAll(".panel-overlay").forEach((p) => p.classList.add("hidden"));
     document.body.classList.remove("menu-open");
     if (S.running && !(S.player && S.player.dead)) S.paused = false;
@@ -631,7 +794,8 @@
 
     // Top buttons
     tapButton($("btn-inventory"), () => { renderInventory(); showPanel("inventory-panel"); });
-    tapButton($("btn-craft"), () => openCrafting(S.craftTable));
+    tapButton($("btn-craft"), () => openCrafting(false)); // Craft button = 2x2 grid
+    tapButton($("craft-result"), doCraft);
     tapButton($("btn-save"), () => saveGame(false));
     tapButton($("btn-menu"), () => { saveGame(true); refreshStartPanel(); showPanel("start-panel"); });
 

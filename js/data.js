@@ -85,6 +85,7 @@ window.Game = window.Game || {};
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
     crafting_table:{ name: "Crafting Table", top: 0xa06a32, side: 0x8a5a2c, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
+    ladder:       { name: "Ladder", top: 0x8a5a2c, side: 0xb8863f, bottom: 0x8a5a2c, tool: "hand", drop: "ladder" },
     coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal_ore" },
     iron_ore:     { name: "Iron Ore",    all: 0xb9846a, base: 0x8a8a8d, tool: "pickaxe", drop: "iron_ore" },
     gold_ore:     { name: "Gold Ore",    all: 0xe6c34a, base: 0x8a8a8d, tool: "pickaxe", drop: "gold_ore" },
@@ -146,22 +147,42 @@ window.Game = window.Game || {};
   // MUST come after the loop above to override it — the apple you carry is
   // food you eat, not a block you place.
   Game.ItemDefs.stick   = { name: "Stick", emoji: "🥢", placeable: false };
-  Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true };
+  Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true };
+  Game.ItemDefs.stone_pickaxe = { name: "Stone Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true };
   Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6 };
   // Watermelon stays a normal placeable block, but you can also eat it.
   Game.ItemDefs.watermelon.food = 8;
+
+  // Any pickaxe can mine stone & ores.
+  Game.isPickaxe = (id) => id === "pickaxe" || id === "stone_pickaxe";
 
   Game.itemName = (id) => (Game.ItemDefs[id] ? Game.ItemDefs[id].name : id);
   Game.itemDef = (id) => Game.ItemDefs[id];
   Game.MAX_STACK = 99;
 
-  // ---- Crafting recipes ------------------------------------------
-  // need: ingredients consumed, gives: {id, count}, table: needs a table.
+  // ---- Crafting recipes (shaped, like Minecraft) -----------------
+  // pattern: rows of cells (item id or null). It is matched against the
+  // crafting grid after both are trimmed of empty rows/columns, so a small
+  // recipe can be placed anywhere in the grid. gives: {id, count}. A recipe
+  // that needs the full 3x3 only fits at a Crafting Table; table:true forces
+  // a table even for small recipes.
+  const W = "wood", S = "stick", T = "stone";
   Game.Recipes = [
-    { id: "stick",          gives: { id: "stick", count: 4 },          need: { wood: 2 },             table: false },
-    { id: "crafting_table", gives: { id: "crafting_table", count: 1 }, need: { wood: 4 },             table: false },
-    { id: "planks",         gives: { id: "planks", count: 4 },         need: { wood: 1 },             table: false },
-    { id: "pickaxe",        gives: { id: "pickaxe", count: 1 },        need: { stick: 2, wood: 3 },   table: true }
+    // 2 wood stacked vertically (centre + centre-bottom) -> 1 stick.
+    { id: "stick", gives: { id: "stick", count: 1 },
+      pattern: [[W], [W]] },
+    // 4 wood in a square -> a crafting table.
+    { id: "crafting_table", gives: { id: "crafting_table", count: 1 },
+      pattern: [[W, W], [W, W]] },
+    // 3 wood across the top + 2 sticks down the middle -> wooden pickaxe.
+    { id: "pickaxe", gives: { id: "pickaxe", count: 1 }, table: true,
+      pattern: [[W, W, W], [null, S, null], [null, S, null]] },
+    // Same shape with stone across the top -> stone pickaxe.
+    { id: "stone_pickaxe", gives: { id: "stone_pickaxe", count: 1 }, table: true,
+      pattern: [[T, T, T], [null, S, null], [null, S, null]] },
+    // Sticks down both sides + one in the middle -> 3 ladders.
+    { id: "ladder", gives: { id: "ladder", count: 3 }, table: true,
+      pattern: [[S, null, S], [S, S, S], [S, null, S]] }
   ];
 
 })(window.Game);

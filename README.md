@@ -31,12 +31,12 @@ npx serve
 Everything (Three.js included) is bundled in this folder, so it works
 completely offline.
 
-**On an iPhone/iPad:** play in **landscape**. For a true full-screen game with
-**no Safari address bar or bottom toolbar**, open the page in Safari, tap
-**Share → Add to Home Screen**, then launch it from the new icon — it runs
-edge-to-edge with the on-screen controls kept clear of the notch and home
-indicator. (A normal Safari tab can't hide its toolbar; only Home-Screen apps
-can.)
+**On an iPhone/iPad:** play in **portrait or landscape** — the controls and
+hotbar rearrange to fit either way. For a true full-screen game with **no Safari
+address bar or bottom toolbar**, open the page in Safari, tap **Share → Add to
+Home Screen**, then launch it from the new icon — it runs edge-to-edge with the
+on-screen controls kept clear of the notch and home indicator. (A normal Safari
+tab can't hide its toolbar; only Home-Screen apps can.)
 
 ## 🎮 Controls
 
@@ -73,16 +73,22 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 💀 If your health runs out, you die — then you can respawn.
 - 🐷 **Animals** — pigs, sheep, donkeys, horses and dogs wander the ground, and
   🐒 **monkeys** swing in the trees. You *can't* hurt any of them.
-- ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald.
-  Stone and ores need a **pickaxe**.
+- ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
+  a stone block **speckled** with its own colour so you can spot it underground.
+  Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
+  cyan-flecked blocks for diamond.
 - 🎒 An **inventory** + hotbar. Whatever you select goes into your hand.
   Hold a block and place it; hold a pickaxe and mine.
-- 🛠️ **Crafting:**
-  - **Stick** = 2 wood
-  - **Crafting Table** = 4 wood
-  - **Wooden Pickaxe** = 2 sticks + 3 wood *(needs a crafting table — place one
-    and tap it to open it)*
-  - (bonus) **Wood Planks** = 1 wood
+- 🛠️ **Crafting — a real shaped grid, like Minecraft.** The **Craft** button
+  opens a **2×2** grid; a **Crafting Table** opens the full **3×3** grid. Tap an
+  item, then tap squares to lay out a recipe (or tap an entry in the recipe book
+  to auto-arrange it), then tap the result square to make it:
+  - **Stick** = 2 wood, one in the centre and one centre-bottom
+  - **Crafting Table** = 4 wood in a 2×2 square
+  - **Wooden Pickaxe** = 3 wood across the top + 2 sticks down the middle *(3×3
+    table only — place a table and tap it)*
+  - **Stone Pickaxe** = the same shape with 3 stone across the top
+  - **Ladder** (×3) = sticks down both sides + one in the middle (an H shape)
 - 💾 **Save your progress** to the browser's local storage with the Save button
   (it also autosaves every 30 seconds). Press **Continue** on the title screen
   to come back to your world later.

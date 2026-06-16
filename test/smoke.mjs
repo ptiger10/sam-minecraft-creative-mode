@@ -118,43 +118,56 @@ const after = await page.evaluate(() => {
 });
 check("player moved", Math.abs(after.x - before.x) + Math.abs(after.z - before.z) > 0.1);
 
-// --- Crafting: give wood, open craft panel, craft a stick + table ---
+// --- Crafting: the Craft button opens a 2x2 grid; make a stick + table ---
 await page.evaluate(() => { window.Game.S.inv[0] = { id: "wood", count: 8 }; });
 await page.click("#btn-craft");
-await page.waitForTimeout(150);
-// click the first two craftable rows (stick, then crafting_table)
-await page.click("#recipe-list .recipe:nth-child(1) .craft-go");
-await page.click("#recipe-list .recipe:nth-child(2) .craft-go");
+await page.waitForTimeout(120);
+const gridSize = await page.evaluate(() => window.Game.S.craft.size);
+check("Craft button opens a 2x2 grid", gridSize === 2);
+// Auto-arrange + craft a stick (2 wood), then a crafting table (4 wood).
+await page.click('#recipe-book [data-recipe="stick"]');
+await page.click("#craft-result");
+await page.click('#recipe-book [data-recipe="crafting_table"]');
+await page.click("#craft-result");
 const craft = await page.evaluate(() => {
   const inv = window.Game.S.inv.filter(Boolean);
   const has = (id) => inv.some((s) => s.id === id);
   const count = (id) => inv.filter((s) => s.id === id).reduce((a, s) => a + s.count, 0);
-  const pickaxeBtn = document.querySelectorAll("#recipe-list .craft-go")[3];
+  const pickBtn = document.querySelector('#recipe-book [data-recipe="pickaxe"]');
   return { stick: has("stick"), table: has("crafting_table"), wood: count("wood"),
-    pickaxeDisabledNoTable: pickaxeBtn ? pickaxeBtn.disabled : null };
+    pickaxeDisabledNoTable: pickBtn ? pickBtn.disabled : null };
 });
 check("crafted a stick", craft.stick);
 check("crafted a crafting table", craft.table);
 check("wood was consumed (8 - 2 - 4 = 2)", craft.wood === 2);
-check("pickaxe needs a table (disabled)", craft.pickaxeDisabledNoTable === true);
+check("pickaxe needs a table (disabled in 2x2)", craft.pickaxeDisabledNoTable === true);
 await page.click("#craft-panel .close-btn");
 
-// --- Placing a block: select dirt, aim down, press Place ---
+// --- Placing a block: aim at a clear, known target so this is deterministic
+//     (the forest world is randomly seeded, so don't rely on the terrain). ---
 const placeResult = await page.evaluate(async () => {
-  const S = window.Game.S;
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  const eye = p.eyePosition(), dir = p.lookDir();
+  // Clear a tunnel straight ahead, then drop a solid block 3 out to build on.
+  for (let i = 0; i <= 5; i++) {
+    W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+  }
+  const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+  W.blocks.set(key(bx, by, bz), "stone");
+  W.buildMeshes();
   S.inv[1] = { id: "dirt", count: 10 };
-  // select slot 1 by clicking its hotbar element
   document.querySelectorAll("#hotbar .slot")[1].click();
-  S.player.pitch = -0.5; // look down at the ground a few blocks ahead
-  const changesBefore = S.world.changes.size;
+  const changesBefore = W.changes.size;
   document.getElementById("btn-place").click();
   await new Promise((r) => setTimeout(r, 60));
-  return { changed: S.world.changes.size > changesBefore, dirtLeft: S.inv[1] ? S.inv[1].count : 0 };
+  return { changed: W.changes.size > changesBefore, dirtLeft: S.inv[1] ? S.inv[1].count : 0 };
 });
 check("placed a block (world changed)", placeResult.changed);
 check("a dirt block was consumed", placeResult.dirtLeft === 9);
 
-// --- Mining without a pickaxe on placed dirt (hand-breakable) ---
+// --- Mining without a pickaxe on the dirt we just placed (hand-breakable) ---
 const mineResult = await page.evaluate(async () => {
   const S = window.Game.S;
   const sizeBefore = S.world.blocks.size;
@@ -199,19 +212,47 @@ const save = await page.evaluate(async () => {
 check("game saved to localStorage", save.saved);
 await page.screenshot({ path: new URL("./screenshot.png", import.meta.url).pathname });
 
-// --- Pickaxe crafting (needs a table) ---
+// --- Pickaxe crafting: a Crafting Table opens the full 3x3 grid ---
 await page.evaluate(() => {
   const S = window.Game.S;
-  S.craftTable = true;
   S.inv[3] = { id: "stick", count: 2 };
   S.inv[4] = { id: "wood", count: 3 };
+  window.Game._openCrafting(true); // same path as tapping a placed crafting table
 });
-await page.click("#btn-craft");
 await page.waitForTimeout(120);
-await page.click("#recipe-list .recipe:nth-child(4) .craft-go"); // 4th recipe = pickaxe
+const size3 = await page.evaluate(() => window.Game.S.craft.size);
+check("a crafting table opens a 3x3 grid", size3 === 3);
+await page.click('#recipe-book [data-recipe="pickaxe"]');
+await page.click("#craft-result");
 const pick = await page.evaluate(() => window.Game.S.inv.some((s) => s && s.id === "pickaxe"));
 check("crafted a pickaxe (with table)", pick);
 await page.click("#craft-panel .close-btn");
+
+// --- The shaped recipes match the exact grid layouts that were requested ---
+const shapes = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game;
+  const W = "wood", st = "stick", T = "stone";
+  const match = (rows, table) => {
+    S.craft.size = 3; S.craft.table = !!table;
+    S.craft.grid = rows.flat().map((c) => c || null);
+    const r = G._currentRecipe();
+    return r ? r.gives.id : null;
+  };
+  const out = {
+    stick: match([[null, W, null], [null, W, null], [null, null, null]], false),
+    table: match([[W, W, null], [W, W, null], [null, null, null]], false),
+    pickaxe: match([[W, W, W], [null, st, null], [null, st, null]], true),
+    stonePick: match([[T, T, T], [null, st, null], [null, st, null]], true),
+    ladder: match([[st, null, st], [st, st, st], [st, null, st]], true)
+  };
+  S.craft.grid = []; // these grids were set directly; don't let close-up re-add items
+  return out;
+});
+check("centre + centre-bottom wood -> 1 stick", shapes.stick === "stick");
+check("2x2 wood -> crafting table", shapes.table === "crafting_table");
+check("3 wood + 2 sticks -> wooden pickaxe", shapes.pickaxe === "pickaxe");
+check("3 stone + 2 sticks -> stone pickaxe", shapes.stonePick === "stone_pickaxe");
+check("7 sticks in an H -> ladder", shapes.ladder === "ladder");
 
 // --- Save + load round-trip (forest world is restored) ---
 const cBefore = await page.evaluate(() => window.Game.S.world.changes.size);
