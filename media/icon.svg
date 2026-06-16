@@ -1,0 +1,12 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="#87ceeb"/>
+  <!-- left face (dirt, in shadow) -->
+  <polygon points="106,170 256,248 256,398 106,320" fill="#6b4a2a"/>
+  <!-- right face (dirt, lit) -->
+  <polygon points="406,170 256,248 256,398 406,320" fill="#855e36"/>
+  <!-- grass overhang on the two side faces -->
+  <polygon points="106,170 256,248 256,274 106,196" fill="#4f9a36"/>
+  <polygon points="406,170 256,248 256,274 406,196" fill="#5cae3f"/>
+  <!-- top face (grass) -->
+  <polygon points="256,92 406,170 256,248 106,170" fill="#6abe46"/>
+</svg>

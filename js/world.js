@@ -10,6 +10,12 @@
 
   const C = Game.CONST;
 
+  // The world is meshed in square columns CHUNK blocks wide/deep (full height).
+  // An edit only re-meshes the affected chunk (+ a neighbour if it sits on the
+  // chunk's edge), instead of rebuilding the entire world every time.
+  const CHUNK = 10;
+  const chunkKey = (x, z) => Math.floor(x / CHUNK) + "," + Math.floor(z / CHUNK);
+
   // ---- Per-type cube geometry (vertex-coloured faces) ------------
   const geomCache = {};
 
@@ -64,7 +70,9 @@
     this.biome = biome; // "forest" | "desert"
     this.blocks = new Map();         // "x,y,z" -> block id
     this.changes = new Map();        // edits since generation (for saving)
-    this.meshes = {};                // block id -> InstancedMesh
+    this.chunkBlocks = new Map();    // chunkKey -> Set of "x,y,z" (blocks per chunk)
+    this.meshChunks = new Map();     // chunkKey -> { block id -> InstancedMesh }
+    this.dirtyChunks = new Set();    // chunks awaiting a re-mesh
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.rebuildQueued = false;
     this.spawn = { x: C.WORLD / 2, y: 0, z: C.WORLD / 2 };
@@ -220,9 +228,44 @@
   // ---- Editing ---------------------------------------------------
   World.prototype.setBlock = function (x, y, z, id, record) {
     const k = World.key(x, y, z);
-    if (id) this.blocks.set(k, id);
-    else this.blocks.delete(k);
+    if (id) { this.blocks.set(k, id); this.indexAdd(k, x, z); }
+    else { this.blocks.delete(k); this.indexRemove(k, x, z); }
     if (record !== false) this.changes.set(k, id || null);
+    this.markDirty(x, y, z);
+  };
+
+  // Keep the per-chunk block index in step with edits.
+  World.prototype.indexAdd = function (key, x, z) {
+    const ck = chunkKey(x, z);
+    let s = this.chunkBlocks.get(ck);
+    if (!s) { s = new Set(); this.chunkBlocks.set(ck, s); }
+    s.add(key);
+  };
+  World.prototype.indexRemove = function (key, x, z) {
+    const s = this.chunkBlocks.get(chunkKey(x, z));
+    if (s) s.delete(key);
+  };
+
+  // Rebuild the whole per-chunk index from the block map (called before a
+  // full mesh build, after generation / loading edits straight into blocks).
+  World.prototype.reindex = function () {
+    this.chunkBlocks = new Map();
+    this.blocks.forEach((id, key) => {
+      const c1 = key.indexOf(","), c2 = key.lastIndexOf(",");
+      this.indexAdd(key, +key.slice(0, c1), +key.slice(c2 + 1));
+    });
+  };
+
+  // Flag the chunk holding (x,y,z) — and a neighbour if the block is on the
+  // chunk's edge, since that changes the neighbour's face exposure.
+  World.prototype.markDirty = function (x, y, z) {
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    this.dirtyChunks.add(cx + "," + cz);
+    const lx = x - cx * CHUNK, lz = z - cz * CHUNK;
+    if (lx === 0)         this.dirtyChunks.add((cx - 1) + "," + cz);
+    if (lx === CHUNK - 1) this.dirtyChunks.add((cx + 1) + "," + cz);
+    if (lz === 0)         this.dirtyChunks.add(cx + "," + (cz - 1));
+    if (lz === CHUNK - 1) this.dirtyChunks.add(cx + "," + (cz + 1));
     this.queueRebuild();
   };
 
@@ -236,36 +279,58 @@
   };
 
   // ---- Meshing ---------------------------------------------------
+  // A block is drawn only if at least one of its six neighbours is empty.
+  World.prototype.isExposed = function (x, y, z) {
+    return !this.occupied(x + 1, y, z) || !this.occupied(x - 1, y, z) ||
+           !this.occupied(x, y + 1, z) || !this.occupied(x, y - 1, z) ||
+           !this.occupied(x, y, z + 1) || !this.occupied(x, y, z - 1);
+  };
+
   World.prototype.queueRebuild = function () {
     if (this.rebuildQueued) return;
     this.rebuildQueued = true;
-    requestAnimationFrame(() => { this.rebuildQueued = false; this.buildMeshes(); });
+    requestAnimationFrame(() => { this.rebuildQueued = false; this.rebuildDirty(); });
   };
 
+  // Re-mesh only the chunks touched since the last frame.
+  World.prototype.rebuildDirty = function () {
+    this.dirtyChunks.forEach((ck) => this.buildChunk(ck));
+    this.dirtyChunks.clear();
+  };
+
+  // Full (re)build of every chunk — used once when a world is started/loaded.
   World.prototype.buildMeshes = function () {
-    // Group every *exposed* block (one with an empty neighbour) by type.
+    this.reindex();
+    this.dirtyChunks.clear();
+    this.chunkBlocks.forEach((_set, ck) => this.buildChunk(ck));
+  };
+
+  // Rebuild the InstancedMeshes for a single chunk from its exposed blocks.
+  World.prototype.buildChunk = function (ck) {
+    const set = this.chunkBlocks.get(ck);
+    let meshMap = this.meshChunks.get(ck);
+
+    // Group this chunk's exposed blocks by type.
     const byType = {};
-    const nx = [1, -1, 0, 0, 0, 0];
-    const ny = [0, 0, 1, -1, 0, 0];
-    const nz = [0, 0, 0, 0, 1, -1];
+    if (set) {
+      set.forEach((key) => {
+        const id = this.blocks.get(key);
+        if (!id) return;
+        const c1 = key.indexOf(","), c2 = key.lastIndexOf(",");
+        const x = +key.slice(0, c1), y = +key.slice(c1 + 1, c2), z = +key.slice(c2 + 1);
+        if (!this.isExposed(x, y, z)) return;
+        (byType[id] || (byType[id] = [])).push(x, y, z);
+      });
+    }
 
-    this.blocks.forEach((id, key) => {
-      const p = key.split(",");
-      const x = +p[0], y = +p[1], z = +p[2];
-      let exposed = false;
-      for (let i = 0; i < 6; i++) {
-        if (!this.occupied(x + nx[i], y + ny[i], z + nz[i])) { exposed = true; break; }
-      }
-      if (!exposed) return;
-      (byType[id] || (byType[id] = [])).push(x, y, z);
-    });
+    if (!meshMap) { meshMap = {}; this.meshChunks.set(ck, meshMap); }
 
-    // Drop meshes that are no longer needed.
-    Object.keys(this.meshes).forEach((id) => {
+    // Drop this chunk's meshes for types it no longer contains.
+    Object.keys(meshMap).forEach((id) => {
       if (!byType[id]) {
-        this.scene.remove(this.meshes[id]);
-        this.meshes[id].dispose();
-        delete this.meshes[id];
+        this.scene.remove(meshMap[id]);
+        meshMap[id].dispose();
+        delete meshMap[id];
       }
     });
 
@@ -273,7 +338,7 @@
     Object.keys(byType).forEach((id) => {
       const coords = byType[id];
       const count = coords.length / 3;
-      let mesh = this.meshes[id];
+      let mesh = meshMap[id];
       if (!mesh || mesh.userData.cap < count) {
         if (mesh) { this.scene.remove(mesh); mesh.dispose(); }
         const cap = Math.ceil(count * 1.3) + 16;
@@ -282,7 +347,7 @@
         mesh.frustumCulled = false; // many small static meshes; skip culling
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(mesh);
-        this.meshes[id] = mesh;
+        meshMap[id] = mesh;
       }
       for (let i = 0; i < count; i++) {
         m.setPosition(coords[i * 3] + 0.5, coords[i * 3 + 1] + 0.5, coords[i * 3 + 2] + 0.5);

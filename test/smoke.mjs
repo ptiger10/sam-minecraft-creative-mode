@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(join(process.env.PW_ROOT, "playwright"));
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 
 const server = createServer(async (req, res) => {
   try {
@@ -84,7 +84,8 @@ const info = await page.evaluate(() => {
   for (const id of S.world.blocks.values()) { if (id === "watermelon") { melonOnGround = true; break; } }
   return {
     running: S.running, biome: S.world.biome, blockCount: S.world.blocks.size,
-    meshTypes: Object.keys(S.world.meshes).length, animals: S.world.animals.length,
+    meshTypes: (() => { const t = new Set(); S.world.meshChunks.forEach((m) => Object.keys(m).forEach((id) => t.add(id))); return t.size; })(),
+    animals: S.world.animals.length,
     animalKinds: S.world.animals.map((a) => a.userData.kind),
     melonOnGround, melonEdible: !!(G.ItemDefs.watermelon && G.ItemDefs.watermelon.food),
     melonHarvest: G.harvestOnTap("watermelon"),
