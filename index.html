@@ -25,14 +25,6 @@
   <!-- The 3D world is rendered into this container -->
   <div id="game"></div>
 
-  <!-- Shown only on a touch device held upright — this game wants landscape. -->
-  <div id="rotate-notice">
-    <div class="rotate-inner">
-      <div class="rotate-icon">📱↻</div>
-      <p>Rotate your device sideways to play Blocky World.</p>
-    </div>
-  </div>
-
   <!-- Crosshair in the middle of the screen -->
   <div id="crosshair">+</div>
 
@@ -90,7 +82,22 @@
     <div class="panel">
       <h2>🛠️ Crafting</h2>
       <p class="hint" id="craft-hint">Some items need a Crafting Table nearby.</p>
-      <div class="recipe-list" id="recipe-list"></div>
+
+      <!-- The crafting grid + the result square. -->
+      <div class="craft-area">
+        <div class="craft-grid" id="craft-grid"></div>
+        <div class="craft-arrow">➡️</div>
+        <div class="craft-result" id="craft-result" title="Result"></div>
+      </div>
+
+      <!-- Your ingredients: tap one, then tap a grid square. -->
+      <h3 class="craft-label">Your items</h3>
+      <div class="craft-inv" id="craft-inv"></div>
+
+      <!-- Recipe book: tap a recipe to auto-arrange it in the grid. -->
+      <h3 class="craft-label">Recipes (tap to fill the grid)</h3>
+      <div class="recipe-book" id="recipe-book"></div>
+
       <button class="big-btn close-btn">Close</button>
     </div>
   </div>
@@ -117,8 +124,14 @@
           <li>Want to <b>build</b>? Tap the <b>ground</b>, or press <b>Place</b> to
               build anywhere (even onto a tree).</li>
           <li>Empty hand or pickaxe? Tap the ground (or <b>Mine</b>) to dig.</li>
-          <li><b>Punch trees</b> for wood. Craft sticks, a table &amp; a pickaxe.</li>
-          <li>Stone &amp; ores need a <b>pickaxe</b>. Animals can't be hurt 🐾.</li>
+          <li><b>Punch trees</b> for wood. Tap <b>🛠️ Craft</b> for a 2×2 grid;
+              make a <b>table</b> and tap it for the full 3×3 grid.</li>
+          <li>Lay items in the grid (or tap a recipe to auto-fill), then tap the
+              <b>result</b> to make sticks, pickaxes, ladders &amp; more.</li>
+          <li>Place a <b>ladder</b> up a wall, then <b>face it and hold ⬆</b> to
+              climb up (let go to come down).</li>
+          <li>Stone &amp; <b>speckled ores</b> (incl. 💎 diamond) need a
+              <b>pickaxe</b>. Animals can't be hurt 🐾.</li>
           <li>Eat 🍎 apples and 🍉 watermelons so you don't starve!</li>
         </ul>
       </div>

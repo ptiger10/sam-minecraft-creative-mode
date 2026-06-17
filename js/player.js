@@ -64,6 +64,22 @@
     return false;
   };
 
+  // ---- Ladders ---------------------------------------------------
+  // You're "on a ladder" when one sits in the cell directly in front of you
+  // (the way you're facing), at any height your body spans. Climbing then
+  // replaces gravity: hold forward (or jump) to go up, let go to slide down.
+  Player.prototype.ladderInFront = function () {
+    const f = this.forwardH(); // unit horizontal vector from the yaw
+    const ax = Math.floor(this.pos.x + f.x * (C.P_HALF + 0.25));
+    const az = Math.floor(this.pos.z + f.z * (C.P_HALF + 0.25));
+    const minY = Math.floor(this.pos.y);
+    const maxY = Math.floor(this.pos.y + C.P_HEIGHT - 0.001);
+    for (let y = minY; y <= maxY; y++) {
+      if (this.world.get(ax, y, az) === "ladder") return true;
+    }
+    return false;
+  };
+
   // ---- Main update ----------------------------------------------
   Player.prototype.update = function (dt, input) {
     if (this.dead) return;
@@ -83,13 +99,20 @@
       dz = f.z * C.MOVE_SPEED * dt;
     }
 
-    // --- Jump + gravity ---
-    if (input.jump && this.onGround) {
-      this.vel.y = C.JUMP_V;
-      this.onGround = false;
+    // --- Climbing, or jump + gravity ---
+    const climbing = this.ladderInFront();
+    if (climbing) {
+      // Hold forward (push into it) or jump to go up; otherwise slide gently
+      // down. No gravity build-up while you're on the rungs.
+      this.vel.y = (input.forward || input.jump) ? C.CLIMB_SPEED : -C.CLIMB_SPEED * 0.5;
+    } else {
+      if (input.jump && this.onGround) {
+        this.vel.y = C.JUMP_V;
+        this.onGround = false;
+      }
+      this.vel.y -= C.GRAVITY * dt;
+      if (this.vel.y < -55) this.vel.y = -55; // terminal velocity
     }
-    this.vel.y -= C.GRAVITY * dt;
-    if (this.vel.y < -55) this.vel.y = -55; // terminal velocity
     let dy = this.vel.y * dt;
 
     // --- Resolve each axis separately against the voxels ---
@@ -109,8 +132,9 @@
       this.vel.y = 0;
     }
 
-    // Track the peak height of a fall for damage purposes.
-    if (this.onGround) {
+    // Track the peak height of a fall for damage purposes. Climbing never
+    // hurts, so a ladder keeps the peak pinned to where you are.
+    if (this.onGround || climbing) {
       this.fallPeak = this.pos.y;
     } else if (this.pos.y > this.fallPeak) {
       this.fallPeak = this.pos.y;

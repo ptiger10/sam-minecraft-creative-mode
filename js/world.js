@@ -46,10 +46,39 @@
     return g;
   }
 
+  // Ore blocks: a stone-coloured cube flecked with little specks of the ore's
+  // colour, so each ore is easy to recognise underground (diamond's pale cyan,
+  // gold's yellow, …). The specks come from vertex colours on a finely
+  // subdivided cube — no textures needed — and are deterministic per ore type
+  // so the pattern is stable but each ore looks different.
+  function oreGeometry(id) {
+    const def = Game.BlockDefs[id];
+    const seg = 5;
+    const g = new THREE.BoxGeometry(1, 1, 1, seg, seg, seg);
+    const pos = g.attributes.position;
+    const stone = new THREE.Color(def.base);
+    const ore = new THREE.Color(def.all);
+    // Give each ore type its own speckle layout.
+    let salt = 0;
+    for (let i = 0; i < id.length; i++) salt = (salt * 31 + id.charCodeAt(i)) | 0;
+    const colors = [];
+    for (let i = 0; i < pos.count; i++) {
+      // Snap the vertex to its cell on the cube so a whole speckle shares a colour.
+      const gx = Math.round((pos.getX(i) + 0.5) * seg);
+      const gy = Math.round((pos.getY(i) + 0.5) * seg);
+      const gz = Math.round((pos.getZ(i) + 0.5) * seg);
+      const c = Game.hash(salt ^ 0x5eed, gx, gy, gz) < 0.3 ? ore : stone;
+      colors.push(c.r, c.g, c.b);
+    }
+    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    return g;
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
     if (id === "watermelon") return (geomCache[id] = watermelonGeometry());
     const def = Game.BlockDefs[id];
+    if (def && def.base !== undefined) return (geomCache[id] = oreGeometry(id));
     const g = new THREE.BoxGeometry(1, 1, 1);
     const colors = [];
     // BoxGeometry face/group order: +X, -X, +Y(top), -Y(bottom), +Z, -Z

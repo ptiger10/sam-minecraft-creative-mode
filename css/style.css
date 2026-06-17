@@ -287,48 +287,122 @@ html, body {
 .inv-grid .slot { width: 100%; height: 58px; }
 .inv-grid .slot .swatch { width: 32px; height: 32px; }
 
-/* ---------- Crafting ---------- */
-.recipe-list { display: flex; flex-direction: column; gap: 10px; }
-.recipe {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #e2e2e2;
-  border: 2px solid #999;
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-.recipe .result-icon {
-  width: 44px;
-  height: 44px;
+/* ---------- Crafting grid ---------- */
+.craft-label { margin: 14px 0 6px; font-size: 15px; color: #333; }
+.craft-area {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
-  background: rgba(0, 0, 0, 0.08);
-  border-radius: 6px;
-  flex: none;
+  gap: 14px;
+  margin: 4px 0 8px;
 }
-.recipe .result-icon .swatch { width: 30px; height: 30px; }
-.recipe .recipe-info { flex: 1; }
-.recipe .recipe-info .r-name { font-weight: bold; }
-.recipe .recipe-info .r-cost { font-size: 13px; color: #555; }
-.recipe .craft-go {
-  font: inherit;
+.craft-grid {
+  display: grid;
+  gap: 5px;
+}
+.craft-cell {
+  width: 50px;
+  height: 50px;
+  background: #d7d2c6;
+  border: 3px solid #9a9384;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.craft-cell.filled { background: #efe9da; }
+.craft-cell:active { background: #c6c0b2; }
+.craft-cell .swatch { width: 30px; height: 30px; }
+.craft-arrow { font-size: 26px; color: #555; }
+.craft-result {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.08);
+  border: 3px solid #9a9384;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.craft-result.ready {
+  background: #d8efc8;
+  border-color: #6a9a4a;
+  box-shadow: 0 0 10px rgba(106, 154, 74, 0.8);
+}
+.craft-result .swatch { width: 36px; height: 36px; }
+.craft-result .count {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 14px;
   font-weight: bold;
-  padding: 10px 14px;
-  background: #6a9a4a;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
   color: #fff;
-  border: 2px solid #3f5f2c;
+}
+
+.craft-inv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.craft-empty { color: #666; font-size: 14px; }
+.craft-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  padding: 6px 9px 6px 7px;
+  background: #e2e2e2;
+  border: 2px solid #999;
   border-radius: 8px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.craft-chip.active { background: #cfe6b8; border-color: #6a9a4a; }
+.craft-chip .count { font-size: 13px; font-weight: bold; color: #333; }
+.craft-chip .swatch { width: 22px; height: 22px; }
+
+.recipe-book {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+.recipe-book-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  font: inherit;
+  padding: 8px 10px;
+  background: #e2e2e2;
+  border: 2px solid #999;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.recipe-book-item:disabled { background: #cfcfcf; color: #888; border-color: #bbb; cursor: not-allowed; }
+.recipe-book-item .rb-icon {
+  width: 36px;
+  height: 36px;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
 }
-.recipe .craft-go:disabled {
-  background: #aaa;
-  border-color: #888;
-  cursor: not-allowed;
-}
+.recipe-book-item .rb-icon .swatch { width: 26px; height: 26px; }
+.recipe-book-item .rb-text { font-size: 14px; line-height: 1.25; }
+.recipe-book-item .rb-text small { color: #555; }
 
 /* ---------- Start & death panels ---------- */
 .start-panel { max-width: 600px; }
@@ -364,27 +438,24 @@ body.menu-open #action-controls,
 body.menu-open #hand-display,
 body.menu-open #crosshair { display: none; }
 
-/* ---------- Rotate-to-landscape notice ---------- */
-/* The dual-thumb controls + 9-slot hotbar are designed for landscape; in
-   portrait the hotbar is wider than a phone screen. So on a touch device held
-   upright we cover the game and ask the player to rotate. Desktop (fine
-   pointer) is never affected, even in a tall/narrow window. */
-#rotate-notice {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: #1b2a36;
-  color: #fff;
-  text-align: center;
-}
-.rotate-inner { max-width: 320px; }
-.rotate-icon { font-size: 56px; margin-bottom: 12px; }
-#rotate-notice p { font-size: 18px; line-height: 1.4; margin: 0; }
-
+/* ---------- Portrait orientation ---------- */
+/* The game plays in both landscape and portrait. In portrait the screen is
+   narrow, so shrink the hotbar/controls a touch and stack the action buttons in
+   a single column on the right so two thumbs still reach everything. */
 @media (orientation: portrait) and (pointer: coarse) {
-  #rotate-notice { display: flex; }
+  #hotbar { bottom: max(10px, env(safe-area-inset-bottom)); gap: 2px; padding: 3px; }
+  .slot { width: 30px; height: 30px; font-size: 15px; border-width: 2px; }
+  .slot .count { font-size: 10px; }
+  .slot .swatch { width: 18px; height: 18px; }
+  #move-controls { bottom: 96px; gap: 6px; }
+  #move-controls .fwd { width: 58px; height: 58px; font-size: 26px; }
+  #action-controls {
+    bottom: 96px;
+    grid-template-columns: auto;   /* stack Place / Mine / Eat in one column */
+    gap: 6px;
+  }
+  #action-controls .ctrl-btn { width: 76px; height: 46px; font-size: 13px; }
+  #hand-display { bottom: 58px; font-size: 12px; padding: 3px 9px; }
+  #top-buttons { gap: 4px; }
+  .menu-btn { font-size: 12px; padding: 6px 8px; min-height: 40px; }
 }
