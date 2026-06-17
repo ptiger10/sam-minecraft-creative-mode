@@ -74,9 +74,66 @@
     return g;
   }
 
+  // Ladder: instead of a plain cube, build a recognisable ladder shape — two
+  // upright side rails joined by several rungs — by merging a handful of thin
+  // boxes into one geometry. It sits as a flat panel through the middle of the
+  // cell (thin front-to-back), so against a wall it reads clearly as a ladder.
+  function ladderGeometry() {
+    const def = Game.BlockDefs["ladder"];
+    const rail = new THREE.Color(def.side);   // the two upright poles
+    const rung = new THREE.Color(def.top);    // the steps between them
+    const D = 0.14;        // thickness (front-to-back)
+    const railW = 0.13;    // width of each upright rail
+    const offX = 0.32;     // how far the rails sit from the centre
+    const parts = [
+      { g: new THREE.BoxGeometry(railW, 1.0, D), x: -offX, y: 0, z: 0, c: rail },
+      { g: new THREE.BoxGeometry(railW, 1.0, D), x:  offX, y: 0, z: 0, c: rail },
+    ];
+    const RUNGS = 5;
+    for (let i = 0; i < RUNGS; i++) {
+      const y = -0.5 + (i + 0.5) / RUNGS;
+      parts.push({ g: new THREE.BoxGeometry(2 * offX, 0.1, D * 0.8), x: 0, y: y, z: 0, c: rung });
+    }
+    return mergeColoredBoxes(parts);
+  }
+
+  // Merge several positioned, single-coloured box geometries into one
+  // non-indexed BufferGeometry (so it can drive an InstancedMesh like the
+  // other block types). Each part carries its own flat vertex colour.
+  function mergeColoredBoxes(parts) {
+    const geos = parts.map((p) => {
+      const g = p.g.toNonIndexed();
+      g.translate(p.x, p.y, p.z);
+      return { g, c: p.c };
+    });
+    let total = 0;
+    geos.forEach(({ g }) => { total += g.attributes.position.count; });
+    const positions = new Float32Array(total * 3);
+    const normals = new Float32Array(total * 3);
+    const colors = new Float32Array(total * 3);
+    let off = 0;
+    geos.forEach(({ g, c }) => {
+      const n = g.attributes.position.count;
+      positions.set(g.attributes.position.array, off * 3);
+      normals.set(g.attributes.normal.array, off * 3);
+      for (let i = 0; i < n; i++) {
+        colors[(off + i) * 3] = c.r;
+        colors[(off + i) * 3 + 1] = c.g;
+        colors[(off + i) * 3 + 2] = c.b;
+      }
+      off += n;
+    });
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    merged.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+    merged.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    return merged;
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
     if (id === "watermelon") return (geomCache[id] = watermelonGeometry());
+    if (id === "ladder") return (geomCache[id] = ladderGeometry());
     const def = Game.BlockDefs[id];
     if (def && def.base !== undefined) return (geomCache[id] = oreGeometry(id));
     const g = new THREE.BoxGeometry(1, 1, 1);
