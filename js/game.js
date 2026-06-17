@@ -137,12 +137,16 @@
 
   function updateHand() {
     const s = selectedSlot();
+    const display = $("hand-display");
     if (s) {
+      display.classList.remove("hidden");
       $("hand-icon").innerHTML = iconHTML(s.id);
       $("hand-name").textContent = Game.itemName(s.id) + (s.count > 1 ? " x" + s.count : "");
     } else {
-      $("hand-icon").innerHTML = "✊";
-      $("hand-name").textContent = "Empty hand";
+      // Empty hand: hide the indicator entirely rather than showing a chip.
+      display.classList.add("hidden");
+      $("hand-icon").innerHTML = "";
+      $("hand-name").textContent = "";
     }
   }
 
@@ -405,6 +409,13 @@
     const s = selectedSlot();
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
 
+    // Aiming at a crafting table always opens its grid — even with a block in
+    // your hand — so selecting a table never places the held block onto it.
+    if (hit && S.world.get(hit.block.x, hit.block.y, hit.block.z) === "crafting_table") {
+      openCrafting(true);
+      return;
+    }
+
     // Holding a placeable block -> build.
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) {
       if (!hit) { toast("Aim at a block to build on."); return; }
@@ -420,11 +431,6 @@
       return;
     }
 
-    // Not holding a block: tapping a crafting table opens it.
-    if (hit && S.world.get(hit.block.x, hit.block.y, hit.block.z) === "crafting_table") {
-      openCrafting(true);
-      return;
-    }
     toast("Pick a block from your hotbar to build.");
   }
 

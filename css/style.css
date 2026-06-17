@@ -101,6 +101,7 @@ html, body {
   gap: 8px;
   pointer-events: none;
 }
+#hand-display.hidden { display: none; }
 #hand-icon {
   display: inline-flex;
   align-items: center;
