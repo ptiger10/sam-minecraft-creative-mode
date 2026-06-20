@@ -130,10 +130,125 @@
     return merged;
   }
 
+  const Box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+
+  // A fence: a central post with rails crossing through it, so it reads as a
+  // proper fence rather than a solid cube.
+  function fenceGeometry() {
+    const def = Game.BlockDefs.fence;
+    const post = new THREE.Color(def.side), rail = new THREE.Color(def.top);
+    const D = 0.24;
+    return mergeColoredBoxes([
+      { g: Box(D, 1.0, D), x: 0, y: 0, z: 0, c: post },
+      { g: Box(1.0, 0.15, D * 0.6), x: 0, y: 0.24, z: 0, c: rail },
+      { g: Box(1.0, 0.15, D * 0.6), x: 0, y: -0.18, z: 0, c: rail },
+      { g: Box(D * 0.6, 0.15, 1.0), x: 0, y: 0.24, z: 0, c: rail },
+      { g: Box(D * 0.6, 0.15, 1.0), x: 0, y: -0.18, z: 0, c: rail }
+    ]);
+  }
+
+  // A torch: a thin stick topped with a little glowing flame.
+  function torchGeometry() {
+    const def = Game.BlockDefs.torch;
+    return mergeColoredBoxes([
+      { g: Box(0.14, 0.6, 0.14), x: 0, y: -0.15, z: 0, c: new THREE.Color(def.side) },
+      { g: Box(0.2, 0.2, 0.2), x: 0, y: 0.25, z: 0, c: new THREE.Color(def.top) }
+    ]);
+  }
+
+  // A bed: a low wooden frame with a coloured mattress and a white pillow.
+  function bedGeometry() {
+    const def = Game.BlockDefs.bed;
+    return mergeColoredBoxes([
+      { g: Box(1.0, 0.3, 1.0), x: 0, y: -0.35, z: 0, c: new THREE.Color(def.bottom) },
+      { g: Box(0.92, 0.2, 0.92), x: 0, y: -0.12, z: 0, c: new THREE.Color(def.top) },
+      { g: Box(0.8, 0.16, 0.34), x: 0, y: 0.0, z: -0.3, c: new THREE.Color(0xf2f2f2) }
+    ]);
+  }
+
+  // A window: a wooden frame around a glass pane. Open = just the frame.
+  function windowGeometry(open) {
+    const frame = new THREE.Color(Game.BlockDefs.window.top);
+    const glass = new THREE.Color(Game.BlockDefs.window.all);
+    const D = 0.18, T = 0.16;
+    const parts = [
+      { g: Box(1.0, T, D), x: 0, y: 0.42, z: 0, c: frame },
+      { g: Box(1.0, T, D), x: 0, y: -0.42, z: 0, c: frame },
+      { g: Box(T, 0.84, D), x: -0.42, y: 0, z: 0, c: frame },
+      { g: Box(T, 0.84, D), x: 0.42, y: 0, z: 0, c: frame }
+    ];
+    if (!open) parts.push({ g: Box(0.84, 0.84, D * 0.4), x: 0, y: 0, z: 0, c: glass });
+    return mergeColoredBoxes(parts);
+  }
+
+  // A door panel (thin in Z). Open swings it flat against the side (thin in X)
+  // so you can walk through. door_window puts glass in its upper half.
+  function doorGeometry(open, hasWindow) {
+    const wood = new THREE.Color(Game.BlockDefs.door.all);
+    const glass = new THREE.Color(Game.BlockDefs.glass.all);
+    const handle = new THREE.Color(0x2e2113);
+    const parts = [];
+    if (!open) {
+      if (hasWindow) {
+        parts.push({ g: Box(0.92, 0.55, 0.16), x: 0, y: -0.2, z: 0, c: wood });
+        parts.push({ g: Box(0.92, 0.4, 0.12), x: 0, y: 0.3, z: 0, c: glass });
+      } else {
+        parts.push({ g: Box(0.92, 0.98, 0.16), x: 0, y: 0, z: 0, c: wood });
+      }
+      parts.push({ g: Box(0.1, 0.1, 0.22), x: 0.32, y: 0, z: 0, c: handle });
+    } else {
+      if (hasWindow) {
+        parts.push({ g: Box(0.16, 0.55, 0.92), x: -0.42, y: -0.2, z: 0, c: wood });
+        parts.push({ g: Box(0.12, 0.4, 0.92), x: -0.42, y: 0.3, z: 0, c: glass });
+      } else {
+        parts.push({ g: Box(0.16, 0.98, 0.92), x: -0.42, y: 0, z: 0, c: wood });
+      }
+      parts.push({ g: Box(0.22, 0.1, 0.1), x: -0.42, y: 0, z: 0.32, c: handle });
+    }
+    return mergeColoredBoxes(parts);
+  }
+
+  // A chest: a wooden box with a darker lid band and a little latch.
+  function chestGeometry() {
+    const def = Game.BlockDefs.chest;
+    const body = new THREE.Color(def.side), lid = new THREE.Color(def.top), latch = new THREE.Color(0x4a3018);
+    return mergeColoredBoxes([
+      { g: Box(0.92, 0.6, 0.84), x: 0, y: -0.18, z: 0, c: body },
+      { g: Box(0.94, 0.3, 0.86), x: 0, y: 0.28, z: 0, c: lid },
+      { g: Box(0.16, 0.18, 0.1), x: 0, y: 0.12, z: 0.44, c: latch }
+    ]);
+  }
+
+  // A crafting table: a wooden block with a bright top carved into a 3×3 grid
+  // of dark lines, so it stands out clearly from plain planks.
+  function craftingTableGeometry() {
+    const def = Game.BlockDefs.crafting_table;
+    const body = new THREE.Color(def.side), top = new THREE.Color(def.top), line = new THREE.Color(0x4a2c12);
+    return mergeColoredBoxes([
+      { g: Box(1, 1, 1), x: 0, y: 0, z: 0, c: body },
+      { g: Box(1.002, 0.14, 1.002), x: 0, y: 0.43, z: 0, c: top },
+      { g: Box(1.02, 0.05, 0.06), x: 0, y: 0.5, z: -0.17, c: line },
+      { g: Box(1.02, 0.05, 0.06), x: 0, y: 0.5, z: 0.17, c: line },
+      { g: Box(0.06, 0.05, 1.02), x: -0.17, y: 0.5, z: 0, c: line },
+      { g: Box(0.06, 0.05, 1.02), x: 0.17, y: 0.5, z: 0, c: line }
+    ]);
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
+    if (id === "crafting_table") return (geomCache[id] = craftingTableGeometry());
     if (id === "watermelon") return (geomCache[id] = watermelonGeometry());
     if (id === "ladder") return (geomCache[id] = ladderGeometry());
+    if (id === "fence") return (geomCache[id] = fenceGeometry());
+    if (id === "torch") return (geomCache[id] = torchGeometry());
+    if (id === "bed") return (geomCache[id] = bedGeometry());
+    if (id === "chest") return (geomCache[id] = chestGeometry());
+    if (id === "window") return (geomCache[id] = windowGeometry(false));
+    if (id === "window_open") return (geomCache[id] = windowGeometry(true));
+    if (id === "door") return (geomCache[id] = doorGeometry(false, false));
+    if (id === "door_open") return (geomCache[id] = doorGeometry(true, false));
+    if (id === "door_window") return (geomCache[id] = doorGeometry(false, true));
+    if (id === "door_window_open") return (geomCache[id] = doorGeometry(true, true));
     const def = Game.BlockDefs[id];
     if (def && def.base !== undefined) return (geomCache[id] = oreGeometry(id));
     const g = new THREE.BoxGeometry(1, 1, 1);
@@ -177,32 +292,69 @@
     return this.blocks.has(World.key(x, y, z));
   };
 
-  // Collision solidity: real blocks, the floor, and invisible world walls.
+  // Collision solidity: real *solid* blocks (water/torches/open doors are not),
+  // the floor, and the invisible world walls.
   World.prototype.solidAt = function (x, y, z) {
     if (y < 0) return true; // bedrock floor — you cannot fall through
     if (x < 0 || x >= C.WORLD || z < 0 || z >= C.WORLD) return true; // edge walls
-    return this.occupied(x, y, z);
+    const id = this.blocks.get(World.key(x, y, z));
+    return !!(id && Game.isSolidBlock(id));
   };
 
+  // Highest solid block in a column (animals & spawning stand on solid ground,
+  // not on the surface of a pond).
   World.prototype.surfaceY = function (x, z) {
     for (let y = C.MAX_Y; y >= 0; y--) {
-      if (this.occupied(x, y, z)) return y;
+      const id = this.blocks.get(World.key(x, y, z));
+      if (id && Game.isSolidBlock(id)) return y;
     }
     return 0;
+  };
+
+  // Can a wandering animal stand at this spot? It must be in bounds and free of
+  // solid blocks at foot + body height — so a fence (a solid block) pens it in.
+  World.prototype.canStand = function (x, z, y) {
+    if (x < 2 || x >= C.WORLD - 2 || z < 2 || z >= C.WORLD - 2) return false;
+    const fx = Math.floor(x), fz = Math.floor(z), fy = Math.floor(y);
+    if (this.solidAt(fx, fy, fz)) return false;
+    if (this.solidAt(fx, fy + 1, fz)) return false;
+    return true;
   };
 
   // ---- Generation ------------------------------------------------
   World.prototype.generate = function () {
     const height = Game.makeHeight(this.seed);
     const desert = this.biome === "desert";
+    const WATER = C.WATER_LEVEL;
+    const cx = Math.floor(C.WORLD / 2), cz = Math.floor(C.WORLD / 2);
+    const nearSpawn = (x, z) => Math.abs(x - cx) <= 3 && Math.abs(z - cz) <= 3;
+
+    // Precompute clamped heights so we can find ponds (and their shores).
+    const H = [];
+    for (let x = 0; x < C.WORLD; x++) {
+      H[x] = [];
+      for (let z = 0; z < C.WORLD; z++) {
+        H[x][z] = Math.max(2, Math.min(C.MAX_Y - 6, height(x, z)));
+      }
+    }
+    // A column floods if it dips below the water line (kept away from spawn so
+    // you never start in a puddle). Deserts stay dry.
+    const isWater = (x, z) => {
+      if (x < 0 || x >= C.WORLD || z < 0 || z >= C.WORLD) return false;
+      return !desert && !nearSpawn(x, z) && H[x][z] < WATER;
+    };
+    this._isWater = isWater;
 
     for (let x = 0; x < C.WORLD; x++) {
       for (let z = 0; z < C.WORLD; z++) {
-        const h = Math.max(2, Math.min(C.MAX_Y - 6, height(x, z)));
+        const h = H[x][z];
+        const water = isWater(x, z);
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === h) {
-            id = desert ? "sand" : "grass";
+            if (water) id = Game.hash(this.seed ^ 0xc1a7, x, 0, z) < 0.5 ? "clay" : "sand"; // pond bed
+            else if (desert) id = this.desertSurface(x, z);
+            else id = "grass";
           } else if (y >= h - 2) {
             id = desert ? "sand" : "dirt";
           } else {
@@ -210,8 +362,22 @@
           }
           this.blocks.set(World.key(x, y, z), id);
         }
-        // Vegetation sits on top of the surface block.
-        this.maybeVegetation(x, z, h, desert);
+        // Fill the pond with water up to the water line.
+        if (water) for (let y = h + 1; y <= WATER; y++) this.blocks.set(World.key(x, y, z), "water");
+        // Vegetation sits on top of dry land only.
+        if (!water) this.maybeVegetation(x, z, h, desert);
+      }
+    }
+
+    // Sandy shore: any land block right beside the water becomes sand.
+    for (let x = 0; x < C.WORLD; x++) {
+      for (let z = 0; z < C.WORLD; z++) {
+        if (isWater(x, z)) continue;
+        const h = H[x][z];
+        if (h < WATER - 1 || h > WATER + 1) continue;
+        if (isWater(x + 1, z) || isWater(x - 1, z) || isWater(x, z + 1) || isWater(x, z - 1)) {
+          if (!this.occupied(x, h + 1, z)) this.blocks.set(World.key(x, h, z), "sand");
+        }
       }
     }
 
@@ -220,10 +386,24 @@
     this.spawn = { x: sx + 0.5, y: this.surfaceY(sx, sz) + 1, z: sz + 0.5 };
 
     this.spawnAnimals(desert ? 3 : 4);
+    this.spawnVillagers(desert ? 1 : 2);
+  };
+
+  // Desert surface is mostly sand, with the odd patch of coloured clay.
+  World.prototype.desertSurface = function (x, z) {
+    const r = Game.hash(this.seed ^ 0x7e44a, x, 0, z);
+    if (r < 0.04) return "red_clay";
+    if (r < 0.075) return "brown_clay";
+    return "sand";
   };
 
   // Stone, or an ore — rarer + special ores appear deeper.
   World.prototype.pickStone = function (x, y, z) {
+    // Clay pockets (hand-diggable) scattered through the ground in every biome.
+    const rc = Game.hash(this.seed ^ 0xc1a77, x, y, z);
+    if (rc < 0.012) return "clay";
+    if (rc < 0.020) return "brown_clay";
+    if (rc < 0.026) return "red_clay";
     const r = Game.hash(this.seed, x, y, z);
     const deep = y < 6; // closer to bedrock — richer in diamond & emerald
     if (r < 0.010) return "coal_ore";
@@ -594,6 +774,47 @@
     return group;
   }
 
+  // A blocky villager: a robed townsperson with a big nose, who you can trade
+  // with for emeralds. Walks the ground like the other critters.
+  function makeVillager() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const robe = 0x5f7a4a, head = 0xc89a78, nose = 0xa9785a;
+    [-0.12, 0.12].forEach((dx) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.2), mat(0x46402f));
+      leg.position.set(dx, 0.25, 0); group.add(leg);
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.32), mat(robe));
+    body.position.y = 0.85; group.add(body);
+    [-0.32, 0.32].forEach((dx) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.18), mat(robe));
+      arm.position.set(dx, 0.85, 0); group.add(arm);
+    });
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), mat(head));
+    h.position.y = 1.42; group.add(h);
+    const n = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.24, 0.18), mat(nose));
+    n.position.set(0, 1.38, 0.26); group.add(n);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.08, 0.05), mat(0x5a4636));
+    brow.position.set(0, 1.55, 0.21); group.add(brow);
+    group.userData.kind = "villager";
+    return group;
+  }
+  World.makeVillager = makeVillager;
+
+  World.prototype.spawnVillagers = function (count) {
+    const rng = Game.mulberry32(this.seed ^ 0x711a9e);
+    for (let i = 0; i < count; i++) {
+      const v = makeVillager();
+      const x = 4 + Math.floor(rng() * (C.WORLD - 8));
+      const z = 4 + Math.floor(rng() * (C.WORLD - 8));
+      v.position.set(x + 0.5, this.surfaceY(x, z) + 1, z + 0.5);
+      v.userData.dir = rng() * Math.PI * 2;
+      v.userData.timer = rng() * 3;
+      v.userData.hop = 0;
+      this.animals.push(v);
+    }
+  };
+
   World.prototype.spawnAnimals = function (count) {
     const rng = Game.mulberry32(this.seed ^ 0xa11ce);
 
@@ -632,6 +853,7 @@
 
   World.prototype.updateAnimals = function (dt) {
     for (const a of this.animals) {
+      if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
 
       // Ground animals just walk around on the surface — no hopping/floating.
@@ -644,11 +866,11 @@
       if (a.userData.hop > 0) { a.userData.hop -= dt; speed = 1.9; } // spooked: trot off
       const nx = a.position.x + Math.cos(a.userData.dir) * speed * dt;
       const nz = a.position.z + Math.sin(a.userData.dir) * speed * dt;
-      // stay inside the world
-      if (nx > 2 && nx < C.WORLD - 2 && nz > 2 && nz < C.WORLD - 2) {
+      // stay inside the world — and inside any fence (a solid block stops them).
+      if (this.canStand(nx, nz, a.position.y)) {
         a.position.x = nx; a.position.z = nz;
       } else {
-        a.userData.dir += Math.PI; // turn around at the border
+        a.userData.dir += Math.PI; // turn around at the border / fence
       }
       const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
       a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);

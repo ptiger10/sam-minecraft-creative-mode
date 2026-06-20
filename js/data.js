@@ -16,6 +16,7 @@ window.Game = window.Game || {};
     MAX_Y: 24,        // top of the buildable column
     BASE: 6,          // average surface height
     AMP: 3,           // how bumpy the terrain is
+    WATER_LEVEL: 5,   // ponds fill up to this height
     REACH: 6,         // how many blocks away you can reach
     EYE: 1.62,        // camera height above the player's feet
     P_HALF: 0.3,      // player half-width (collision)
@@ -23,7 +24,12 @@ window.Game = window.Game || {};
     GRAVITY: 26,      // blocks / s^2
     JUMP_V: 8.4,      // jump velocity
     MOVE_SPEED: 4.3,  // walking speed (blocks / s)
+    RIDE_SPEED: 5.2,  // speed while riding an animal (blocks / s)
     CLIMB_SPEED: 3.4, // up/down speed while on a ladder (blocks / s)
+    SWIM_UP: 4.8,     // how fast jump lifts you toward the surface in water
+    SWIM_SINK: 3.0,   // fastest you sink in water
+    SWIM_BUOY: 6,     // buoyant upward acceleration that floats you up
+    MAX_AIR: 10,      // seconds of breath before you start drowning
     TURN_SPEED: 1.9,  // turn speed (radians / s)
     FALL_SAFE: 3,     // falls shorter than this do no damage
     MAX_HP: 20,
@@ -74,26 +80,56 @@ window.Game = window.Game || {};
   // Each block gets six face colours (vertex-coloured cubes).
   // tool:  "hand" = punchable, "pickaxe" = needs a pickaxe.
   // drop:  item id you receive when you break it (null = nothing).
+  // solid: false = you can walk straight through it (water, torch, open doors).
   const B = {
     grass:        { name: "Grass Block", top: 0x6abe46, side: 0x7d6a3f, bottom: 0x73553a, tool: "hand", drop: "grass" },
     dirt:         { name: "Dirt",        all: 0x7d5a36, tool: "hand", drop: "dirt" },
     sand:         { name: "Sand",        all: 0xe3d8a3, tool: "hand", drop: "sand" },
     stone:        { name: "Stone",       all: 0x8a8a8d, tool: "pickaxe", drop: "stone" },
+    water:        { name: "Water",       all: 0x2f6fd8, top: 0x4f8ff0, tool: "hand", drop: null, solid: false },
     wood:         { name: "Wood",        top: 0x9c7a48, side: 0x6f5230, bottom: 0x9c7a48, tool: "hand", drop: "wood", harvestOnTap: true },
     planks:       { name: "Wood Planks", all: 0xb18a4f, tool: "hand", drop: "planks" },
+    wood_red:     { name: "Red Wood",    all: 0xc0503f, tool: "hand", drop: "wood_red" },
+    wood_blue:    { name: "Blue Wood",   all: 0x3f6fc0, tool: "hand", drop: "wood_blue" },
+    wood_green:   { name: "Green Wood",  all: 0x4a9a4a, tool: "hand", drop: "wood_green" },
+    wood_yellow:  { name: "Yellow Wood", all: 0xd8c24a, tool: "hand", drop: "wood_yellow" },
     leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: null, harvestOnTap: true },
     cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
-    crafting_table:{ name: "Crafting Table", top: 0xa06a32, side: 0x8a5a2c, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
+    crafting_table:{ name: "Crafting Table", top: 0xc28a3a, side: 0x7a4a22, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
+    furnace:      { name: "Furnace",     top: 0x6b6b70, side: 0x5a5a5e, bottom: 0x4a4a4e, tool: "pickaxe", drop: "furnace" },
+    chest:        { name: "Chest",       top: 0xc79a4f, side: 0x8a5a2c, bottom: 0x6f4a26, tool: "hand", drop: "chest" },
+    bed:          { name: "Bed",         top: 0xd23b52, side: 0xc0392b, bottom: 0x9c7a48, tool: "hand", drop: "bed" },
     ladder:       { name: "Ladder", top: 0x8a5a2c, side: 0xb8863f, bottom: 0x8a5a2c, tool: "hand", drop: "ladder" },
-    coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal_ore" },
+    fence:        { name: "Fence",  top: 0x8a5a2c, side: 0x6f5230, bottom: 0x6f5230, tool: "hand", drop: "fence" },
+    torch:        { name: "Torch",  top: 0xffcc33, side: 0x8a5a2c, bottom: 0x6f5230, tool: "hand", drop: "torch", solid: false },
+    glass:        { name: "Glass",  all: 0xbfe3ef, top: 0xd6f0f7, tool: "hand", drop: "glass" },
+    window:       { name: "Window", all: 0xbfe3ef, top: 0x8a5a2c, tool: "hand", drop: "window" },
+    door:         { name: "Door",   all: 0x8a5a2c, top: 0x7a4a22, tool: "hand", drop: "door" },
+    door_window:  { name: "Door (with window)", all: 0x8a5a2c, top: 0x7a4a22, tool: "hand", drop: "door_window" },
+    clay:         { name: "Clay",       all: 0xa9a39a, tool: "hand", drop: "clay" },
+    brown_clay:   { name: "Brown Clay", all: 0x8a6a4a, tool: "hand", drop: "brown_clay" },
+    red_clay:     { name: "Red Clay",   all: 0xb45a3c, tool: "hand", drop: "red_clay" },
+    brick:        { name: "Brick",       all: 0xa5503c, tool: "pickaxe", drop: "brick" },
+    brown_brick:  { name: "Brown Brick", all: 0x6b4a32, tool: "pickaxe", drop: "brown_brick" },
+    red_brick:    { name: "Red Brick",   all: 0xb33a2c, tool: "pickaxe", drop: "red_brick" },
+    obsidian:     { name: "Obsidian",    all: 0x241a36, top: 0x342a4a, tool: "pickaxe", drop: "obsidian" },
+    coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal" },
     iron_ore:     { name: "Iron Ore",    all: 0xb9846a, base: 0x8a8a8d, tool: "pickaxe", drop: "iron_ore" },
     gold_ore:     { name: "Gold Ore",    all: 0xe6c34a, base: 0x8a8a8d, tool: "pickaxe", drop: "gold_ore" },
     redstone_ore: { name: "Redstone Ore",all: 0xc0392b, base: 0x8a8a8d, tool: "pickaxe", drop: "redstone_ore" },
     diamond_ore:  { name: "Diamond Ore", all: 0x4fe3d8, base: 0x8a8a8d, tool: "pickaxe", drop: "diamond_ore" },
     emerald_ore:  { name: "Emerald Ore", all: 0x2ecc71, base: 0x8a8a8d, tool: "pickaxe", drop: "emerald_ore" }
   };
+
+  // Open variants of the doors/window are generated from their closed defs so
+  // they share colours but can be walked through (solid:false).
+  ["window", "door", "door_window"].forEach((id) => {
+    const d = B[id];
+    B[id + "_open"] = { name: d.name + " (open)", all: d.all, top: d.top,
+      tool: "hand", drop: id, solid: false };
+  });
 
   // Fill in any missing face colours from "all" / "base".
   Object.keys(B).forEach((id) => {
@@ -109,7 +145,7 @@ window.Game = window.Game || {};
       if (d.side === undefined) d.side = d.all;
       if (d.bottom === undefined) d.bottom = d.all;
     }
-    d.solid = true;
+    if (d.solid === undefined) d.solid = true;
   });
 
   function mix(a, b, t) {
@@ -124,6 +160,7 @@ window.Game = window.Game || {};
 
   Game.BlockDefs = B;
   Game.isBlock = (id) => Object.prototype.hasOwnProperty.call(B, id);
+  Game.isSolidBlock = (id) => !!(B[id] && B[id].solid);
   // "Natural" blocks (trees, leaves, cactus, apples) that a tap always
   // grabs/punches — even when you're holding a block. Intent is read from what
   // you're pointing at, so a block in your hand never turns a "punch the tree"
@@ -131,8 +168,14 @@ window.Game = window.Game || {};
   // ground / your own structures, or with the Place button.
   Game.harvestOnTap = (id) => !!(B[id] && B[id].harvestOnTap);
 
+  // Touchable blocks that open / close when you tap them.
+  Game.OPENABLE = {
+    window: "window_open", window_open: "window",
+    door: "door_open", door_open: "door",
+    door_window: "door_window_open", door_window_open: "door_window"
+  };
+
   // ---- Item definitions (blocks + non-block items) ----------------
-  // Non-block items: stick, pickaxe, and the food apple item.
   Game.ItemDefs = {};
 
   // Every block is also an item you can hold and place.
@@ -140,19 +183,50 @@ window.Game = window.Game || {};
     Game.ItemDefs[id] = {
       name: B[id].name,
       swatch: B[id].top,    // little colour square used as the icon
+      swatchSide: B[id].side,
       placeable: true
     };
   });
+  // Ore icons carry a speckle so they look like their in-world block.
+  Object.keys(B).forEach((id) => {
+    if (B[id].base !== undefined) { Game.ItemDefs[id].speckle = B[id].all; Game.ItemDefs[id].ore = true; }
+  });
+  // The open door/window states are never carried around — drop their tidy form.
+  ["window_open", "door_open", "door_window_open"].forEach((id) => { Game.ItemDefs[id].hidden = true; });
 
   // Special non-block items. NOTE: "apple" is also a world block, so this
-  // MUST come after the loop above to override it — the apple you carry is
-  // food you eat, not a block you place.
-  Game.ItemDefs.stick   = { name: "Stick", emoji: "🥢", placeable: false };
-  Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true };
-  Game.ItemDefs.stone_pickaxe = { name: "Stone Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true };
-  Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6 };
+  // MUST come after the loop above to override it.
+  Game.ItemDefs.stick   = { name: "Stick", emoji: "🥢", placeable: false, desc: "A handy stick for tools, ladders and torches." };
+  Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true, desc: "Mines stone and ores." };
+  Game.ItemDefs.stone_pickaxe = { name: "Stone Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true, desc: "A sturdier pickaxe." };
+  Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6, desc: "Eat it to fill your food bar." };
+  Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 8, desc: "Burns in a furnace. Makes torches too." };
+  Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
+  Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
+  Game.ItemDefs.paint_red    = { name: "Red Paint",    swatch: 0xc0392b, placeable: false, paint: "red",    desc: "Paint wood red at a crafting table." };
+  Game.ItemDefs.paint_blue   = { name: "Blue Paint",   swatch: 0x2f6fd8, placeable: false, paint: "blue",   desc: "Paint wood blue at a crafting table." };
+  Game.ItemDefs.paint_green  = { name: "Green Paint",  swatch: 0x2ecc71, placeable: false, paint: "green",  desc: "Paint wood green at a crafting table." };
+  Game.ItemDefs.paint_yellow = { name: "Yellow Paint", swatch: 0xe6c34a, placeable: false, paint: "yellow", desc: "Paint wood yellow at a crafting table." };
+
   // Watermelon stays a normal placeable block, but you can also eat it.
   Game.ItemDefs.watermelon.food = 8;
+
+  // A few descriptions for placeable blocks (shown in the inventory title).
+  const DESCS = {
+    furnace: "Place it and tap to smelt sand, clay, coal and ore.",
+    chest: "Place it and tap to store lots of items.",
+    crafting_table: "Place it and tap for the full 3×3 crafting grid.",
+    bed: "A cosy place to sleep.",
+    fence: "Pen animals in — they won't cross a fence.",
+    torch: "A little light for dark places.",
+    glass: "See-through block. Build windows with it.",
+    window: "Tap it to open and close the window.",
+    door: "Tap it to open and close the door.",
+    door_window: "A door with a window built in. Tap to open.",
+    obsidian: "The hardest, darkest block.",
+    emerald_ore: "Smelt it in a furnace to get an emerald."
+  };
+  Object.keys(DESCS).forEach((id) => { if (Game.ItemDefs[id]) Game.ItemDefs[id].desc = DESCS[id]; });
 
   // Any pickaxe can mine stone & ores.
   Game.isPickaxe = (id) => id === "pickaxe" || id === "stone_pickaxe";
@@ -162,19 +236,19 @@ window.Game = window.Game || {};
   Game.MAX_STACK = 99;
 
   // ---- Crafting recipes (shaped, like Minecraft) -----------------
-  // pattern: rows of cells (item id or null). It is matched against the
-  // crafting grid after both are trimmed of empty rows/columns, so a small
-  // recipe can be placed anywhere in the grid. gives: {id, count}. A recipe
-  // that needs the full 3x3 only fits at a Crafting Table; table:true forces
-  // a table even for small recipes.
-  const W = "wood", S = "stick", T = "stone";
+  const W = "wood", S = "stick", T = "stone", G = "glass", PL = "planks",
+        CO = "coal", IR = "iron_ore", RS = "redstone_ore";
   Game.Recipes = [
-    // 2 wood stacked vertically (centre + centre-bottom) -> 1 stick.
-    { id: "stick", gives: { id: "stick", count: 1 },
-      pattern: [[W], [W]] },
+    // 1 wood -> 4 planks.
+    { id: "planks", gives: { id: "planks", count: 4 }, pattern: [[W]] },
+    // 2 wood stacked vertically -> 1 stick.
+    { id: "stick", gives: { id: "stick", count: 1 }, pattern: [[W], [W]] },
     // 4 wood in a square -> a crafting table.
-    { id: "crafting_table", gives: { id: "crafting_table", count: 1 },
-      pattern: [[W, W], [W, W]] },
+    { id: "crafting_table", gives: { id: "crafting_table", count: 1 }, pattern: [[W, W], [W, W]] },
+    // 4 stone in a square -> a furnace.
+    { id: "furnace", gives: { id: "furnace", count: 1 }, pattern: [[T, T], [T, T]] },
+    // Coal on top of a stick -> 4 torches.
+    { id: "torch", gives: { id: "torch", count: 4 }, pattern: [[CO], [S]] },
     // 3 wood across the top + 2 sticks down the middle -> wooden pickaxe.
     { id: "pickaxe", gives: { id: "pickaxe", count: 1 }, table: true,
       pattern: [[W, W, W], [null, S, null], [null, S, null]] },
@@ -183,7 +257,62 @@ window.Game = window.Game || {};
       pattern: [[T, T, T], [null, S, null], [null, S, null]] },
     // Sticks down both sides + one in the middle -> 3 ladders.
     { id: "ladder", gives: { id: "ladder", count: 3 }, table: true,
-      pattern: [[S, null, S], [S, S, S], [S, null, S]] }
+      pattern: [[S, null, S], [S, S, S], [S, null, S]] },
+    // Wood posts with sticks between -> 6 fences.
+    { id: "fence", gives: { id: "fence", count: 6 }, table: true,
+      pattern: [[W, S, W], [W, S, W]] },
+    // Iron - redstone - iron -> a battery (long-lasting furnace fuel).
+    { id: "battery", gives: { id: "battery", count: 1 }, table: true,
+      pattern: [[IR], [RS], [IR]] },
+    // Planks mattress over a wood frame -> a bed.
+    { id: "bed", gives: { id: "bed", count: 1 }, table: true,
+      pattern: [[PL, PL, PL], [W, W, W]] },
+    // A ring of wood -> a chest.
+    { id: "chest", gives: { id: "chest", count: 1 }, table: true,
+      pattern: [[W, W, W], [W, null, W], [W, W, W]] },
+    // Glass surrounded by wood -> a window.
+    { id: "window", gives: { id: "window", count: 1 }, table: true,
+      pattern: [[W, W, W], [W, G, W], [W, W, W]] },
+    // 6 wood -> a plain door.
+    { id: "door", gives: { id: "door", count: 1 }, table: true,
+      pattern: [[W, W], [W, W], [W, W]] },
+    // Glass over wood -> a door with a window.
+    { id: "door_window", gives: { id: "door_window", count: 1 }, table: true,
+      pattern: [[G, G], [W, W], [W, W]] }
+  ];
+
+  // Painting recipes: wood + a paint -> coloured wood.
+  ["red", "blue", "green", "yellow"].forEach((c) => {
+    Game.Recipes.push({
+      id: "wood_" + c, gives: { id: "wood_" + c, count: 1 },
+      pattern: [[W, "paint_" + c]]
+    });
+  });
+
+  // ---- Furnace smelting recipes ----------------------------------
+  // input item id -> what you get out.
+  Game.SmeltRecipes = {
+    sand: { id: "glass", count: 1 },
+    clay: { id: "brick", count: 1 },
+    brown_clay: { id: "brown_brick", count: 1 },
+    red_clay: { id: "red_brick", count: 1 },
+    coal: { id: "obsidian", count: 1 },
+    emerald_ore: { id: "emerald", count: 1 }
+  };
+  Game.canSmelt = (id) => !!Game.SmeltRecipes[id];
+  Game.isFuel = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].fuel);
+  Game.fuelValue = (id) => (Game.ItemDefs[id] ? (Game.ItemDefs[id].fuel || 0) : 0);
+
+  // ---- Villager trades -------------------------------------------
+  // What a villager will sell you for emeralds.
+  Game.Trades = [
+    { cost: 1, gives: { id: "paint_red", count: 1 } },
+    { cost: 1, gives: { id: "paint_blue", count: 1 } },
+    { cost: 1, gives: { id: "paint_green", count: 1 } },
+    { cost: 1, gives: { id: "paint_yellow", count: 1 } },
+    { cost: 2, gives: { id: "glass", count: 4 } },
+    { cost: 3, gives: { id: "window", count: 1 } },
+    { cost: 4, gives: { id: "bed", count: 1 } }
   ];
 
 })(window.Game);

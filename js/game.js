@@ -28,19 +28,38 @@
     craftTable: false,
     swing: 0,
     last: 0,
-    autosaveTimer: 0
+    autosaveTimer: 0,
+    riding: null,            // the animal you're currently riding (or null)
+    chests: {},              // "x,y,z" -> array of stored item stacks
+    openChestKey: null,      // which chest the chest panel is showing
+    tradingWith: null        // the villager whose trade panel is open
   };
   Game.S = S;
+  const CHEST_SIZE = 27;
 
   // ---- Small helpers --------------------------------------------
   const $ = (id) => document.getElementById(id);
   const hex = (n) => "#" + (n >>> 0).toString(16).padStart(6, "0");
 
+  // A distinctive little icon for each item: emoji items render their emoji;
+  // block/material items render a tiny shaded "cube" (a lit top over a darker
+  // side) so each material reads differently, and ores get a speckled overlay.
   function iconHTML(id) {
     const def = Game.itemDef(id);
     if (!def) return "";
-    if (def.swatch !== undefined) return '<span class="swatch" style="background:' + hex(def.swatch) + '"></span>';
-    return '<span>' + (def.emoji || "?") + "</span>";
+    if (def.emoji) return '<span class="emoji">' + def.emoji + "</span>";
+    if (def.swatch !== undefined) {
+      const top = hex(def.swatch);
+      const side = hex(def.swatchSide !== undefined ? def.swatchSide : Game.mix(def.swatch, 0x000000, 0.34));
+      let bg = "linear-gradient(150deg," + top + " 0 54%," + side + " 54% 100%)";
+      if (def.ore) {
+        const sp = hex(def.speckle);
+        bg = "radial-gradient(" + sp + " 17%, transparent 19%) 0 0/8px 8px," +
+             "radial-gradient(" + sp + " 17%, transparent 19%) 4px 4px/8px 8px," + bg;
+      }
+      return '<span class="swatch" style="background:' + bg + '"></span>';
+    }
+    return '<span class="emoji">?</span>';
   }
 
   let toastTimer = null;
@@ -56,26 +75,31 @@
   // ===============================================================
   //  Inventory
   // ===============================================================
-  function addItem(id, count) {
+  // Stack `count` of `id` into any array of slots (the inventory or a chest).
+  // Returns how many actually fit.
+  function stackInto(arr, id, count) {
     let remaining = count;
-    // top up existing stacks
-    for (let i = 0; i < S.inv.length && remaining > 0; i++) {
-      const s = S.inv[i];
+    for (let i = 0; i < arr.length && remaining > 0; i++) {
+      const s = arr[i];
       if (s && s.id === id && s.count < Game.MAX_STACK) {
         const add = Math.min(Game.MAX_STACK - s.count, remaining);
         s.count += add; remaining -= add;
       }
     }
-    // fill empty slots
-    for (let i = 0; i < S.inv.length && remaining > 0; i++) {
-      if (!S.inv[i]) {
+    for (let i = 0; i < arr.length && remaining > 0; i++) {
+      if (!arr[i]) {
         const add = Math.min(Game.MAX_STACK, remaining);
-        S.inv[i] = { id: id, count: add }; remaining -= add;
+        arr[i] = { id: id, count: add }; remaining -= add;
       }
     }
+    return count - remaining;
+  }
+
+  function addItem(id, count) {
+    const fit = stackInto(S.inv, id, count);
     renderHotbar();
     if (!$("inventory-panel").classList.contains("hidden")) renderInventory();
-    return count - remaining;
+    return fit;
   }
 
   function countItem(id) {
@@ -108,7 +132,23 @@
     renderHotbar();
     if (!$("inventory-panel").classList.contains("hidden")) renderInventory();
     updateHand();
+    updateInvTitle(S.inv[i] ? S.inv[i].id : null);
     setViewmodel(selectedSlot() ? selectedSlot().id : null);
+  }
+
+  // The little title bar in the inventory panel that names (and describes)
+  // whatever you last clicked on.
+  function updateInvTitle(id) {
+    const t = $("inv-title");
+    if (!t) return;
+    if (!id) {
+      t.innerHTML = '<span class="inv-title-name">Tap an item to see what it is</span>';
+      return;
+    }
+    const def = Game.itemDef(id);
+    t.innerHTML = '<span class="inv-title-icon">' + iconHTML(id) + "</span>" +
+      '<span class="inv-title-text"><b>' + Game.itemName(id) + "</b>" +
+      (def && def.desc ? '<br><small>' + def.desc + "</small>" : "") + "</span>";
   }
 
   function buildSlotEl(i) {
@@ -133,6 +173,7 @@
     const grid = $("inv-grid");
     grid.innerHTML = "";
     for (let i = 0; i < S.inv.length; i++) grid.appendChild(buildSlotEl(i));
+    updateInvTitle(S.inv[S.selected] ? S.inv[S.selected].id : null);
   }
 
   function updateHand() {
@@ -359,6 +400,250 @@
   }
 
   // ===============================================================
+  //  Furnace — load a fuel (coal / battery) + something to smelt
+  // ===============================================================
+  const FUR = { fuel: null, fuelN: 0, input: null, inputN: 0, burn: 0, brush: null };
+  S.furnace = FUR;
+
+  function openFurnace() {
+    returnFurnace();
+    FUR.brush = null;
+    renderFurnace();
+    showPanel("furnace-panel");
+  }
+  Game._openFurnace = openFurnace; // (used by the smoke test)
+
+  // Tip whatever is sitting in the furnace back into your inventory.
+  function returnFurnace() {
+    if (FUR.fuel && FUR.fuelN > 0) addItem(FUR.fuel, FUR.fuelN);
+    if (FUR.input && FUR.inputN > 0) addItem(FUR.input, FUR.inputN);
+    FUR.fuel = null; FUR.fuelN = 0; FUR.input = null; FUR.inputN = 0; FUR.burn = 0;
+  }
+
+  function furnaceFill(which) {
+    const id = FUR.brush;
+    if (which === "fuel") {
+      if (FUR.fuel && FUR.fuelN > 0) { addItem(FUR.fuel, FUR.fuelN); FUR.fuel = null; FUR.fuelN = 0; renderFurnace(); return; }
+      if (!id) { toast("Pick an item below first."); return; }
+      if (!Game.isFuel(id)) { toast("That's not fuel — use coal or a battery."); return; }
+      const n = countItem(id); if (!n) return;
+      removeItems({ [id]: n }); FUR.fuel = id; FUR.fuelN = n;
+    } else {
+      if (FUR.input && FUR.inputN > 0) { addItem(FUR.input, FUR.inputN); FUR.input = null; FUR.inputN = 0; renderFurnace(); return; }
+      if (!id) { toast("Pick an item below first."); return; }
+      if (!Game.canSmelt(id)) { toast(Game.itemName(id) + " can't be smelted."); return; }
+      const n = countItem(id); if (!n) return;
+      removeItems({ [id]: n }); FUR.input = id; FUR.inputN = n;
+    }
+    renderFurnace();
+  }
+
+  function doSmelt() {
+    if (!FUR.input || FUR.inputN <= 0) { toast("Add something to smelt."); return; }
+    if (!Game.canSmelt(FUR.input)) { toast("That can't be smelted."); return; }
+    const out = Game.SmeltRecipes[FUR.input];
+    let made = 0;
+    while (FUR.inputN > 0) {
+      if (FUR.burn <= 0) {
+        if (FUR.fuelN <= 0) break;          // out of fuel
+        FUR.fuelN -= 1; FUR.burn += Game.fuelValue(FUR.fuel);
+      }
+      FUR.burn -= 1; FUR.inputN -= 1; made += 1;
+      addItem(out.id, out.count);
+    }
+    if (FUR.inputN <= 0) FUR.input = null;
+    if (FUR.fuelN <= 0 && FUR.burn <= 0) FUR.fuel = null;
+    renderFurnace();
+    if (!made) toast("Need fuel — add coal or a battery. 🔥");
+    else toast("Smelted " + made + " × " + Game.itemName(out.id) + "!");
+  }
+
+  function renderFurnace() {
+    const cell = (el, id, n) => {
+      el.innerHTML = id ? iconHTML(id) + (n > 1 ? '<span class="count">' + n + "</span>" : "") : "";
+    };
+    cell($("furnace-fuel"), FUR.fuel, FUR.fuelN);
+    cell($("furnace-input"), FUR.input, FUR.inputN);
+    const out = FUR.input && Game.canSmelt(FUR.input) ? Game.SmeltRecipes[FUR.input] : null;
+    const oc = $("furnace-output");
+    oc.innerHTML = out ? iconHTML(out.id) : "";
+    oc.className = "furnace-cell out" + (out && (FUR.fuelN > 0 || FUR.burn > 0) ? " ready" : "");
+    $("furnace-burn").textContent = (FUR.fuel || FUR.burn > 0)
+      ? "🔥 Fuel loaded: " + FUR.fuelN + (FUR.fuel ? " × " + Game.itemName(FUR.fuel) : "")
+      : "No fuel loaded yet";
+
+    const inv = $("furnace-inv");
+    inv.innerHTML = "";
+    const seen = {};
+    S.inv.forEach((s) => { if (s) seen[s.id] = (seen[s.id] || 0) + s.count; });
+    const ids = Object.keys(seen);
+    if (!ids.length) {
+      inv.innerHTML = '<span class="craft-empty">Gather sand, clay, coal or ore — and some fuel.</span>';
+    } else {
+      ids.forEach((id) => {
+        const chip = document.createElement("button");
+        chip.className = "craft-chip" + (FUR.brush === id ? " active" : "");
+        chip.innerHTML = iconHTML(id) + '<span class="count">' + seen[id] + "</span>";
+        chip.title = Game.itemName(id) + (Game.isFuel(id) ? " · fuel 🔥" : (Game.canSmelt(id) ? " · smeltable ♨️" : ""));
+        chip.addEventListener("click", () => { FUR.brush = (FUR.brush === id ? null : id); renderFurnace(); });
+        inv.appendChild(chip);
+      });
+    }
+  }
+
+  // ===============================================================
+  //  Chest — extra storage you place in the world
+  // ===============================================================
+  function chestArr() {
+    let a = S.chests[S.openChestKey];
+    if (!a) { a = new Array(CHEST_SIZE).fill(null); S.chests[S.openChestKey] = a; }
+    return a;
+  }
+
+  function openChest(pos) {
+    S.openChestKey = pos.x + "," + pos.y + "," + pos.z;
+    chestArr();
+    renderChest();
+    showPanel("chest-panel");
+  }
+
+  // Tip a broken chest's contents into your inventory so nothing is lost.
+  function dumpChest(pos) {
+    const k = pos.x + "," + pos.y + "," + pos.z;
+    const a = S.chests[k];
+    if (a) { a.forEach((s) => { if (s) addItem(s.id, s.count); }); delete S.chests[k]; }
+  }
+
+  function chestTake(i) {
+    const a = chestArr(); const s = a[i]; if (!s) return;
+    const fit = addItem(s.id, s.count); s.count -= fit; if (s.count <= 0) a[i] = null;
+    renderChest();
+  }
+  function chestPut(i) {
+    const s = S.inv[i]; if (!s) return;
+    const a = chestArr(); const fit = stackInto(a, s.id, s.count);
+    s.count -= fit; if (s.count <= 0) S.inv[i] = null;
+    renderHotbar(); renderChest();
+  }
+
+  function renderChest() {
+    const fill = (grid, arr, onClick) => {
+      grid.innerHTML = "";
+      for (let i = 0; i < arr.length; i++) {
+        const el = document.createElement("div");
+        el.className = "slot";
+        const s = arr[i];
+        if (s) { el.innerHTML = iconHTML(s.id) + (s.count > 1 ? '<span class="count">' + s.count + "</span>" : ""); el.title = Game.itemName(s.id); }
+        el.addEventListener("click", () => onClick(i));
+        grid.appendChild(el);
+      }
+    };
+    fill($("chest-grid"), chestArr(), chestTake);
+    fill($("chest-inv-grid"), S.inv, chestPut);
+  }
+
+  // ===============================================================
+  //  Villager trading
+  // ===============================================================
+  function openTrade(villager) {
+    S.tradingWith = villager;
+    renderTrades();
+    showPanel("trade-panel");
+  }
+  Game._openTrade = openTrade; // (used by the smoke test)
+  function buyTrade(t) {
+    if (countItem("emerald") < t.cost) { toast("You need " + t.cost + " emerald" + (t.cost > 1 ? "s" : "") + " for that."); return; }
+    removeItems({ emerald: t.cost });
+    addItem(t.gives.id, t.gives.count);
+    toast("Traded for " + Game.itemName(t.gives.id) + "! 💚");
+    renderTrades();
+  }
+  function renderTrades() {
+    $("trade-emeralds").textContent = "💚 Your emeralds: " + countItem("emerald");
+    const list = $("trade-list");
+    list.innerHTML = "";
+    Game.Trades.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.className = "recipe-book-item";
+      btn.disabled = countItem("emerald") < t.cost;
+      btn.innerHTML =
+        '<span class="rb-icon">' + iconHTML(t.gives.id) + "</span>" +
+        '<span class="rb-text"><b>' + Game.itemName(t.gives.id) +
+        (t.gives.count > 1 ? " ×" + t.gives.count : "") + "</b><br><small>" +
+        t.cost + " 💚 emerald" + (t.cost > 1 ? "s" : "") + "</small></span>";
+      btn.addEventListener("click", () => buyTrade(t));
+      list.appendChild(btn);
+    });
+  }
+
+  // ===============================================================
+  //  Riding an animal (fences keep them penned)
+  // ===============================================================
+  function toggleRide(animal) {
+    S.riding = animal;
+    toast("Riding the " + (animal.userData.kind || "animal") + "! Tap to hop off. 🐎");
+  }
+  function dismount() {
+    const a = S.riding; S.riding = null;
+    if (a) {
+      S.player.pos.set(a.position.x + 0.8, a.position.y, a.position.z);
+      S.player.vel.set(0, 0, 0);
+      S.player.fallPeak = S.player.pos.y;
+    }
+  }
+  function updateRiding(dt) {
+    const p = S.player, a = S.riding;
+    if (!a) return;
+    if (S.input.turnLeft) p.yaw += C.TURN_SPEED * dt;
+    if (S.input.turnRight) p.yaw -= C.TURN_SPEED * dt;
+    const f = p.forwardH();
+    if (S.input.forward) {
+      const nx = a.position.x + f.x * C.RIDE_SPEED * dt;
+      const nz = a.position.z + f.z * C.RIDE_SPEED * dt;
+      if (S.world.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
+    }
+    const sy = S.world.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+    a.rotation.y = -Math.atan2(f.z, f.x) + Math.PI / 2;
+    p.pos.set(a.position.x, a.position.y + 0.55, a.position.z);
+    p.vel.set(0, 0, 0);
+    p.updateVitals(dt);
+    p.syncCamera();
+  }
+
+  // Tapping an animal mounts it (or trades with a villager). Returns true if it
+  // handled the tap.
+  function aimedEntityAct() {
+    const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
+    let blockDist = null;
+    if (hit) {
+      const c = new THREE.Vector3(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
+      blockDist = S.player.eyePosition().distanceTo(c);
+    }
+    const animal = aimedAnimal(blockDist);
+    if (!animal) return false;
+    if (animal.userData.kind === "villager") openTrade(animal);
+    else toggleRide(animal);
+    S.swing = 0.18;
+    return true;
+  }
+
+  // Tapping an interactive block (table / furnace / chest / door / window).
+  function tryBlockInteract(hit) {
+    if (!hit) return false;
+    const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
+    if (id === "crafting_table") { openCrafting(true); return true; }
+    if (id === "furnace") { openFurnace(); return true; }
+    if (id === "chest") { openChest(hit.block); return true; }
+    if (Game.OPENABLE[id]) {
+      S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, Game.OPENABLE[id]);
+      S.swing = 0.18;
+      return true;
+    }
+    return false;
+  }
+
+  // ===============================================================
   //  Eating
   // ===============================================================
   function eatFood() {
@@ -406,15 +691,14 @@
   }
 
   function doUse() {
+    if (S.riding) { dismount(); return; }
     const s = selectedSlot();
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
+    const holdingPick = s && Game.isPickaxe(s.id);
 
-    // Aiming at a crafting table always opens its grid — even with a block in
-    // your hand — so selecting a table never places the held block onto it.
-    if (hit && S.world.get(hit.block.x, hit.block.y, hit.block.z) === "crafting_table") {
-      openCrafting(true);
-      return;
-    }
+    // Aiming at an interactive block (table / furnace / chest / door) uses it —
+    // even with a block in your hand — so selecting one never places onto it.
+    if (!holdingPick && tryBlockInteract(hit)) return;
 
     // Holding a placeable block -> build.
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) {
@@ -435,23 +719,12 @@
   }
 
   function doHit() {
+    if (S.riding) { dismount(); return; }
+
+    // Animals come first if they're closer — tap to ride (or trade).
+    if (aimedEntityAct()) return;
+
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
-    let blockDist = null;
-    if (hit) {
-      const center = new THREE.Vector3(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
-      blockDist = S.player.eyePosition().distanceTo(center);
-    }
-
-    // Animals come first if they're closer — and they can't be hurt.
-    const animal = aimedAnimal(blockDist);
-    if (animal) {
-      animal.userData.hop = 0.5;
-      animal.userData.dir = Math.random() * Math.PI * 2;
-      toast("You can't hurt the animals! 🐷");
-      S.swing = 0.18;
-      return;
-    }
-
     if (!hit) return;
     const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
     const def = Game.BlockDefs[id];
@@ -460,14 +733,18 @@
 
     const holdingPick = selectedSlot() && Game.isPickaxe(selectedSlot().id);
 
-    // Tapping a crafting table (without a pickaxe) opens it instead of breaking it.
-    if (id === "crafting_table" && !holdingPick) { openCrafting(true); return; }
+    // Tapping an interactive block (without a pickaxe) uses it instead of
+    // breaking it. Hold a pickaxe to actually mine these away.
+    if (!holdingPick && tryBlockInteract(hit)) return;
 
     // Stone & ores need a pickaxe.
     if (def.tool === "pickaxe" && !holdingPick) {
       toast("You need a pickaxe to mine " + def.name + "!");
       return;
     }
+
+    // A broken chest spills its contents back to you.
+    if (id === "chest") dumpChest(hit.block);
 
     S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
     if (def.drop) {
@@ -482,10 +759,16 @@
   // accidental "place". You build by tapping the ground (or with the Place
   // button). Empty hand / pickaxe on anything else digs or mines.
   function doTap() {
+    if (S.riding) { dismount(); return; }
+    if (aimedEntityAct()) return; // tap an animal to ride / a villager to trade
     const hit = S.world.raycast(S.player.eyePosition(), S.player.lookDir());
-    if (hit && Game.harvestOnTap(S.world.get(hit.block.x, hit.block.y, hit.block.z))) {
-      doHit();
-      return;
+    if (hit) {
+      const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
+      if (Game.harvestOnTap(id)) { doHit(); return; }
+      // Doors / windows / table / furnace / chest are used by a tap.
+      if (id === "crafting_table" || id === "furnace" || id === "chest" || Game.OPENABLE[id]) {
+        tryBlockInteract(hit); return;
+      }
     }
     const s = selectedSlot();
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) doUse();
@@ -521,7 +804,9 @@
       vm.rotation.z = 0.4;
       return;
     }
-    const colors = { apple: 0xd23b32, stick: 0x9a6a32 };
+    const colors = { apple: 0xd23b32, stick: 0x9a6a32, coal: 0x2a2a2c, emerald: 0x2ecc71,
+      battery: 0xd8c24a, paint_red: 0xc0392b, paint_blue: 0x2f6fd8, paint_green: 0x2ecc71,
+      paint_yellow: 0xe6c34a };
     const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
@@ -583,6 +868,15 @@
   function renderVitals() {
     drawPips($("health-row"), S.player.hp, C.MAX_HP, "❤️", "🖤");
     drawPips($("food-row"), S.player.food, C.MAX_FOOD, "🍗", "🦴");
+    // Air bubbles only appear while you're underwater (and draining/refilling).
+    const airRow = $("air-row");
+    if (S.player.air < C.MAX_AIR - 0.05) {
+      airRow.style.display = "";
+      drawPips(airRow, S.player.air, C.MAX_AIR, "🫧", "⚫");
+    } else {
+      airRow.style.display = "none";
+      airRow.innerHTML = "";
+    }
   }
 
   function drawPips(row, value, max, full, empty) {
@@ -604,7 +898,8 @@
     if (dt > 0.1) dt = 0.1; // avoid huge jumps after a pause
 
     if (!S.paused && !S.player.dead) {
-      S.player.update(dt, S.input);
+      if (S.riding) updateRiding(dt);
+      else S.player.update(dt, S.input);
       S.world.updateAnimals(dt);
       updateTargeting();
       renderVitals();
@@ -625,6 +920,7 @@
   }
 
   function onDeath() {
+    S.riding = null;
     S.paused = true;
     $("death-reason").textContent = "You " + (S.player.lastDamage || "ran out of health") + ".";
     document.body.classList.add("menu-open");
@@ -670,10 +966,13 @@
       S.player.syncCamera();
       S.inv = restore.inventory;
       S.selected = restore.selected || 0;
+      S.chests = restore.chests || {};
     } else {
       S.inv = new Array(36).fill(null);
       S.selected = 0;
+      S.chests = {};
     }
+    S.riding = null;
 
     renderHotbar();
     updateHand();
@@ -731,7 +1030,8 @@
         hp: S.player.hp, food: S.player.food
       },
       inventory: S.inv,
-      selected: S.selected
+      selected: S.selected,
+      chests: S.chests
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -755,7 +1055,7 @@
     // make sure the inventory array is the right length
     const inv = new Array(36).fill(null);
     (data.inventory || []).forEach((s, i) => { if (s && i < 36) inv[i] = s; });
-    startWorld(world, { player: data.player, inventory: inv, selected: data.selected });
+    startWorld(world, { player: data.player, inventory: inv, selected: data.selected, chests: data.chests || {} });
     return true;
   }
 
@@ -768,7 +1068,10 @@
     if (S.running) S.paused = true;
   }
   function hideAllPanels() {
-    returnGrid(); // never swallow ingredients left in the crafting grid
+    returnGrid();    // never swallow ingredients left in the crafting grid
+    returnFurnace(); // ...or anything sitting in the furnace
+    S.openChestKey = null;
+    S.tradingWith = null;
     document.querySelectorAll(".panel-overlay").forEach((p) => p.classList.add("hidden"));
     document.body.classList.remove("menu-open");
     if (S.running && !(S.player && S.player.dead)) S.paused = false;
@@ -802,6 +1105,11 @@
     tapButton($("btn-inventory"), () => { renderInventory(); showPanel("inventory-panel"); });
     tapButton($("btn-craft"), () => openCrafting(false)); // Craft button = 2x2 grid
     tapButton($("craft-result"), doCraft);
+
+    // Furnace panel
+    tapButton($("furnace-fuel"), () => furnaceFill("fuel"));
+    tapButton($("furnace-input"), () => furnaceFill("input"));
+    tapButton($("furnace-smelt"), doSmelt);
     tapButton($("btn-save"), () => saveGame(false));
     tapButton($("btn-menu"), () => { saveGame(true); refreshStartPanel(); showPanel("start-panel"); });
 
@@ -819,6 +1127,10 @@
       document.body.classList.remove("menu-open");
     });
 
+    // Suppress the iOS/Android long-press context menu & selection loupe so a
+    // press-and-hold on the world never pops up a blue zoom/selection box.
+    window.addEventListener("contextmenu", (e) => e.preventDefault());
+
     wirePointerLook();
     wireKeyboard();
     window.addEventListener("resize", onResize);
@@ -833,6 +1145,8 @@
     const el = $("game");
     let dragging = false, moved = 0, lx = 0, ly = 0;
     el.addEventListener("pointerdown", (e) => {
+      // Stop the long-press text-selection / magnifier (the blue "zoom" box).
+      e.preventDefault();
       if (S.paused || !S.player) return;
       dragging = true; moved = 0; lx = e.clientX; ly = e.clientY;
     });
