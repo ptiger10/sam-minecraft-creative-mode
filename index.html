@@ -72,6 +72,9 @@
     <div class="panel">
       <h2>🎒 Inventory</h2>
       <p class="hint">Click an item to put it in your hand.</p>
+      <div class="inv-title" id="inv-title">
+        <span class="inv-title-name">Tap an item to see what it is</span>
+      </div>
       <div class="inv-grid" id="inv-grid"></div>
       <button class="big-btn close-btn">Close</button>
     </div>
@@ -98,6 +101,56 @@
       <h3 class="craft-label">Recipes (tap to fill the grid)</h3>
       <div class="recipe-book" id="recipe-book"></div>
 
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Furnace panel ============ -->
+  <div class="panel-overlay hidden" id="furnace-panel">
+    <div class="panel">
+      <h2>🔥 Furnace</h2>
+      <p class="hint">Load a <b>fuel</b> (coal or a battery) and something to
+        <b>smelt</b>, then press Smelt. Batteries last much longer than coal.</p>
+      <div class="furnace-area">
+        <div class="furnace-stack">
+          <div class="furnace-cell fuel" id="furnace-fuel" title="Fuel: coal or battery"></div>
+          <div class="furnace-cell-label">🔥 Fuel</div>
+          <div class="furnace-cell" id="furnace-input" title="Thing to smelt"></div>
+          <div class="furnace-cell-label">♨️ Smelt</div>
+        </div>
+        <div class="craft-arrow">➡️</div>
+        <div class="furnace-cell out" id="furnace-output" title="Result"></div>
+      </div>
+      <p class="furnace-burn" id="furnace-burn">No fuel loaded yet</p>
+      <button class="big-btn" id="furnace-smelt">Smelt</button>
+      <h3 class="craft-label">Your items (tap one, then tap Fuel or Smelt)</h3>
+      <div class="craft-inv" id="furnace-inv"></div>
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Chest panel ============ -->
+  <div class="panel-overlay hidden" id="chest-panel">
+    <div class="panel">
+      <h2>📦 Chest</h2>
+      <p class="hint">Tap an item in the chest to take it out, or tap one of your
+        items to store it.</p>
+      <h3 class="craft-label">Chest</h3>
+      <div class="inv-grid chest-grid" id="chest-grid"></div>
+      <h3 class="craft-label">Your backpack</h3>
+      <div class="inv-grid" id="chest-inv-grid"></div>
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Villager trade panel ============ -->
+  <div class="panel-overlay hidden" id="trade-panel">
+    <div class="panel">
+      <h2>🧑‍🌾 Villager Trades</h2>
+      <p class="hint">Villagers love emeralds — smelt <b>emerald ore</b> in a
+        furnace to get them. Trade for paints and other goodies.</p>
+      <p class="trade-emeralds" id="trade-emeralds">💚 Your emeralds: 0</p>
+      <div class="recipe-book" id="trade-list"></div>
       <button class="big-btn close-btn">Close</button>
     </div>
   </div>

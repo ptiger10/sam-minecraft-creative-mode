@@ -73,24 +73,38 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 💀 If your health runs out, you die — then you can respawn.
 - 🐷 **Animals** — pigs, sheep, donkeys, horses and dogs wander the ground, and
-  🐒 **monkeys** swing in the trees. You *can't* hurt any of them.
+  🐒 **monkeys** swing in the trees. You *can't* hurt any of them. **Tap a
+  ground animal to climb on and ride it** (tap again to hop off). Build a
+  **fence** around a field and the animals stay penned inside it.
+- 🧑‍🌾 **Villagers** wander the world too. **Tap one to trade** — they take 💚
+  **emeralds** (smelt emerald ore in a furnace) and sell you paints and other
+  goodies to decorate your house.
+- 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
+  red) to dig up near the water and underground — smelt it into bricks.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
   a stone block **speckled** with its own colour so you can spot it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
   cyan-flecked blocks for diamond.
-- 🎒 An **inventory** + hotbar. Whatever you select goes into your hand.
-  Hold a block and place it; hold a pickaxe and mine.
+- 🔥 **Furnaces.** Craft one from **4 stone**, place it and tap it. Load a
+  **fuel** (coal, or a long-lasting **battery**) and something to **smelt**:
+  sand → **glass**, clay → **brick**, coal → **obsidian**, emerald ore →
+  **emerald**.
+- 🚪 **Doors & windows** you can **tap to open and close**, **🛏️ beds**, **🔦
+  torches**, and a **📦 chest** that stores lots of extra items.
+- 🎒 An **inventory** + hotbar with distinctive material icons and a title that
+  names whatever you tap. Whatever you select goes into your hand — hold a block
+  and place it; hold a pickaxe and mine.
 - 🛠️ **Crafting — a real shaped grid, like Minecraft.** The **Craft** button
   opens a **2×2** grid; a **Crafting Table** opens the full **3×3** grid. Tap an
   item, then tap squares to lay out a recipe (or tap an entry in the recipe book
   to auto-arrange it), then tap the result square to make it:
-  - **Stick** = 2 wood, one in the centre and one centre-bottom
-  - **Crafting Table** = 4 wood in a 2×2 square
-  - **Wooden Pickaxe** = 3 wood across the top + 2 sticks down the middle *(3×3
-    table only — place a table and tap it)*
-  - **Stone Pickaxe** = the same shape with 3 stone across the top
-  - **Ladder** (×3) = sticks down both sides + one in the middle (an H shape).
-    Place ladders up a wall, then **face one and hold forward (or jump)** to
+  - **Planks** (×4) = 1 wood · **Stick** = 2 wood stacked
+  - **Crafting Table** = 4 wood in a square · **Furnace** = 4 stone in a square
+  - **Torch** (×4) = coal on top of a stick
+  - **Wooden / Stone Pickaxe**, **Ladder**, **Fence**, **Battery**, **Bed**,
+    **Chest**, **Window**, **Door** and a **Door with a window** *(3×3 table)*
+  - **Paint wood** any colour = wood + a paint (bought from a villager)
+  - Place ladders up a wall, then **face one and hold forward (or jump)** to
     climb; let go to slide back down. Ladders never cause fall damage.
 - 💾 **Save your progress** to the browser's local storage with the Save button
   (it also autosaves every 30 seconds). Press **Continue** on the title screen
