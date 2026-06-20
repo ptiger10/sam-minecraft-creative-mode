@@ -24,6 +24,8 @@
     this.foodTimer = 0;
     this.starveTimer = 0;
     this.regenTimer = 0;
+    this.air = C.MAX_AIR;        // breath remaining while underwater
+    this.drownTimer = 0;
     this.dead = false;
 
     camera.rotation.order = "YXZ";
@@ -48,6 +50,15 @@
   Player.prototype.syncCamera = function () {
     this.camera.position.copy(this.eyePosition());
     this.camera.rotation.set(this.pitch, this.yaw, 0);
+  };
+
+  // ---- Water -----------------------------------------------------
+  Player.prototype.blockAt = function (x, y, z) {
+    return this.world.get(Math.floor(x), Math.floor(y), Math.floor(z));
+  };
+  // Is there water at height y in the column the player is standing in?
+  Player.prototype.inWaterAt = function (y) {
+    return this.blockAt(this.pos.x, y, this.pos.z) === "water";
   };
 
   // ---- Collision ------------------------------------------------
@@ -91,20 +102,38 @@
     if (input.lookPitch) this.pitch += input.lookPitch;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
 
-    // --- Horizontal movement (no inertia, like creative walking) ---
+    // --- Are we in water? (drives swimming, buoyancy and no fall damage) ---
+    const feetWater = this.inWaterAt(this.pos.y + 0.1);
+    const bodyWater = this.inWaterAt(this.pos.y + 0.9);
+    const swimming = feetWater || bodyWater;
+    if (swimming) this.fallPeak = this.pos.y; // splashing into water never hurts
+
+    // --- Horizontal movement (a little slower while swimming) ---
     let dx = 0, dz = 0;
     if (input.forward) {
       const f = this.forwardH();
-      dx = f.x * C.MOVE_SPEED * dt;
-      dz = f.z * C.MOVE_SPEED * dt;
+      const sp = swimming ? C.MOVE_SPEED * 0.65 : C.MOVE_SPEED;
+      dx = f.x * sp * dt;
+      dz = f.z * sp * dt;
     }
 
-    // --- Climbing, or jump + gravity ---
+    // --- Climbing, swimming, or jump + gravity ---
     const climbing = this.ladderInFront();
     if (climbing) {
       // Hold forward (push into it) or jump to go up; otherwise slide gently
       // down. No gravity build-up while you're on the rungs.
       this.vel.y = (input.forward || input.jump) ? C.CLIMB_SPEED : -C.CLIMB_SPEED * 0.5;
+    } else if (swimming) {
+      if (input.jump) {
+        this.vel.y = C.SWIM_UP;              // press jump to rise to the surface
+      } else {
+        // Buoyancy + drag: a fast fall is slowed to a gentle sink, then you
+        // drift back up to float at the surface.
+        this.vel.y += C.SWIM_BUOY * dt;
+        this.vel.y -= this.vel.y * 4 * dt;   // water drag
+        if (this.vel.y > C.SWIM_UP) this.vel.y = C.SWIM_UP;
+        if (this.vel.y < -C.SWIM_SINK) this.vel.y = -C.SWIM_SINK;
+      }
     } else {
       if (input.jump && this.onGround) {
         this.vel.y = C.JUMP_V;
@@ -132,9 +161,9 @@
       this.vel.y = 0;
     }
 
-    // Track the peak height of a fall for damage purposes. Climbing never
-    // hurts, so a ladder keeps the peak pinned to where you are.
-    if (this.onGround || climbing) {
+    // Track the peak height of a fall for damage purposes. Climbing and being
+    // in water never hurt, so they keep the peak pinned to where you are.
+    if (this.onGround || climbing || swimming) {
       this.fallPeak = this.pos.y;
     } else if (this.pos.y > this.fallPeak) {
       this.fallPeak = this.pos.y;
@@ -181,6 +210,22 @@
         if (this.regenTimer >= 4) { this.regenTimer = 0; this.hp = Math.min(C.MAX_HP, this.hp + 1); }
       }
     }
+
+    // Breath: while your head is underwater your air runs down; once it's gone
+    // you start losing health, so come up for air. Air refills quickly above
+    // the surface.
+    const submerged = this.inWaterAt(this.pos.y + C.EYE - 0.1);
+    if (submerged) {
+      this.air -= dt;
+      if (this.air <= 0) {
+        this.air = 0;
+        this.drownTimer += dt;
+        if (this.drownTimer >= 1.5) { this.drownTimer = 0; this.damage(1, "drowned"); }
+      }
+    } else if (this.air < C.MAX_AIR) {
+      this.air = Math.min(C.MAX_AIR, this.air + dt * 4);
+      this.drownTimer = 0;
+    }
   };
 
   Player.prototype.damage = function (amount, reason) {
@@ -204,6 +249,8 @@
     this.food = C.MAX_FOOD;
     this.foodTimer = 0;
     this.starveTimer = 0;
+    this.air = C.MAX_AIR;
+    this.drownTimer = 0;
     this.dead = false;
     this.fallPeak = this.pos.y;
     this.syncCamera();

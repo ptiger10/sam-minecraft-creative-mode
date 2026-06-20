@@ -868,6 +868,15 @@
   function renderVitals() {
     drawPips($("health-row"), S.player.hp, C.MAX_HP, "❤️", "🖤");
     drawPips($("food-row"), S.player.food, C.MAX_FOOD, "🍗", "🦴");
+    // Air bubbles only appear while you're underwater (and draining/refilling).
+    const airRow = $("air-row");
+    if (S.player.air < C.MAX_AIR - 0.05) {
+      airRow.style.display = "";
+      drawPips(airRow, S.player.air, C.MAX_AIR, "🫧", "⚫");
+    } else {
+      airRow.style.display = "none";
+      airRow.innerHTML = "";
+    }
   }
 
   function drawPips(row, value, max, full, empty) {
