@@ -1185,8 +1185,17 @@
     window.addEventListener("contextmenu", (e) => e.preventDefault());
     document.addEventListener("selectstart", (e) => e.preventDefault());
     document.addEventListener("dragstart", (e) => e.preventDefault());
-    // iOS double-tap / long-press zoom gestures on the canvas.
+    // iOS double-tap / long-press zoom gestures.
     document.addEventListener("gesturestart", (e) => e.preventDefault());
+
+    // iPhone Safari (iOS 15+) still shows the long-press selection box / loupe
+    // even with `user-select:none` — the only reliable fix is to preventDefault
+    // the underlying TOUCH events on the world. We do this only on #game (the
+    // 3D view), so menus/panels keep scrolling and the buttons still work.
+    const gameEl = $("game");
+    const stopTouch = (e) => { if (e.cancelable) e.preventDefault(); };
+    gameEl.addEventListener("touchstart", stopTouch, { passive: false });
+    gameEl.addEventListener("touchmove", stopTouch, { passive: false });
 
     wirePointerLook();
     wireKeyboard();
