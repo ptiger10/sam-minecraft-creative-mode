@@ -198,7 +198,7 @@
   // squares; ingredients are pulled from your inventory as you place them and
   // returned if you take them back out or close the panel. The result square
   // shows what the current arrangement makes; tap it to craft.
-  const CR = { size: 2, grid: [], brush: null };
+  const CR = { size: 2, grid: [], brush: null, tab: "craft" };
   S.craft = CR;
 
   // ---- Shaped-recipe matching -----------------------------------
@@ -375,9 +375,40 @@
       });
     }
 
-    // The recipe book (tap to auto-arrange).
+    // The recipe book — either the shaped table recipes or the furnace recipes,
+    // depending on which tab is selected.
+    renderRecipeBook();
+  }
+
+  // Two tabs in the crafting screen: shaped "Crafting" recipes (tap to fill the
+  // grid) and a reference list of "Furnace" smelting recipes.
+  function renderRecipeBook() {
     const book = $("recipe-book");
+    const hint = $("recipe-book-hint");
     book.innerHTML = "";
+    $("tab-craft").classList.toggle("active", CR.tab !== "furnace");
+    $("tab-furnace").classList.toggle("active", CR.tab === "furnace");
+
+    if (CR.tab === "furnace") {
+      hint.textContent = "Smelt these at a furnace — place one and tap it.";
+      Object.keys(Game.SmeltRecipes).forEach((inId) => {
+        const out = Game.SmeltRecipes[inId];
+        const btn = document.createElement("button");
+        btn.className = "recipe-book-item";
+        btn.dataset.smelt = inId;
+        btn.innerHTML =
+          '<span class="rb-icon">' + iconHTML(out.id) + "</span>" +
+          '<span class="rb-text"><b>' + Game.itemName(out.id) +
+          (out.count > 1 ? " ×" + out.count : "") + "</b><br><small>🔥 " +
+          Game.itemName(inId) + " → " + Game.itemName(out.id) + "</small></span>";
+        btn.addEventListener("click", () =>
+          toast("Place a furnace and tap it to smelt " + Game.itemName(inId) + ". 🔥"));
+        book.appendChild(btn);
+      });
+      return;
+    }
+
+    hint.textContent = "Tap a recipe to fill the grid.";
     Game.Recipes.forEach((rec) => {
       if (!rec._trim) rec._trim = trimPattern(rec.pattern);
       const tooBig = rec._trim.length > CR.size || rec._trim[0].length > CR.size;
@@ -700,15 +731,18 @@
     // even with a block in your hand — so selecting one never places onto it.
     if (!holdingPick && tryBlockInteract(hit)) return;
 
-    // Holding a placeable block -> build.
+    // Holding a placeable block (or a water bucket) -> build / pour.
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) {
       if (!hit) { toast("Aim at a block to build on."); return; }
+      const def = Game.itemDef(s.id);
+      const blockId = def.places || s.id;   // a water bucket lays down "water"
       const c = hit.place;
       if (S.world.occupied(c.x, c.y, c.z)) return;
       if (placeOverlapsPlayer(c.x, c.y, c.z)) { toast("No room to place that here."); return; }
-      S.world.setBlock(c.x, c.y, c.z, s.id);
+      S.world.setBlock(c.x, c.y, c.z, blockId);
       s.count -= 1;
       if (s.count <= 0) S.inv[S.selected] = null;
+      if (def.empties) addItem(def.empties, 1); // the bucket comes back empty
       renderHotbar(); updateHand();
       setViewmodel(selectedSlot() ? selectedSlot().id : null);
       S.swing = 0.18;
@@ -730,6 +764,23 @@
     const def = Game.BlockDefs[id];
     if (!def) return;
     S.swing = 0.18;
+
+    // Water can only be picked up with a bucket.
+    if (id === "water") {
+      const sel = selectedSlot();
+      if (sel && sel.id === "bucket") {
+        sel.count -= 1;
+        if (sel.count <= 0) S.inv[S.selected] = null;
+        addItem("water_bucket", 1);
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
+        renderHotbar(); updateHand();
+        setViewmodel(selectedSlot() ? selectedSlot().id : null);
+        toast("Scooped up water! 🪣");
+      } else {
+        toast("You need a 🪣 bucket to scoop up water.");
+      }
+      return;
+    }
 
     const holdingPick = selectedSlot() && Game.isPickaxe(selectedSlot().id);
 
@@ -806,7 +857,7 @@
     }
     const colors = { apple: 0xd23b32, stick: 0x9a6a32, coal: 0x2a2a2c, emerald: 0x2ecc71,
       battery: 0xd8c24a, paint_red: 0xc0392b, paint_blue: 0x2f6fd8, paint_green: 0x2ecc71,
-      paint_yellow: 0xe6c34a };
+      paint_yellow: 0xe6c34a, iron_ingot: 0xd0d3da, bucket: 0x9aa0a8, water_bucket: 0x3a6ff0 };
     const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
@@ -1105,6 +1156,8 @@
     tapButton($("btn-inventory"), () => { renderInventory(); showPanel("inventory-panel"); });
     tapButton($("btn-craft"), () => openCrafting(false)); // Craft button = 2x2 grid
     tapButton($("craft-result"), doCraft);
+    tapButton($("tab-craft"), () => { CR.tab = "craft"; renderRecipeBook(); });
+    tapButton($("tab-furnace"), () => { CR.tab = "furnace"; renderRecipeBook(); });
 
     // Furnace panel
     tapButton($("furnace-fuel"), () => furnaceFill("fuel"));
@@ -1127,9 +1180,13 @@
       document.body.classList.remove("menu-open");
     });
 
-    // Suppress the iOS/Android long-press context menu & selection loupe so a
-    // press-and-hold on the world never pops up a blue zoom/selection box.
+    // Suppress the iOS/Android long-press context menu, selection loupe and the
+    // blue selection box so a press-and-hold on the world never pops one up.
     window.addEventListener("contextmenu", (e) => e.preventDefault());
+    document.addEventListener("selectstart", (e) => e.preventDefault());
+    document.addEventListener("dragstart", (e) => e.preventDefault());
+    // iOS double-tap / long-press zoom gestures on the canvas.
+    document.addEventListener("gesturestart", (e) => e.preventDefault());
 
     wirePointerLook();
     wireKeyboard();

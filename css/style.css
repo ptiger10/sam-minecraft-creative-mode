@@ -5,14 +5,24 @@
 
 * { box-sizing: border-box; }
 
-/* Never let a long-press pop the iOS/Android text-selection loupe or the blue
-   "zoom" selection box anywhere in the game. */
+/* Never let a long-press pop the iOS/Android text-selection loupe, the blue
+   "zoom"/selection box, or the tap-highlight rectangle anywhere in the game. */
 * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+html, body { -webkit-tap-highlight-color: rgba(0, 0, 0, 0); }
+#game, #game canvas {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
 }
-#game, #game canvas { -webkit-user-select: none; -webkit-touch-callout: none; }
 
 html, body {
   margin: 0;
@@ -217,6 +227,17 @@ html, body {
 }
 /* Walk + jump share the exact same look. */
 #move-controls .fwd { width: 74px; height: 74px; font-size: 34px; }
+/* The jump button shows a jumping figure with a "Jump" label underneath. */
+.jump-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  gap: 1px;
+}
+.jump-btn .jump-emoji { font-size: 30px; }
+.jump-btn .jump-text { font-size: 13px; font-weight: bold; }
 
 #action-controls {
   position: fixed;
@@ -402,6 +423,33 @@ html, body {
 .craft-chip .count { font-size: 13px; font-weight: bold; color: #333; }
 .craft-chip .swatch { width: 22px; height: 22px; }
 
+/* Tabs that switch the recipe list between crafting and furnace recipes. */
+.craft-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 6px;
+  border-bottom: 2px solid #b3ada0;
+}
+.craft-tab {
+  font: inherit;
+  font-size: 15px;
+  font-weight: bold;
+  padding: 8px 14px;
+  color: #555;
+  background: #d7d2c6;
+  border: 2px solid #b3ada0;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.craft-tab.active {
+  color: #222;
+  background: #efe9da;
+  border-color: #9a9384;
+  margin-bottom: -2px;
+}
+
 .recipe-book {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -552,6 +600,8 @@ html, body {
   .slot .count { font-size: 11px; }
   .slot .swatch { width: 22px; height: 22px; }
   #move-controls .fwd { width: 60px; height: 60px; font-size: 28px; }
+  .jump-btn .jump-emoji { font-size: 24px; }
+  .jump-btn .jump-text { font-size: 11px; }
   #action-controls .ctrl-btn { width: 72px; height: 50px; font-size: 13px; }
   #hand-display { bottom: 88px; font-size: 13px; }
 }
@@ -573,6 +623,8 @@ body.menu-open #crosshair { display: none; }
   .slot .swatch { width: 18px; height: 18px; }
   #move-controls { bottom: 96px; gap: 6px; }
   #move-controls .fwd { width: 58px; height: 58px; font-size: 26px; }
+  .jump-btn .jump-emoji { font-size: 22px; }
+  .jump-btn .jump-text { font-size: 10px; }
   #action-controls {
     bottom: 96px;
     grid-template-columns: auto;   /* stack Place / Mine / Eat in one column */

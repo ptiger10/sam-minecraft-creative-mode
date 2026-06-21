@@ -16,7 +16,7 @@ window.Game = window.Game || {};
     MAX_Y: 24,        // top of the buildable column
     BASE: 6,          // average surface height
     AMP: 3,           // how bumpy the terrain is
-    WATER_LEVEL: 5,   // ponds fill up to this height
+    WATER_LEVEL: 4,   // ponds fill up to this height (kept low so water is rare)
     REACH: 6,         // how many blocks away you can reach
     EYE: 1.62,        // camera height above the player's feet
     P_HALF: 0.3,      // player half-width (collision)
@@ -27,8 +27,7 @@ window.Game = window.Game || {};
     RIDE_SPEED: 5.2,  // speed while riding an animal (blocks / s)
     CLIMB_SPEED: 3.4, // up/down speed while on a ladder (blocks / s)
     SWIM_UP: 4.8,     // how fast jump lifts you toward the surface in water
-    SWIM_SINK: 3.0,   // fastest you sink in water
-    SWIM_BUOY: 6,     // buoyant upward acceleration that floats you up
+    SWIM_SINK: 2.0,   // how fast you slowly sink in water
     MAX_AIR: 10,      // seconds of breath before you start drowning
     TURN_SPEED: 1.9,  // turn speed (radians / s)
     FALL_SAFE: 3,     // falls shorter than this do no damage
@@ -203,6 +202,12 @@ window.Game = window.Game || {};
   Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 8, desc: "Burns in a furnace. Makes torches too." };
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
+  Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
+  Game.ItemDefs.bucket  = { name: "Bucket", emoji: "🪣", placeable: false, desc: "Tap water with it to scoop the water up." };
+  Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "Tap the ground to pour the water back out." };
+  // You can only get water with a bucket — never carry/place a raw water block.
+  Game.ItemDefs.water.placeable = false;
+  Game.ItemDefs.water.hidden = true;
   Game.ItemDefs.paint_red    = { name: "Red Paint",    swatch: 0xc0392b, placeable: false, paint: "red",    desc: "Paint wood red at a crafting table." };
   Game.ItemDefs.paint_blue   = { name: "Blue Paint",   swatch: 0x2f6fd8, placeable: false, paint: "blue",   desc: "Paint wood blue at a crafting table." };
   Game.ItemDefs.paint_green  = { name: "Green Paint",  swatch: 0x2ecc71, placeable: false, paint: "green",  desc: "Paint wood green at a crafting table." };
@@ -278,7 +283,10 @@ window.Game = window.Game || {};
       pattern: [[W, W], [W, W], [W, W]] },
     // Glass over wood -> a door with a window.
     { id: "door_window", gives: { id: "door_window", count: 1 }, table: true,
-      pattern: [[G, G], [W, W], [W, W]] }
+      pattern: [[G, G], [W, W], [W, W]] },
+    // Three iron ingots in a V -> a bucket (for scooping up water).
+    { id: "bucket", gives: { id: "bucket", count: 1 }, table: true,
+      pattern: [["iron_ingot", null, "iron_ingot"], [null, "iron_ingot", null]] }
   ];
 
   // Painting recipes: wood + a paint -> coloured wood.
@@ -293,6 +301,7 @@ window.Game = window.Game || {};
   // input item id -> what you get out.
   Game.SmeltRecipes = {
     sand: { id: "glass", count: 1 },
+    iron_ore: { id: "iron_ingot", count: 1 },
     clay: { id: "brick", count: 1 },
     brown_clay: { id: "brown_brick", count: 1 },
     red_clay: { id: "red_brick", count: 1 },

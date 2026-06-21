@@ -46,8 +46,8 @@ buttons **or** the keyboard.
 | Action | On-screen | Keyboard |
 | --- | --- | --- |
 | Walk forward | ⬆ | `W` / `↑` |
-| Jump | ⤒ (right next to ⬆) | `Space` |
-| Climb a ladder | face it &amp; hold ⬆ (or ⤒) | `W` / `Space` |
+| Jump (swim up in water) | 🤸 **Jump** (right next to ⬆) | `Space` |
+| Climb a ladder | face it &amp; hold ⬆ (or **Jump**) | `W` / `Space` |
 | Look around / turn | drag the screen | `A` `D` / `←` `→` |
 | Place / Use | **Place** (or tap the world) | `F` |
 | Punch / Mine | **Mine** (or tap the world) | `Q` |
