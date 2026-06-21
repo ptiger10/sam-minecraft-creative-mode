@@ -55,7 +55,9 @@
   <!-- Movement controls (bottom-left): walk + jump, styled the same -->
   <div id="move-controls">
     <button class="ctrl-btn fwd" id="btn-forward" title="Walk forward">⬆</button>
-    <button class="ctrl-btn fwd" id="btn-jump" title="Jump">⤒</button>
+    <button class="ctrl-btn fwd jump-btn" id="btn-jump" title="Jump">
+      <span class="jump-emoji">🤸</span><span class="jump-text">Jump</span>
+    </button>
   </div>
 
   <!-- Action controls (bottom-right) -->
@@ -98,8 +100,12 @@
       <h3 class="craft-label">Your items</h3>
       <div class="craft-inv" id="craft-inv"></div>
 
-      <!-- Recipe book: tap a recipe to auto-arrange it in the grid. -->
-      <h3 class="craft-label">Recipes (tap to fill the grid)</h3>
+      <!-- Recipe book with two tabs: shaped crafting recipes & furnace recipes. -->
+      <div class="craft-tabs">
+        <button class="craft-tab active" id="tab-craft">🛠️ Crafting</button>
+        <button class="craft-tab" id="tab-furnace">🔥 Furnace</button>
+      </div>
+      <p class="craft-label" id="recipe-book-hint">Tap a recipe to fill the grid.</p>
       <div class="recipe-book" id="recipe-book"></div>
 
       <button class="big-btn close-btn">Close</button>
@@ -170,7 +176,8 @@
       <div class="instructions">
         <h3>How to play</h3>
         <ul>
-          <li><b>⬆</b> walks forward, <b>⤒</b> jumps (right next to it).</li>
+          <li><b>⬆</b> walks forward, <b>🤸 Jump</b> jumps (right next to it).
+              In water, <b>Jump</b> swims you up to the surface.</li>
           <li><b>Drag the screen</b> to look around and turn (or <b>A</b>/<b>D</b>).</li>
           <li>Pick an item from the hotbar — it goes <b>in your hand</b>.</li>
           <li>Point the <b>+</b> at a tree or 🍎 apple and tap to <b>grab it</b> —

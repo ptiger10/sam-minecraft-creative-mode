@@ -127,12 +127,12 @@
       if (input.jump) {
         this.vel.y = C.SWIM_UP;              // press jump to rise to the surface
       } else {
-        // Buoyancy + drag: a fast fall is slowed to a gentle sink, then you
-        // drift back up to float at the surface.
-        this.vel.y += C.SWIM_BUOY * dt;
-        this.vel.y -= this.vel.y * 4 * dt;   // water drag
-        if (this.vel.y > C.SWIM_UP) this.vel.y = C.SWIM_UP;
+        // No jump: you sink. Reduced gravity pulls you down and water drag
+        // settles you to a slow, steady sink — so hold jump to come back up.
+        this.vel.y -= C.GRAVITY * 0.25 * dt;
+        this.vel.y -= this.vel.y * 3 * dt;    // water drag (frame-rate independent)
         if (this.vel.y < -C.SWIM_SINK) this.vel.y = -C.SWIM_SINK;
+        if (this.vel.y > C.SWIM_UP) this.vel.y = C.SWIM_UP;
       }
     } else {
       if (input.jump && this.onGround) {

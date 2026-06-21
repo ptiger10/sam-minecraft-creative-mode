@@ -803,14 +803,19 @@
 
   World.prototype.spawnVillagers = function (count) {
     const rng = Game.mulberry32(this.seed ^ 0x711a9e);
+    // The villagers share one little settlement and stay close to it.
+    const cx = 6 + Math.floor(rng() * (C.WORLD - 12));
+    const cz = 6 + Math.floor(rng() * (C.WORLD - 12));
     for (let i = 0; i < count; i++) {
       const v = makeVillager();
-      const x = 4 + Math.floor(rng() * (C.WORLD - 8));
-      const z = 4 + Math.floor(rng() * (C.WORLD - 8));
+      const x = Math.max(3, Math.min(C.WORLD - 3, cx + Math.floor(rng() * 5) - 2));
+      const z = Math.max(3, Math.min(C.WORLD - 3, cz + Math.floor(rng() * 5) - 2));
       v.position.set(x + 0.5, this.surfaceY(x, z) + 1, z + 0.5);
+      v.userData.home = { x: cx + 0.5, z: cz + 0.5 }; // the settlement centre
+      v.userData.roam = 4;                            // how far they'll stray
       v.userData.dir = rng() * Math.PI * 2;
-      v.userData.timer = rng() * 3;
-      v.userData.hop = 0;
+      v.userData.timer = rng() * 4;
+      v.userData.moving = false;
       this.animals.push(v);
     }
   };
@@ -855,6 +860,7 @@
     for (const a of this.animals) {
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
+      if (a.userData.kind === "villager") { this.updateVillager(a, dt); continue; }
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -876,6 +882,32 @@
       a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
       a.rotation.y = -a.userData.dir + Math.PI / 2;
     }
+  };
+
+  // Villagers mostly stand around their settlement, only occasionally taking a
+  // slow, short stroll — and never wandering past their roam radius from home.
+  World.prototype.updateVillager = function (a, dt) {
+    const u = a.userData;
+    u.timer -= dt;
+    if (u.timer <= 0) {
+      u.timer = 3 + Math.random() * 5;     // long pauses between strolls
+      u.dir = Math.random() * Math.PI * 2;
+      u.moving = Math.random() < 0.4;      // and usually they just stay put
+    }
+    if (u.moving) {
+      const speed = 0.4;                   // a gentle amble
+      const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+      const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+      const dx = nx - u.home.x, dz = nz - u.home.z;
+      if (dx * dx + dz * dz <= u.roam * u.roam && this.canStand(nx, nz, a.position.y)) {
+        a.position.x = nx; a.position.z = nz;
+        a.rotation.y = -u.dir + Math.PI / 2;
+      } else {
+        u.dir += Math.PI; u.moving = false; // turn back toward the settlement
+      }
+    }
+    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
   };
 
   // Monkeys hang in place and sway back and forth like they're swinging.
