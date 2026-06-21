@@ -199,6 +199,45 @@
     </div>
   </div>
 
+  <!-- ============ Break reminder ============ -->
+  <!-- Pops up every 17 minutes of play. The game saves + pauses while a
+       3-minute countdown bar ticks down, then a Resume button appears. -->
+  <div class="panel-overlay hidden" id="break-panel">
+    <div class="panel break-panel">
+      <h1>⏰ Break Time!</h1>
+      <p class="break-instructions">
+        Get water, go to the bathroom, stick your head outside 🌳
+      </p>
+
+      <!-- A bird, a water bottle and a toilet. -->
+      <div class="break-pics">
+        <figure class="break-pic">
+          <span class="break-emoji">🐦</span>
+          <figcaption>Stick your head outside</figcaption>
+        </figure>
+        <figure class="break-pic">
+          <span class="break-emoji">🥤</span>
+          <figcaption>Get water</figcaption>
+        </figure>
+        <figure class="break-pic">
+          <span class="break-emoji">🚽</span>
+          <figcaption>Go to the bathroom</figcaption>
+        </figure>
+      </div>
+
+      <!-- Countdown bar (counts down over 3 minutes). -->
+      <div class="break-countdown">
+        <div class="break-bar"><div class="break-bar-fill" id="break-bar-fill"></div></div>
+        <p class="break-time" id="break-time">3:00</p>
+      </div>
+
+      <p class="break-saved">💾 Your game was saved and paused.</p>
+
+      <!-- Hidden until the 3 minutes are up, so the break is a real break. -->
+      <button class="big-btn hidden" id="btn-resume-break">▶️ I'm back — Resume</button>
+    </div>
+  </div>
+
   <!-- ============ Death screen ============ -->
   <div class="panel-overlay hidden" id="death-panel">
     <div class="panel death-panel">
