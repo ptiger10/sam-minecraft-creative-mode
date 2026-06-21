@@ -331,6 +331,73 @@ html, body {
   .close-btn:hover { background: #999; }
 }
 
+/* ---------- Break reminder ---------- */
+/* A calmer panel than the others so it reads as "rest", not "menu". */
+.break-panel {
+  background: #eaf3df;
+  border-color: #6a9a4a;
+  text-align: center;
+}
+.break-panel h1 { color: #3f5f2c; }
+.break-instructions {
+  font-size: 17px;
+  font-weight: bold;
+  color: #3f5f2c;
+  margin: 4px 0 16px;
+}
+.break-pics {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 18px;
+}
+.break-pic {
+  margin: 0;
+  flex: 1 1 0;
+  background: #fff;
+  border: 3px solid #6a9a4a;
+  border-radius: 12px;
+  padding: 12px 6px;
+}
+.break-emoji {
+  display: block;
+  font-size: 46px;
+  line-height: 1;
+}
+.break-pic figcaption {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #3f5f2c;
+}
+.break-countdown { margin: 10px 0; }
+.break-bar {
+  height: 22px;
+  width: 100%;
+  background: #cdd9c0;
+  border: 3px solid #3f5f2c;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.break-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #6a9a4a, #8fc06a);
+  /* width is driven from JS; ease it so it glides rather than steps */
+  transition: width 0.25s linear;
+}
+.break-time {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: bold;
+  color: #3f5f2c;
+}
+.break-saved { color: #555; font-size: 13px; margin: 6px 0 4px; }
+@media (max-width: 380px) {
+  .break-emoji { font-size: 36px; }
+  .break-pic figcaption { font-size: 11px; }
+}
+
 /* ---------- Inventory grid ---------- */
 .inv-grid {
   display: grid;

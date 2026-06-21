@@ -32,10 +32,18 @@
     riding: null,            // the animal you're currently riding (or null)
     chests: {},              // "x,y,z" -> array of stored item stacks
     openChestKey: null,      // which chest the chest panel is showing
-    tradingWith: null        // the villager whose trade panel is open
+    tradingWith: null,       // the villager whose trade panel is open
+    playClock: 0,            // seconds of *active* play since the last break
+    onBreak: false,          // true while the take-a-break overlay is showing
+    breakLeft: 0             // seconds remaining on the break countdown
   };
   Game.S = S;
   const CHEST_SIZE = 27;
+
+  // Take a healthy break: after 17 minutes of actual play, save + pause the
+  // game and run a 3-minute countdown before letting the player resume.
+  const BREAK_EVERY = 17 * 60;   // seconds of active play between breaks
+  const BREAK_LENGTH = 3 * 60;   // how long the break lasts
 
   // ---- Small helpers --------------------------------------------
   const $ = (id) => document.getElementById(id);
@@ -964,10 +972,59 @@
       S.autosaveTimer += dt;
       if (S.autosaveTimer > 30) { S.autosaveTimer = 0; saveGame(true); }
 
+      // Count only real play time toward the next break; trigger at 17 min.
+      S.playClock += dt;
+      if (S.playClock >= BREAK_EVERY) startBreak();
+
       if (S.player.dead) onDeath();
     }
 
+    // The break countdown keeps ticking while the game is paused.
+    if (S.onBreak) tickBreak(dt);
+
     S.renderer.render(S.scene, S.camera);
+  }
+
+  // ===============================================================
+  //  Take-a-break reminder
+  // ===============================================================
+  function startBreak() {
+    S.playClock = 0;
+    S.onBreak = true;
+    S.breakLeft = BREAK_LENGTH;
+    saveGame(true);                 // save before we step away
+    updateBreakBar();
+    $("btn-resume-break").classList.add("hidden");
+    showPanel("break-panel");       // also sets S.paused = true
+  }
+
+  function tickBreak(dt) {
+    if (S.breakLeft <= 0) return;
+    S.breakLeft = Math.max(0, S.breakLeft - dt);
+    updateBreakBar();
+    if (S.breakLeft <= 0) {
+      // Break's over — reveal the Resume button (we don't auto-resume so the
+      // world stays safely paused if the player is still away).
+      $("break-time").textContent = "All done! 🎉";
+      $("btn-resume-break").classList.remove("hidden");
+    }
+  }
+
+  function updateBreakBar() {
+    const frac = Math.max(0, S.breakLeft / BREAK_LENGTH);
+    $("break-bar-fill").style.width = (frac * 100) + "%";
+    const secs = Math.ceil(S.breakLeft);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    $("break-time").textContent = m + ":" + String(s).padStart(2, "0");
+  }
+
+  function endBreak() {
+    S.onBreak = false;
+    S.breakLeft = 0;
+    S.playClock = 0;
+    hideAllPanels();                // unpauses the game
+    toast("Welcome back! 🎮");
   }
 
   function onDeath() {
@@ -1024,6 +1081,9 @@
       S.chests = {};
     }
     S.riding = null;
+    S.playClock = 0;
+    S.onBreak = false;
+    S.breakLeft = 0;
 
     renderHotbar();
     updateHand();
@@ -1165,6 +1225,8 @@
     tapButton($("furnace-smelt"), doSmelt);
     tapButton($("btn-save"), () => saveGame(false));
     tapButton($("btn-menu"), () => { saveGame(true); refreshStartPanel(); showPanel("start-panel"); });
+
+    tapButton($("btn-resume-break"), endBreak);
 
     document.querySelectorAll(".close-btn").forEach((b) => b.addEventListener("click", hideAllPanels));
 
