@@ -75,6 +75,38 @@
     return false;
   };
 
+  // ---- Stairs (auto step-up) ------------------------------------
+  // Is there a stairs block in the footprint at this spot, at foot height?
+  Player.prototype.stairAt = function (x, z) {
+    const h = C.P_HALF;
+    const y = Math.floor(this.pos.y);
+    for (let cx = Math.floor(x - h); cx <= Math.floor(x + h); cx++)
+      for (let cz = Math.floor(z - h); cz <= Math.floor(z + h); cz++)
+        if (this.world.get(cx, y, cz) === "stairs") return true;
+    return false;
+  };
+
+  // Move along one axis. If the way is clear, just slide. If a STAIRS block is
+  // blocking and there's headroom above it, step up onto it — so a flight of
+  // stairs is walked up smoothly, no jumping required. (Walking back down is
+  // just gravity over a single, harmless block-high drop.)
+  Player.prototype.stepMove = function (dx, dz, grounded) {
+    if (dx === 0 && dz === 0) return;
+    const nx = this.pos.x + dx, nz = this.pos.z + dz;
+    if (!this.collides(nx, this.pos.y, nz)) {
+      this.pos.x = nx; this.pos.z = nz;
+      return;
+    }
+    // Blocked. Only stairs let you step up, and only while you're on the ground.
+    if (!grounded) return;
+    if (!this.stairAt(nx, nz)) return;
+    const step = C.STEP_HEIGHT;
+    if (this.collides(this.pos.x, this.pos.y + step, this.pos.z)) return; // can't rise here
+    if (this.collides(nx, this.pos.y + step, nz)) return;                 // no room up there
+    this.pos.x = nx; this.pos.z = nz; this.pos.y += step;
+    this.onGround = true; this.vel.y = 0;
+  };
+
   // ---- Ladders ---------------------------------------------------
   // You're "on a ladder" when one sits in the cell directly in front of you
   // (the way you're facing), at any height your body spans. Climbing then
@@ -145,8 +177,10 @@
     let dy = this.vel.y * dt;
 
     // --- Resolve each axis separately against the voxels ---
-    if (dx !== 0 && !this.collides(this.pos.x + dx, this.pos.y, this.pos.z)) this.pos.x += dx;
-    if (dz !== 0 && !this.collides(this.pos.x, this.pos.y, this.pos.z + dz)) this.pos.z += dz;
+    // (auto-stepping up onto stairs so you can walk up them without jumping)
+    const grounded = this.onGround;
+    this.stepMove(dx, 0, grounded);
+    this.stepMove(0, dz, grounded);
 
     const wasGround = this.onGround;
     this.onGround = false;

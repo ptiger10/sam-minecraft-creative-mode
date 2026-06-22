@@ -9,6 +9,7 @@
 
   const C = Game.CONST;
   const SAVE_KEY = "blocky-world-save-v1";
+  const SETTINGS_KEY = "blocky-world-settings-v1";
 
   // Whole-game state.
   const S = {
@@ -35,7 +36,8 @@
     tradingWith: null,       // the villager whose trade panel is open
     playClock: 0,            // seconds of *active* play since the last break
     onBreak: false,          // true while the take-a-break overlay is showing
-    breakLeft: 0             // seconds remaining on the break countdown
+    breakLeft: 0,            // seconds remaining on the break countdown
+    invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
   Game.S = S;
   const CHEST_SIZE = 27;
@@ -110,6 +112,21 @@
     return fit;
   }
 
+  // A water bucket holds an unlimited number of waters, so it ignores the
+  // normal stack limit: pour the waters into an existing water bucket if there
+  // is one, otherwise start a fresh one.
+  function collectWater(n) {
+    for (const s of S.inv) {
+      if (s && s.id === "water_bucket") {
+        s.count += n;
+        renderHotbar();
+        if (!$("inventory-panel").classList.contains("hidden")) renderInventory();
+        return;
+      }
+    }
+    addItem("water_bucket", n);
+  }
+
   function countItem(id) {
     let n = 0;
     for (const s of S.inv) if (s && s.id === id) n += s.count;
@@ -132,6 +149,10 @@
     }
     return true;
   }
+
+  // Show a number on a slot whenever there's more than one — and always for a
+  // water bucket, so you can read off how many waters it holds at a glance.
+  function showSlotCount(s) { return !!(s && (s.count > 1 || s.id === "water_bucket")); }
 
   function selectedSlot() { return S.inv[S.selected]; }
 
@@ -164,7 +185,7 @@
     el.className = "slot" + (i === S.selected ? " selected" : "");
     const s = S.inv[i];
     if (s) {
-      el.innerHTML = iconHTML(s.id) + (s.count > 1 ? '<span class="count">' + s.count + "</span>" : "");
+      el.innerHTML = iconHTML(s.id) + (showSlotCount(s) ? '<span class="count">' + s.count + "</span>" : "");
       el.title = Game.itemName(s.id);
     }
     el.addEventListener("click", () => selectSlot(i));
@@ -190,7 +211,7 @@
     if (s) {
       display.classList.remove("hidden");
       $("hand-icon").innerHTML = iconHTML(s.id);
-      $("hand-name").textContent = Game.itemName(s.id) + (s.count > 1 ? " x" + s.count : "");
+      $("hand-name").textContent = Game.itemName(s.id) + (showSlotCount(s) ? " x" + s.count : "");
     } else {
       // Empty hand: hide the indicator entirely rather than showing a chip.
       display.classList.add("hidden");
@@ -388,6 +409,22 @@
     renderRecipeBook();
   }
 
+  // One row in a smelt-recipe list (shared by the crafting screen's furnace tab
+  // and the furnace panel itself).
+  function buildSmeltRecipeItem(inId, onClick) {
+    const out = Game.SmeltRecipes[inId];
+    const btn = document.createElement("button");
+    btn.className = "recipe-book-item";
+    btn.dataset.smelt = inId;
+    btn.innerHTML =
+      '<span class="rb-icon">' + iconHTML(out.id) + "</span>" +
+      '<span class="rb-text"><b>' + Game.itemName(out.id) +
+      (out.count > 1 ? " ×" + out.count : "") + "</b><br><small>🔥 " +
+      Game.itemName(inId) + " → " + Game.itemName(out.id) + "</small></span>";
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
   // Two tabs in the crafting screen: shaped "Crafting" recipes (tap to fill the
   // grid) and a reference list of "Furnace" smelting recipes.
   function renderRecipeBook() {
@@ -400,18 +437,8 @@
     if (CR.tab === "furnace") {
       hint.textContent = "Smelt these at a furnace — place one and tap it.";
       Object.keys(Game.SmeltRecipes).forEach((inId) => {
-        const out = Game.SmeltRecipes[inId];
-        const btn = document.createElement("button");
-        btn.className = "recipe-book-item";
-        btn.dataset.smelt = inId;
-        btn.innerHTML =
-          '<span class="rb-icon">' + iconHTML(out.id) + "</span>" +
-          '<span class="rb-text"><b>' + Game.itemName(out.id) +
-          (out.count > 1 ? " ×" + out.count : "") + "</b><br><small>🔥 " +
-          Game.itemName(inId) + " → " + Game.itemName(out.id) + "</small></span>";
-        btn.addEventListener("click", () =>
-          toast("Place a furnace and tap it to smelt " + Game.itemName(inId) + ". 🔥"));
-        book.appendChild(btn);
+        book.appendChild(buildSmeltRecipeItem(inId, () =>
+          toast("Place a furnace and tap it to smelt " + Game.itemName(inId) + ". 🔥")));
       });
       return;
     }
@@ -459,20 +486,36 @@
     FUR.fuel = null; FUR.fuelN = 0; FUR.input = null; FUR.inputN = 0; FUR.burn = 0;
   }
 
+  // Coal is special: it both burns AND smelts (into obsidian), so it can sit in
+  // both furnace slots at once.
+  const dualUse = (id) => Game.isFuel(id) && Game.canSmelt(id);
+
   function furnaceFill(which) {
     const id = FUR.brush;
-    if (which === "fuel") {
-      if (FUR.fuel && FUR.fuelN > 0) { addItem(FUR.fuel, FUR.fuelN); FUR.fuel = null; FUR.fuelN = 0; renderFurnace(); return; }
-      if (!id) { toast("Pick an item below first."); return; }
-      if (!Game.isFuel(id)) { toast("That's not fuel — use coal or a battery."); return; }
-      const n = countItem(id); if (!n) return;
-      removeItems({ [id]: n }); FUR.fuel = id; FUR.fuelN = n;
+    // Slot bookkeeping so we can treat "fuel" and "input" the same way.
+    const slot = which === "fuel" ? "fuel" : "input";
+    const cnt = which === "fuel" ? "fuelN" : "inputN";
+    const other = which === "fuel" ? "input" : "fuel";
+    const otherCnt = which === "fuel" ? "inputN" : "fuelN";
+
+    // Tapping a filled slot tips it back into your inventory.
+    if (FUR[slot] && FUR[cnt] > 0) { addItem(FUR[slot], FUR[cnt]); FUR[slot] = null; FUR[cnt] = 0; renderFurnace(); return; }
+
+    if (!id) { toast("Pick an item below first."); return; }
+    if (which === "fuel" && !Game.isFuel(id)) { toast("That's not fuel — use coal or a battery."); return; }
+    if (which === "input" && !Game.canSmelt(id)) { toast(Game.itemName(id) + " can't be smelted."); return; }
+
+    const n = countItem(id);
+    if (n > 0) {
+      removeItems({ [id]: n }); FUR[slot] = id; FUR[cnt] = n;
+    } else if (FUR[other] === id && FUR[otherCnt] >= 2) {
+      // None left in your pack — split a dual-use item (coal) out of the other
+      // slot so it can fuel the smelting of itself.
+      const move = Math.floor(FUR[otherCnt] / 2);
+      FUR[otherCnt] -= move; FUR[slot] = id; FUR[cnt] = move;
     } else {
-      if (FUR.input && FUR.inputN > 0) { addItem(FUR.input, FUR.inputN); FUR.input = null; FUR.inputN = 0; renderFurnace(); return; }
-      if (!id) { toast("Pick an item below first."); return; }
-      if (!Game.canSmelt(id)) { toast(Game.itemName(id) + " can't be smelted."); return; }
-      const n = countItem(id); if (!n) return;
-      removeItems({ [id]: n }); FUR.input = id; FUR.inputN = n;
+      toast("You don't have any " + Game.itemName(id) + " left.");
+      return;
     }
     renderFurnace();
   }
@@ -515,6 +558,10 @@
     inv.innerHTML = "";
     const seen = {};
     S.inv.forEach((s) => { if (s) seen[s.id] = (seen[s.id] || 0) + s.count; });
+    // Keep a dual-use item (coal) selectable even once it's loaded, so it can be
+    // split into the other slot — letting it fuel the smelting of itself.
+    if (FUR.fuel && dualUse(FUR.fuel)) seen[FUR.fuel] = (seen[FUR.fuel] || 0) + FUR.fuelN;
+    if (FUR.input && dualUse(FUR.input)) seen[FUR.input] = (seen[FUR.input] || 0) + FUR.inputN;
     const ids = Object.keys(seen);
     if (!ids.length) {
       inv.innerHTML = '<span class="craft-empty">Gather sand, clay, coal or ore — and some fuel.</span>';
@@ -528,6 +575,25 @@
         inv.appendChild(chip);
       });
     }
+
+    // The same smelting recipes shown on the craft screen, right here in the
+    // furnace. Tap one to load that ingredient straight into the smelt slot.
+    const recBook = $("furnace-recipes");
+    if (recBook) {
+      recBook.innerHTML = "";
+      Object.keys(Game.SmeltRecipes).forEach((inId) => {
+        recBook.appendChild(buildSmeltRecipeItem(inId, () => loadSmeltRecipe(inId)));
+      });
+    }
+  }
+
+  // Tap a furnace recipe: if you have the ingredient (and the smelt slot is
+  // free), load it ready to smelt; otherwise just say what you'd need.
+  function loadSmeltRecipe(inId) {
+    if (FUR.input && FUR.inputN > 0) { toast("The smelt slot is full — tap it to empty it first."); return; }
+    if (countItem(inId) <= 0) { toast("You need some " + Game.itemName(inId) + " first."); return; }
+    FUR.brush = inId;
+    furnaceFill("input");
   }
 
   // ===============================================================
@@ -572,7 +638,7 @@
         const el = document.createElement("div");
         el.className = "slot";
         const s = arr[i];
-        if (s) { el.innerHTML = iconHTML(s.id) + (s.count > 1 ? '<span class="count">' + s.count + "</span>" : ""); el.title = Game.itemName(s.id); }
+        if (s) { el.innerHTML = iconHTML(s.id) + (showSlotCount(s) ? '<span class="count">' + s.count + "</span>" : ""); el.title = Game.itemName(s.id); }
         el.addEventListener("click", () => onClick(i));
         grid.appendChild(el);
       }
@@ -623,32 +689,21 @@
     toast("Riding the " + (animal.userData.kind || "animal") + "! Tap to hop off. 🐎");
   }
   function dismount() {
-    const a = S.riding; S.riding = null;
-    if (a) {
-      S.player.pos.set(a.position.x + 0.8, a.position.y, a.position.z);
-      S.player.vel.set(0, 0, 0);
-      S.player.fallPeak = S.player.pos.y;
-    }
+    S.riding = null;
+    S.player.fallPeak = S.player.pos.y;  // you're standing where you stopped
   }
   function updateRiding(dt) {
     const p = S.player, a = S.riding;
     if (!a) return;
-    if (S.input.turnLeft) p.yaw += C.TURN_SPEED * dt;
-    if (S.input.turnRight) p.yaw -= C.TURN_SPEED * dt;
+    // Ride with the exact same controls as walking: drag to look/steer, the
+    // forward button to walk, and jump to jump. The player moves normally and
+    // the mount is carried right along underneath them.
+    p.update(dt, S.input);
+    a.position.set(p.pos.x, p.pos.y, p.pos.z);
     const f = p.forwardH();
-    if (S.input.forward) {
-      const nx = a.position.x + f.x * C.RIDE_SPEED * dt;
-      const nz = a.position.z + f.z * C.RIDE_SPEED * dt;
-      if (S.world.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
-    }
-    const sy = S.world.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-    a.rotation.y = -Math.atan2(f.z, f.x) + Math.PI / 2;
-    p.pos.set(a.position.x, a.position.y + 0.55, a.position.z);
-    p.vel.set(0, 0, 0);
-    p.updateVitals(dt);
-    p.syncCamera();
+    a.rotation.y = -Math.atan2(f.z, f.x) + Math.PI / 2; // face the way you steer
   }
+  Game._updateRiding = updateRiding; // (used by the feature test)
 
   // Tapping an animal mounts it (or trades with a villager). Returns true if it
   // handled the tap.
@@ -739,7 +794,29 @@
     // even with a block in your hand — so selecting one never places onto it.
     if (!holdingPick && tryBlockInteract(hit)) return;
 
-    // Holding a placeable block (or a water bucket) -> build / pour.
+    // Water bucket: pour ONE water out per tap. The bucket keeps the rest of
+    // its waters; only when the very last one is poured does it empty back into
+    // a plain bucket.
+    if (s && s.id === "water_bucket") {
+      if (!hit) { toast("Aim at a block to pour water on."); return; }
+      const c = hit.place;
+      if (S.world.occupied(c.x, c.y, c.z)) return;
+      if (placeOverlapsPlayer(c.x, c.y, c.z)) { toast("No room to pour water here."); return; }
+      S.world.setBlock(c.x, c.y, c.z, "water");
+      s.count -= 1;
+      if (s.count <= 0) {
+        S.inv[S.selected] = { id: "bucket", count: 1 }; // emptied — left holding the bucket
+        toast("The bucket is empty now.");
+      } else {
+        toast("Poured water — " + s.count + " 💧 left");
+      }
+      renderHotbar(); updateHand();
+      setViewmodel(selectedSlot() ? selectedSlot().id : null);
+      S.swing = 0.18;
+      return;
+    }
+
+    // Holding a placeable block -> build.
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) {
       if (!hit) { toast("Aim at a block to build on."); return; }
       const def = Game.itemDef(s.id);
@@ -773,13 +850,19 @@
     if (!def) return;
     S.swing = 0.18;
 
-    // Water can only be picked up with a bucket.
+    // Water can only be picked up with a bucket. A water bucket keeps a running
+    // count of how many waters it holds and can scoop up an unlimited amount.
     if (id === "water") {
       const sel = selectedSlot();
-      if (sel && sel.id === "bucket") {
+      if (sel && sel.id === "water_bucket") {
+        sel.count += 1;                       // top up the bucket you're holding
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
+        renderHotbar(); updateHand();
+        toast("Collected water — " + sel.count + " 💧 in the bucket");
+      } else if (sel && sel.id === "bucket") {
         sel.count -= 1;
         if (sel.count <= 0) S.inv[S.selected] = null;
-        addItem("water_bucket", 1);
+        collectWater(1);
         S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
         renderHotbar(); updateHand();
         setViewmodel(selectedSlot() ? selectedSlot().id : null);
@@ -994,7 +1077,10 @@
     S.breakLeft = BREAK_LENGTH;
     saveGame(true);                 // save before we step away
     updateBreakBar();
+    // Keep the Resume button hidden AND disabled until the timer truly runs
+    // out, so the break can't be skipped early.
     $("btn-resume-break").classList.add("hidden");
+    $("btn-resume-break").disabled = true;
     showPanel("break-panel");       // also sets S.paused = true
   }
 
@@ -1007,6 +1093,7 @@
       // world stays safely paused if the player is still away).
       $("break-time").textContent = "All done! 🎉";
       $("btn-resume-break").classList.remove("hidden");
+      $("btn-resume-break").disabled = false;
     }
   }
 
@@ -1020,6 +1107,8 @@
   }
 
   function endBreak() {
+    // Safety net: never resume while the countdown is still running.
+    if (S.onBreak && S.breakLeft > 0) return;
     S.onBreak = false;
     S.breakLeft = 0;
     S.playClock = 0;
@@ -1156,6 +1245,17 @@
     try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
   }
 
+  // ---- Settings (a small, separate, global preference store) ------
+  function loadSettings() {
+    let data;
+    try { data = JSON.parse(localStorage.getItem(SETTINGS_KEY)); } catch (e) { data = null; }
+    // Default to inverted look; only turn it off if the player explicitly did.
+    if (data && typeof data.invertLook === "boolean") S.invertLook = data.invertLook;
+  }
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ invertLook: S.invertLook })); } catch (e) {}
+  }
+
   function loadGame() {
     let data;
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
@@ -1235,6 +1335,11 @@
     tapButton($("btn-new-desert"), () => newWorld("desert"));
     tapButton($("btn-new-random"), () => newWorld("random"));
     tapButton($("btn-continue"), () => { if (!loadGame()) toast("No saved world found."); });
+    tapButton($("btn-invert-look"), () => {
+      S.invertLook = !S.invertLook;
+      saveSettings();
+      refreshSettings();
+    });
     tapButton($("btn-respawn"), () => {
       S.player.respawn();
       hideAllPanels();
@@ -1284,7 +1389,10 @@
       lx = e.clientX; ly = e.clientY;
       moved += Math.abs(dx) + Math.abs(dy);
       S.player.yaw -= dx * 0.005;
-      S.player.pitch = Math.max(-1.45, Math.min(1.45, S.player.pitch - dy * 0.005));
+      // Inverted look (the default): dragging DOWN tilts the view UP, and
+      // dragging UP tilts it DOWN. Flip the sign when the setting is off.
+      const lookSign = S.invertLook ? 1 : -1;
+      S.player.pitch = Math.max(-1.45, Math.min(1.45, S.player.pitch + lookSign * dy * 0.005));
     });
     const end = () => {
       if (dragging && moved < 9 && !S.paused) doTap();
@@ -1323,6 +1431,15 @@
     $("btn-continue").style.display = hasSave() ? "block" : "none";
   }
 
+  // Reflect the current settings in the menu (the look-control toggle).
+  function refreshSettings() {
+    const state = $("invert-look-state");
+    const btn = $("btn-invert-look");
+    if (!state || !btn) return;
+    state.textContent = S.invertLook ? "ON" : "OFF";
+    btn.classList.toggle("on", S.invertLook);
+  }
+
   // ===============================================================
   //  Boot
   // ===============================================================
@@ -1332,10 +1449,12 @@
     S.renderer.setSize(window.innerWidth, window.innerHeight);
     $("game").appendChild(S.renderer.domElement);
 
+    loadSettings();
     wireControls();
     renderHotbar();
     updateHand();
     refreshStartPanel();
+    refreshSettings();
     showPanel("start-panel");
   }
 

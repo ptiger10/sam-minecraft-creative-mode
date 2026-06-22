@@ -1,5 +1,6 @@
 # Generated test artifacts
 test/screenshot*.png
+test/shot-*.png
 
 # Editor / OS noise
 .DS_Store

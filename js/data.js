@@ -26,6 +26,7 @@ window.Game = window.Game || {};
     MOVE_SPEED: 4.3,  // walking speed (blocks / s)
     RIDE_SPEED: 5.2,  // speed while riding an animal (blocks / s)
     CLIMB_SPEED: 3.4, // up/down speed while on a ladder (blocks / s)
+    STEP_HEIGHT: 1.0, // how high you auto-step (only onto stairs) without jumping
     SWIM_UP: 4.8,     // how fast jump lifts you toward the surface in water
     SWIM_SINK: 2.0,   // how fast you slowly sink in water
     MAX_AIR: 10,      // seconds of breath before you start drowning
@@ -92,7 +93,7 @@ window.Game = window.Game || {};
     wood_blue:    { name: "Blue Wood",   all: 0x3f6fc0, tool: "hand", drop: "wood_blue" },
     wood_green:   { name: "Green Wood",  all: 0x4a9a4a, tool: "hand", drop: "wood_green" },
     wood_yellow:  { name: "Yellow Wood", all: 0xd8c24a, tool: "hand", drop: "wood_yellow" },
-    leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: null, harvestOnTap: true },
+    leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: "leaves", harvestOnTap: true },
     cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
@@ -101,6 +102,7 @@ window.Game = window.Game || {};
     chest:        { name: "Chest",       top: 0xc79a4f, side: 0x8a5a2c, bottom: 0x6f4a26, tool: "hand", drop: "chest" },
     bed:          { name: "Bed",         top: 0xd23b52, side: 0xc0392b, bottom: 0x9c7a48, tool: "hand", drop: "bed" },
     ladder:       { name: "Ladder", top: 0x8a5a2c, side: 0xb8863f, bottom: 0x8a5a2c, tool: "hand", drop: "ladder" },
+    stairs:       { name: "Stairs", top: 0xc79a55, side: 0xa57d3e, bottom: 0x8a652f, tool: "hand", drop: "stairs" },
     fence:        { name: "Fence",  top: 0x8a5a2c, side: 0x6f5230, bottom: 0x6f5230, tool: "hand", drop: "fence" },
     torch:        { name: "Torch",  top: 0xffcc33, side: 0x8a5a2c, bottom: 0x6f5230, tool: "hand", drop: "torch", solid: false },
     glass:        { name: "Glass",  all: 0xbfe3ef, top: 0xd6f0f7, tool: "hand", drop: "glass" },
@@ -204,7 +206,7 @@ window.Game = window.Game || {};
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
   Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
   Game.ItemDefs.bucket  = { name: "Bucket", emoji: "🪣", placeable: false, desc: "Tap water with it to scoop the water up." };
-  Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "Tap the ground to pour the water back out." };
+  Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "The number shows how many waters it holds. Tap more water to scoop up as much as you like; tap the ground to pour one back out." };
   // You can only get water with a bucket — never carry/place a raw water block.
   Game.ItemDefs.water.placeable = false;
   Game.ItemDefs.water.hidden = true;
@@ -221,6 +223,7 @@ window.Game = window.Game || {};
     furnace: "Place it and tap to smelt sand, clay, coal and ore.",
     chest: "Place it and tap to store lots of items.",
     crafting_table: "Place it and tap for the full 3×3 crafting grid.",
+    stairs: "Walk straight up or down them to change height — no jumping needed.",
     bed: "A cosy place to sleep.",
     fence: "Pen animals in — they won't cross a fence.",
     torch: "A little light for dark places.",
@@ -263,6 +266,10 @@ window.Game = window.Game || {};
     // Sticks down both sides + one in the middle -> 3 ladders.
     { id: "ladder", gives: { id: "ladder", count: 3 }, table: true,
       pattern: [[S, null, S], [S, S, S], [S, null, S]] },
+    // Planks in a staircase -> 4 stairs. Walk straight up or down them, no
+    // jumping needed.
+    { id: "stairs", gives: { id: "stairs", count: 4 }, table: true,
+      pattern: [[PL, null, null], [PL, PL, null], [PL, PL, PL]] },
     // Wood posts with sticks between -> 6 fences.
     { id: "fence", gives: { id: "fence", count: 6 }, table: true,
       pattern: [[W, S, W], [W, S, W]] },
