@@ -234,8 +234,56 @@
     ]);
   }
 
+  // A furnace: a stone block dressed up so it reads at a glance — a lighter
+  // stone cap and plinth, a row of rivets, and a glowing firebox with embers
+  // and a grate on the front (+Z) face. Far more distinctive than a grey cube.
+  function furnaceGeometry() {
+    const def = Game.BlockDefs.furnace;
+    const body = new THREE.Color(def.side);     // dark stone body
+    const cap = new THREE.Color(def.top);       // lighter stone cap / plinth
+    const trim = new THREE.Color(0x3a3a3d);     // dark iron trim
+    const mouth = new THREE.Color(0x141417);    // the recessed firebox opening
+    const ember = new THREE.Color(0xff7a1a);    // glowing coals
+    const flame = new THREE.Color(0xffd23b);    // bright flame tips
+    const rivet = new THREE.Color(0x9aa0a8);    // little metal studs
+    const F = 0.5;                              // the front face sits at z = 0.5
+    return mergeColoredBoxes([
+      // Core block + a stone cap and base plinth so it has clear "top & bottom".
+      { g: Box(1, 1, 1), x: 0, y: 0, z: 0, c: body },
+      { g: Box(1.02, 0.16, 1.02), x: 0, y: 0.45, z: 0, c: cap },
+      { g: Box(1.04, 0.12, 1.04), x: 0, y: -0.46, z: 0, c: cap },
+      // A dark iron band wrapping the upper front.
+      { g: Box(1.01, 0.2, 1.01), x: 0, y: 0.2, z: 0, c: trim },
+      // Firebox: a recessed dark opening with glowing embers and a flame.
+      { g: Box(0.66, 0.5, 0.06), x: 0, y: -0.14, z: F, c: mouth },
+      { g: Box(0.54, 0.16, 0.05), x: 0, y: -0.3, z: F + 0.02, c: ember },
+      { g: Box(0.3, 0.18, 0.05), x: 0, y: -0.12, z: F + 0.02, c: flame },
+      // Two grate bars across the firebox mouth.
+      { g: Box(0.06, 0.46, 0.04), x: -0.16, y: -0.14, z: F + 0.03, c: trim },
+      { g: Box(0.06, 0.46, 0.04), x: 0.16, y: -0.14, z: F + 0.03, c: trim },
+      // A row of rivets along the front, just under the cap.
+      { g: Box(0.1, 0.1, 0.04), x: -0.34, y: 0.34, z: F + 0.01, c: rivet },
+      { g: Box(0.1, 0.1, 0.04), x: 0, y: 0.34, z: F + 0.01, c: rivet },
+      { g: Box(0.1, 0.1, 0.04), x: 0.34, y: 0.34, z: F + 0.01, c: rivet }
+    ]);
+  }
+
+  // Stairs: a full-height back half with a lower front step, so it clearly
+  // reads as something you walk up. (Collision is a normal cube — you auto-step
+  // onto it — but the shape shows the slope.)
+  function stairsGeometry() {
+    const def = Game.BlockDefs.stairs;
+    const lower = new THREE.Color(def.side), upper = new THREE.Color(def.top);
+    return mergeColoredBoxes([
+      { g: Box(1, 0.5, 1), x: 0, y: -0.25, z: 0, c: lower },   // bottom step (front)
+      { g: Box(1, 0.5, 0.5), x: 0, y: 0.25, z: -0.25, c: upper } // upper step (back)
+    ]);
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
+    if (id === "stairs") return (geomCache[id] = stairsGeometry());
+    if (id === "furnace") return (geomCache[id] = furnaceGeometry());
     if (id === "crafting_table") return (geomCache[id] = craftingTableGeometry());
     if (id === "watermelon") return (geomCache[id] = watermelonGeometry());
     if (id === "ladder") return (geomCache[id] = ladderGeometry());
@@ -801,18 +849,92 @@
   }
   World.makeVillager = makeVillager;
 
+  // Fill a single column from fromY..toY (inclusive) with one block id.
+  World.prototype.fillColumn = function (x, z, fromY, toY, id) {
+    if (x < 0 || z < 0 || x >= C.WORLD || z >= C.WORLD) return;
+    for (let y = fromY; y <= toY; y++) this.blocks.set(World.key(x, y, z), id);
+  };
+
+  // The settlement: a paved keep ringed by a low wall, with four soaring corner
+  // spires and a central beacon mast that all rise WELL above the treetops, so
+  // the village is unmistakable when you scan the horizon from a treetop.
+  World.prototype.buildSettlement = function (cx, cz, rng) {
+    const R = 5;                                  // half-width of the keep
+    const floorY = this.surfaceY(cx, cz);         // flatten everything to here
+    const wallTop = floorY + 3;                   // a low, homely perimeter wall
+    const spireTop = C.MAX_Y - 1;                 // corner spires nearly touch the sky
+    const mastTop = C.MAX_Y + 1;                  // the central mast is the tallest of all
+
+    // 1) Flatten + pave the plaza, clearing any trees that stood here.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+        this.fillColumn(x, z, Math.max(0, floorY - 1), floorY - 1, "dirt");
+        this.blocks.set(World.key(x, floorY, z), "planks"); // a wooden plaza floor
+      }
+    }
+
+    // 2) Perimeter wall with windows, leaving a doorway on the +z side.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== R) continue; // edge cells only
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        if (dz === R && Math.abs(dx) <= 1) continue;             // open doorway
+        this.fillColumn(x, z, floorY + 1, wallTop, "brown_brick");
+        // a glass window every other block along the wall
+        if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) {
+          this.blocks.set(World.key(x, floorY + 2, z), "glass");
+        }
+      }
+    }
+
+    // 3) Four tall corner spires, each topped with a bright beacon you can spot
+    //    from far away (a coloured block crowned with a glowing torch).
+    const corners = [[-R, -R], [R, -R], [-R, R], [R, R]];
+    corners.forEach(([dx, dz]) => {
+      const x = cx + dx, z = cz + dz;
+      if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) return;
+      this.fillColumn(x, z, floorY + 1, spireTop - 1, "brick");
+      this.blocks.set(World.key(x, spireTop, z), "wood_red"); // bright crown
+      if (spireTop + 1 <= C.MAX_Y) this.blocks.set(World.key(x, spireTop + 1, z), "torch");
+    });
+
+    // 4) The central beacon mast — the very tallest point of the settlement.
+    this.fillColumn(cx, cz, floorY + 1, Math.min(C.MAX_Y, mastTop - 1), "brick");
+    if (mastTop - 2 >= floorY + 1) this.blocks.set(World.key(cx, mastTop - 2, cz), "wood_yellow");
+    const beaconY = Math.min(C.MAX_Y, mastTop);
+    this.blocks.set(World.key(cx, beaconY, cz), "torch");
+
+    return floorY;
+  };
+
   World.prototype.spawnVillagers = function (count) {
     const rng = Game.mulberry32(this.seed ^ 0x711a9e);
-    // The villagers share one little settlement and stay close to it.
-    const cx = 6 + Math.floor(rng() * (C.WORLD - 12));
-    const cz = 6 + Math.floor(rng() * (C.WORLD - 12));
+    // The villagers share one settlement and stay close to it. Keep it clear of
+    // the player's spawn (world centre) so nobody starts buried under a tower.
+    const sc = Math.floor(C.WORLD / 2);
+    let cx = sc, cz = sc, tries = 0;
+    do {
+      cx = 8 + Math.floor(rng() * (C.WORLD - 16));
+      cz = 8 + Math.floor(rng() * (C.WORLD - 16));
+      tries++;
+    } while (tries < 40 && Math.abs(cx - sc) < 10 && Math.abs(cz - sc) < 10);
+
+    const floorY = this.buildSettlement(cx, cz, rng);
+
+    // Spots inside the keep (clear of the central mast and the corner spires)
+    // where the villagers stand and amble about.
+    const spots = [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [-2, -2], [3, -1], [-3, 1]];
     for (let i = 0; i < count; i++) {
       const v = makeVillager();
-      const x = Math.max(3, Math.min(C.WORLD - 3, cx + Math.floor(rng() * 5) - 2));
-      const z = Math.max(3, Math.min(C.WORLD - 3, cz + Math.floor(rng() * 5) - 2));
-      v.position.set(x + 0.5, this.surfaceY(x, z) + 1, z + 0.5);
+      const off = spots[i % spots.length];
+      const x = cx + off[0], z = cz + off[1];
+      v.position.set(x + 0.5, floorY + 1, z + 0.5);
       v.userData.home = { x: cx + 0.5, z: cz + 0.5 }; // the settlement centre
-      v.userData.roam = 4;                            // how far they'll stray
+      v.userData.roam = 3.5;                          // stay inside the walls
       v.userData.dir = rng() * Math.PI * 2;
       v.userData.timer = rng() * 4;
       v.userData.moving = false;

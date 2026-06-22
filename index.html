@@ -117,7 +117,9 @@
     <div class="panel">
       <h2>🔥 Furnace</h2>
       <p class="hint">Load a <b>fuel</b> (coal or a battery) and something to
-        <b>smelt</b>, then press Smelt. Batteries last much longer than coal.</p>
+        <b>smelt</b>, then press Smelt. Batteries last much longer than coal.
+        <b>Coal can go in both slots</b> — it burns <i>and</i> smelts into
+        obsidian, so load it as fuel, then tap Smelt to split some across.</p>
       <div class="furnace-area">
         <div class="furnace-stack">
           <div class="furnace-cell fuel" id="furnace-fuel" title="Fuel: coal or battery"></div>
@@ -132,6 +134,9 @@
       <button class="big-btn" id="furnace-smelt">Smelt</button>
       <h3 class="craft-label">Your items (tap one, then tap Fuel or Smelt)</h3>
       <div class="craft-inv" id="furnace-inv"></div>
+      <h3 class="craft-label">What you can smelt</h3>
+      <p class="craft-label" id="furnace-recipe-hint">Tap a recipe to load it (if you have it).</p>
+      <div class="recipe-book" id="furnace-recipes"></div>
       <button class="big-btn close-btn">Close</button>
     </div>
   </div>
@@ -173,6 +178,18 @@
         <button class="big-btn" id="btn-new-random">🎲 New World — Surprise me</button>
         <button class="big-btn" id="btn-continue">▶️ Continue saved world</button>
       </div>
+
+      <!-- Settings: small toggles that persist across worlds. -->
+      <div class="settings">
+        <h3>⚙️ Settings</h3>
+        <button class="setting-toggle" id="btn-invert-look">
+          <span class="setting-label">Look controls: drag down to look up</span>
+          <span class="setting-state" id="invert-look-state">ON</span>
+        </button>
+        <p class="setting-hint">When ON (the default), pulling the screen down
+          tilts your view up — and pulling up tilts it down.</p>
+      </div>
+
       <div class="instructions">
         <h3>How to play</h3>
         <ul>
@@ -241,7 +258,7 @@
   <!-- ============ Death screen ============ -->
   <div class="panel-overlay hidden" id="death-panel">
     <div class="panel death-panel">
-      <h1>💀 You Died</h1>
+      <h1>😴 You needed a nap!</h1>
       <p id="death-reason">You ran out of health.</p>
       <button class="big-btn" id="btn-respawn">Respawn</button>
     </div>

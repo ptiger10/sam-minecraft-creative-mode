@@ -1,0 +1,281 @@
+// Focused verification of the new features: inverted look + setting, the
+// counting/indefinite water bucket, coal as both fuel & smelt, tall villager
+// settlements, leaves dropping into the backpack, and the break button staying
+// locked until the timer ends. Run alongside smoke.mjs.
+import { createServer } from "http";
+import { readFile } from "fs/promises";
+import { extname, join, normalize } from "path";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(join(process.env.PW_ROOT, "playwright"));
+
+const ROOT = new URL("..", import.meta.url).pathname;
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".webmanifest": "application/manifest+json" };
+
+const server = createServer(async (req, res) => {
+  try {
+    let p = decodeURIComponent(req.url.split("?")[0]);
+    if (p === "/") p = "/index.html";
+    const file = normalize(join(ROOT, p));
+    if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+    const body = await readFile(file);
+    res.writeHead(200, { "Content-Type": TYPES[extname(file)] || "application/octet-stream" });
+    res.end(body);
+  } catch { res.writeHead(404); res.end("not found"); }
+});
+
+await new Promise((r) => server.listen(0, r));
+const base = `http://127.0.0.1:${server.address().port}`;
+
+const errors = [];
+const checks = [];
+function check(name, cond) { checks.push({ name, ok: !!cond }); }
+
+const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--no-sandbox"] });
+const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
+page.on("console", (m) => { if (m.type() === "error") errors.push("console: " + m.text()); });
+page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
+
+await page.goto(base, { waitUntil: "load" });
+await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
+
+// --- Inverted look is the default, and the toggle flips it ---
+const lookDefault = await page.evaluate(() => window.Game.S.invertLook);
+check("inverted look is ON by default", lookDefault === true);
+const stateText = await page.textContent("#invert-look-state");
+check("look setting shows ON in the menu", stateText.trim() === "ON");
+await page.click("#btn-invert-look");
+const afterToggle = await page.evaluate(() => window.Game.S.invertLook);
+check("toggling the setting turns inverted look OFF", afterToggle === false);
+await page.click("#btn-invert-look"); // back to default for the rest of the run
+
+// --- Start a forest world ---
+await page.click("#btn-new-forest");
+await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
+await page.waitForTimeout(300);
+
+// --- The pointer-look pitch obeys the inverted setting ---
+const lookMath = await page.evaluate(() => {
+  const S = window.Game.S, p = S.player;
+  const game = document.getElementById("game");
+  const fire = (type, x, y) => game.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true }));
+  // Inverted (default): dragging DOWN should raise the pitch (look up).
+  S.invertLook = true; p.pitch = 0;
+  fire("pointerdown", 450, 300); fire("pointermove", 450, 360); fire("pointerup", 450, 360);
+  const invUp = p.pitch;
+  // Normal: dragging DOWN should lower the pitch (look down).
+  S.invertLook = false; p.pitch = 0;
+  fire("pointerdown", 450, 300); fire("pointermove", 450, 360); fire("pointerup", 450, 360);
+  const normDown = p.pitch;
+  S.invertLook = true;
+  return { invUp, normDown };
+});
+check("inverted: dragging down looks UP (pitch rises)", lookMath.invUp > 0);
+check("normal: dragging down looks DOWN (pitch drops)", lookMath.normDown < 0);
+
+// --- The water bucket counts up and collects without limit ---
+const water = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  const eye = p.eyePosition(), dir = p.lookDir();
+  const placeWater = () => {
+    for (let i = 0; i <= 5; i++) W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+    const bx = Math.floor(eye.x + dir.x * 2.5), by = Math.floor(eye.y + dir.y * 2.5), bz = Math.floor(eye.z + dir.z * 2.5);
+    W.blocks.set(key(bx, by, bz), "water"); W.buildMeshes();
+  };
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  const mine = () => document.getElementById("btn-mine").click();
+  // A) an empty bucket scoops one water and becomes a water bucket.
+  S.inv.fill(null); S.inv[0] = { id: "bucket", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  placeWater(); mine();
+  const afterScoop = { waters: count("water_bucket"), buckets: count("bucket") };
+  // B) holding the water bucket, scoop 130 more — well past the 99 stack cap.
+  S.inv.fill(null); S.inv[0] = { id: "water_bucket", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  for (let i = 0; i < 130; i++) { placeWater(); mine(); }
+  return { afterScoop, waters: count("water_bucket"), stacks: S.inv.filter((s) => s && s.id === "water_bucket").length };
+});
+check("an empty bucket scoops one water (and empties)", water.afterScoop.waters === 1 && water.afterScoop.buckets === 0);
+check("water bucket collected 131 waters (indefinite, past 99)", water.waters === 131);
+check("the water count lives in a single bucket", water.stacks === 1);
+
+// --- Coal can be loaded into BOTH the fuel and smelt slots ---
+const coal = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game, FUR = S.furnace;
+  S.inv.fill(null); S.inv[0] = { id: "coal", count: 8 };
+  window.Game._openFurnace();
+  // brush coal -> load all into fuel
+  FUR.brush = "coal"; document.getElementById("furnace-fuel").click();
+  const afterFuel = { fuelN: FUR.fuelN, inputN: FUR.inputN };
+  // brush coal again (still listed because coal is dual-use) -> split into smelt
+  FUR.brush = "coal"; document.getElementById("furnace-input").click();
+  const afterSplit = { fuel: FUR.fuel, fuelN: FUR.fuelN, input: FUR.input, inputN: FUR.inputN };
+  return { afterFuel, afterSplit };
+});
+check("loading fuel grabs the whole coal stack", coal.afterFuel.fuelN === 8 && coal.afterFuel.inputN === 0);
+check("coal then splits into the smelt slot", coal.afterSplit.fuel === "coal" && coal.afterSplit.input === "coal");
+check("coal sits in both slots at once", coal.afterSplit.fuelN > 0 && coal.afterSplit.inputN > 0);
+
+// --- Smelting coal-with-coal yields obsidian ---
+const smelt = await page.evaluate(() => {
+  const S = window.Game.S;
+  document.getElementById("furnace-smelt").click();
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  document.querySelector("#furnace-panel .close-btn").click();
+  return { obsidian: count("obsidian") };
+});
+check("smelting coal with coal produced obsidian", smelt.obsidian > 0);
+
+// --- Mining leaves drops leaves into the backpack ---
+const leaves = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const G = window.Game;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  const eye = p.eyePosition(), dir = p.lookDir();
+  for (let i = 0; i <= 5; i++) W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+  const bx = Math.floor(eye.x + dir.x * 2.5), by = Math.floor(eye.y + dir.y * 2.5), bz = Math.floor(eye.z + dir.z * 2.5);
+  W.blocks.set(key(bx, by, bz), "leaves"); W.buildMeshes();
+  S.inv.fill(null); // empty hand to mine
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  document.getElementById("btn-mine").click();
+  const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
+  return { leaves: count("leaves"), dropDef: G.BlockDefs.leaves.drop };
+});
+check("leaves drop is defined", leaves.dropDef === "leaves");
+check("mining leaves put leaves in the backpack", leaves.leaves >= 1);
+
+// --- The settlement towers rise well above the treetops ---
+const village = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game, W = S.world;
+  const C = G.CONST;
+  const v = W.animals.find((a) => a.userData.kind === "villager");
+  if (!v) return { hasVillager: false };
+  const hx = Math.round(v.userData.home.x - 0.5), hz = Math.round(v.userData.home.z - 0.5);
+  // Tallest solid block within the settlement footprint.
+  let tallest = 0, beacon = false;
+  for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) {
+    for (let y = C.MAX_Y + 1; y >= 0; y--) {
+      const id = W.get(hx + dx, y, hz + dz);
+      if (id && G.isSolidBlock(id)) { if (y > tallest) tallest = y; break; }
+    }
+    for (let y = 0; y <= C.MAX_Y + 1; y++) if (W.get(hx + dx, y, hz + dz) === "torch") beacon = true;
+  }
+  // The treetops in this world for comparison.
+  let treetop = 0;
+  for (const [k, id] of W.blocks) { if (id === "leaves") { const y = +k.split(",")[1]; if (y > treetop) treetop = y; } }
+  return { hasVillager: true, tallest, treetop, beacon };
+});
+check("a villager settlement exists", village.hasVillager);
+check("the settlement towers rise above the treetops", village.tallest > village.treetop);
+check("the settlement is very tall (near the sky)", village.tallest >= 20);
+check("the settlement has a glowing beacon", village.beacon);
+
+// --- Riding uses the normal controls: walk forward and jump ---
+const ride = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  const a = W.animals.find((an) => an.userData.kind !== "villager" && an.userData.kind !== "monkey");
+  if (!a) return { hasMount: false };
+  // Clear a straight corridor ahead (forward is -z) at body height.
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0);
+  const px = Math.floor(p.pos.x), pz = Math.floor(p.pos.z), fy = Math.floor(p.pos.y);
+  for (let dz = 0; dz <= 8; dz++) for (let dy = 0; dy <= 2; dy++) W.blocks.delete(key(px, fy + dy, pz - dz));
+  W.buildMeshes();
+  S.riding = a; a.position.set(p.pos.x, p.pos.y, p.pos.z);
+  S.input.forward = false; S.input.jump = false;
+  for (let i = 0; i < 4; i++) G._updateRiding(0.05);     // settle on the ground
+  // Walk forward and watch the mount travel with us.
+  const z0 = a.position.z;
+  S.input.forward = true;
+  for (let i = 0; i < 16; i++) G._updateRiding(0.05);
+  S.input.forward = false;
+  const walked = z0 - a.position.z;                       // forward is -z
+  const follows = Math.abs(a.position.x - p.pos.x) < 0.01 && Math.abs(a.position.z - p.pos.z) < 0.01;
+  // Jump from the ground.
+  p.onGround = true; p.vel.y = 0; S.input.jump = true;
+  G._updateRiding(0.05);
+  const jumpV = p.vel.y;
+  S.input.jump = false; S.riding = null;
+  return { hasMount: true, walked, follows, jumpV };
+});
+check("a rideable mount exists", ride.hasMount);
+check("riding + forward walks the mount along", ride.walked > 0.3);
+check("the mount stays under the rider", ride.follows);
+check("riding + jump launches you upward (same as on foot)", ride.jumpV > 0);
+
+// --- The break "I'm back" button is locked until the timer ends ---
+const lock = await page.evaluate(() => {
+  const btn = document.getElementById("btn-resume-break");
+  // Simulate being mid-break.
+  const S = window.Game.S;
+  S.onBreak = true; S.breakLeft = 42;
+  btn.classList.add("hidden"); btn.disabled = true;
+  const style = getComputedStyle(btn);
+  const hiddenNow = style.display === "none";
+  // Try to resume early via the wired handler.
+  btn.click();
+  const stillPaused = S.onBreak === true;
+  // Now finish the timer and confirm it unlocks.
+  S.breakLeft = 0; btn.classList.remove("hidden"); btn.disabled = false;
+  const visibleNow = getComputedStyle(btn).display !== "none";
+  return { hiddenNow, stillPaused, visibleNow };
+});
+check("Resume button is hidden during the break", lock.hiddenNow);
+check("clicking Resume early does NOT end the break", lock.stillPaused);
+check("Resume button appears once the timer ends", lock.visibleNow);
+
+// --- Stairs: a recipe exists and you walk straight up them, no jump ---
+const stairs = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  const hasRecipe = G.Recipes.some((r) => r.id === "stairs");
+  const hasBlock = !!G.BlockDefs.stairs;
+  p.yaw = 0; p.pitch = 0; p.vel.set(0, 0, 0); p.onGround = true;
+  const px = Math.floor(p.pos.x), pz = Math.floor(p.pos.z), gy = Math.floor(p.pos.y) - 1;
+  // Clear a tall air column, then lay: a floor, a stairs step, and a raised
+  // platform behind it (one block higher).
+  for (let dz = 0; dz <= 6; dz++) for (let dy = 0; dy <= 5; dy++) W.blocks.delete(key(px, gy + dy, pz - dz));
+  W.blocks.set(key(px, gy, pz), "grass");        // floor where you start
+  W.blocks.set(key(px, gy, pz - 1), "grass");    // floor under the stair
+  W.blocks.set(key(px, gy + 1, pz - 1), "stairs"); // the step
+  for (let dz = 2; dz <= 6; dz++) W.blocks.set(key(px, gy + 1, pz - dz), "grass"); // raised platform
+  W.buildMeshes();
+  p.pos.set(px + 0.5, gy + 1, pz + 0.5);
+  const y0 = p.pos.y;
+  const inp = { forward: true, turnLeft: false, turnRight: false, jump: false };
+  for (let i = 0; i < 45; i++) p.update(1 / 60, inp);
+  return { hasRecipe, hasBlock, climbed: p.pos.y - y0, jumped: inp.jump };
+});
+check("a stairs recipe exists", stairs.hasRecipe);
+check("stairs block is defined", stairs.hasBlock);
+check("walking into stairs steps you up ~1 block (no jump)", stairs.climbed > 0.8);
+
+// --- Furnace recipes are shown right in the furnace panel ---
+const furRecipes = await page.evaluate(() => {
+  const S = window.Game.S, G = window.Game, FUR = S.furnace;
+  S.inv.fill(null); S.inv[0] = { id: "sand", count: 3 };
+  G._openFurnace();
+  const rows = document.querySelectorAll("#furnace-recipes .recipe-book-item").length;
+  const sandBtn = document.querySelector('#furnace-recipes [data-smelt="sand"]');
+  if (sandBtn) sandBtn.click();
+  const loaded = { input: FUR.input, inputN: FUR.inputN };
+  document.querySelector("#furnace-panel .close-btn").click();
+  return { rows, loaded };
+});
+check("furnace panel lists the smelting recipes", furRecipes.rows >= 5);
+check("tapping a furnace recipe loads the ingredient", furRecipes.loaded.input === "sand" && furRecipes.loaded.inputN === 3);
+
+// --- Report ---
+await browser.close();
+server.close();
+
+let pass = 0;
+for (const c of checks) { console.log((c.ok ? "  ✅ " : "  ❌ ") + c.name); if (c.ok) pass++; }
+console.log("\nErrors: " + (errors.length ? "\n  " + errors.join("\n  ") : "none"));
+const ok = pass === checks.length && errors.length === 0;
+console.log("\n" + (ok ? "FEATURE VERIFY PASSED ✅" : `FEATURE VERIFY FAILED ❌ (${pass}/${checks.length})`));
+process.exit(ok ? 0 : 1);

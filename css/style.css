@@ -290,6 +290,9 @@ html, body {
            max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .panel-overlay.hidden { display: none; }
+/* Generic hide utility (e.g. the break-over Resume button stays hidden until
+   the countdown finishes). The more specific rules above still win. */
+.hidden { display: none; }
 
 .panel {
   background: #c8c8c8;
@@ -655,6 +658,42 @@ html, body {
 .instructions h3 { margin: 4px 0 8px; }
 .instructions ul { margin: 0; padding-left: 20px; }
 .instructions li { margin-bottom: 5px; font-size: 14px; line-height: 1.35; }
+
+/* ---------- Settings ---------- */
+.settings {
+  background: #e2e2e2;
+  border: 2px solid #999;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.settings h3 { margin: 4px 0 8px; }
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #333;
+  background: #f4f4f4;
+  border: 2px solid #999;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.setting-toggle:active { background: #e8e8e8; }
+.setting-label { text-align: left; }
+.setting-state {
+  flex: none;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: #b0b0b0;
+  color: #fff;
+}
+.setting-toggle.on .setting-state { background: #6abe46; }
+.setting-hint { margin: 8px 0 0; font-size: 13px; color: #555; line-height: 1.35; }
 
 .death-panel { max-width: 380px; text-align: center; }
 .death-panel h1 { color: #a01b1b; }
