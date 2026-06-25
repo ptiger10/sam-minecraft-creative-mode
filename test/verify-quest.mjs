@@ -208,6 +208,82 @@ await page.waitForTimeout(350);
 const backOut = await page.evaluate(() => window.Game.S.inNether);
 check("walking into the return portal leaves the Nether", stepBack && backOut === false);
 
+// --- A villager hands over each key only once ---
+const oneTime = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S, W = S.world;
+  // Start from a clean slate for villager 1 (the free Bronze Key).
+  S.questKeysGiven = {};
+  for (let i = 0; i < S.inv.length; i++) if (S.inv[i] && S.inv[i].id === "key2") S.inv[i] = null;
+  const v1 = W.questVillagers.find((v) => v.userData.house === 1);
+  const q = v1.userData.quest;
+  const count = () => S.inv.reduce((n, s) => n + (s && s.id === "key2" ? s.count : 0), 0);
+  Game._buyQuest(q);            // first trade — should hand over the key
+  const afterFirst = count();
+  Game._buyQuest(q);            // second attempt — must be refused
+  Game._buyQuest(q);            // ...even a third time
+  const afterMore = count();
+  return { afterFirst, afterMore, remembered: !!S.questKeysGiven.key2 };
+});
+check("trading gives the key the first time", oneTime.afterFirst === 1);
+check("the same key can't be obtained again", oneTime.afterMore === 1);
+check("the granted key is remembered", oneTime.remembered === true);
+
+// The trade UI also shows the key as already-claimed (button disabled).
+const claimedUI = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S, W = S.world;
+  const v1 = W.questVillagers.find((v) => v.userData.house === 1);
+  Game._openTrade(v1); // questKeysGiven.key2 is still set from the test above
+  const btn = document.querySelector("#trade-list .quest-trade");
+  const disabled = btn ? btn.disabled : null;
+  const closeBtn = document.querySelector("#trade-panel .close-btn");
+  if (closeBtn) closeBtn.click(); // close so the game keeps running
+  return { disabled };
+});
+check("the claimed key trade is disabled in the UI", claimedUI.disabled === true);
+
+// --- You can't mine through the walls of a locked house ---
+const sealed = await page.evaluate(async () => {
+  const Game = window.Game, S = Game.S, W = S.world;
+  if (!W.protectedCells || W.protectedCells.size === 0) return { ok: false };
+  // Find a protected wall block with an open square beside it to stand in.
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let wall = null, stand = null;
+  for (const k of W.protectedCells) {
+    const p = k.split(",").map(Number);
+    const id = W.get(p[0], p[1], p[2]);
+    if (!id || Game.LOCKED[id] || id === "door") continue; // skip the (separately handled) door
+    for (const d of dirs) {
+      const nx = p[0] + d[0], nz = p[2] + d[1];
+      if (!W.occupied(nx, p[1], nz) && !W.occupied(nx, p[1] + 1, nz)) { wall = p; stand = { d, nx, nz }; break; }
+    }
+    if (wall) break;
+  }
+  if (!wall) return { ok: false };
+
+  const animalsBackup = W.animals;
+  W.animals = []; // ignore the villager so the tap targets the wall, not a trade
+  const p = S.player;
+  // Stand in the open square with the eye level with the wall block's centre, so
+  // a level look-ray points straight into it.
+  p.pos.set(stand.nx + 0.5, wall[1] + 0.5 - Game.CONST.EYE, stand.nz + 0.5);
+  p.yaw = Math.atan2(stand.d[0], stand.d[1]); // face from the open square toward the wall
+  p.pitch = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  S.inv[0] = { id: "pickaxe", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  const hit = W.raycast(p.eyePosition(), p.lookDir());
+  const before = W.get(wall[0], wall[1], wall[2]);
+  document.getElementById("btn-mine").click();
+  await new Promise((r) => setTimeout(r, 60));
+  const after = W.get(wall[0], wall[1], wall[2]);
+  W.animals = animalsBackup;
+  return { ok: true, isProtected: W.isProtected(wall[0], wall[1], wall[2]),
+    aimedWall: !!(hit && hit.block.x === wall[0] && hit.block.y === wall[1] && hit.block.z === wall[2]),
+    before, after };
+});
+check("locked houses register protected wall cells", sealed.ok && sealed.isProtected === true);
+check("a pickaxe can aim right at a house wall", sealed.aimedWall === true);
+check("but the wall can't be mined away", !!sealed.before && sealed.after === sealed.before);
+
 // ---- Report ----
 await browser.close();
 server.close();

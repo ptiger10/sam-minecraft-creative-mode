@@ -34,6 +34,7 @@
     chests: {},              // "x,y,z" -> array of stored item stacks
     openChestKey: null,      // which chest the chest panel is showing
     tradingWith: null,       // the villager whose trade panel is open
+    questKeysGiven: {},      // keyN -> true once a villager has handed it over (one-time)
     overworld: null,         // the surface world (kept while you visit the Nether)
     netherWorld: null,       // the Nether dimension (built on first entry)
     inNether: false,         // true while the player is in the Nether
@@ -669,16 +670,26 @@
     renderTrades();
   }
   // The quest villagers each offer one special key (the third wants netherite).
+  // Each key can be obtained only once — a villager won't hand out a second.
+  function questKeyClaimed(q) {
+    return !!S.questKeysGiven[q.gives] || countItem(q.gives) > 0;
+  }
   function buyQuest(q) {
+    if (questKeyClaimed(q)) {
+      toast("The villager has already given you the " + Game.itemName(q.gives) + ".");
+      return;
+    }
     if (q.cost && countItem(q.cost.id) < q.cost.count) {
       toast("You need " + q.cost.count + " " + Game.itemName(q.cost.id) + " for that key.");
       return;
     }
     if (q.cost) removeItems({ [q.cost.id]: q.cost.count });
     addItem(q.gives, 1);
+    S.questKeysGiven[q.gives] = true;   // remember it: one key per villager, ever
     toast("Traded for the " + Game.itemName(q.gives) + "! 🗝️");
     renderTrades();
   }
+  Game._buyQuest = buyQuest; // (used by the quest test)
 
   function renderTrades() {
     $("trade-emeralds").textContent = "💚 Your emeralds: " + countItem("emerald");
@@ -690,16 +701,17 @@
     if (q) {
       const btn = document.createElement("button");
       btn.className = "recipe-book-item quest-trade";
+      const claimed = questKeyClaimed(q);
       const canBuy = !q.cost || countItem(q.cost.id) >= q.cost.count;
-      btn.disabled = !canBuy;
-      const costText = q.cost
-        ? ("needs " + q.cost.count + " " + Game.itemName(q.cost.id))
-        : "a gift — just take it!";
-      const have = countItem(q.gives) > 0 ? " · you have one" : "";
+      btn.disabled = claimed || !canBuy;
+      const costText = claimed
+        ? "already received — one per villager"
+        : (q.cost ? ("needs " + q.cost.count + " " + Game.itemName(q.cost.id))
+                   : "a gift — just take it!");
       btn.innerHTML =
         '<span class="rb-icon">' + iconHTML(q.gives) + "</span>" +
-        '<span class="rb-text"><b>🗝️ ' + Game.itemName(q.gives) + "</b><br><small>" +
-        costText + have + "</small></span>";
+        '<span class="rb-text"><b>🗝️ ' + Game.itemName(q.gives) +
+        (claimed ? " ✓" : "") + "</b><br><small>" + costText + "</small></span>";
       btn.addEventListener("click", () => buyQuest(q));
       list.appendChild(btn);
     }
@@ -980,6 +992,13 @@
     if (Game.LOCKED[id]) { tryUnlock(hit.block); return; }
     if (id === "credits_block") { showCredits(); return; }
     if (id === "nether_portal") return; // travel by walking into it
+
+    // The walls, roof and floor around a locked house are sealed: the only way
+    // in is the matching key, so you can't just mine through them.
+    if (S.world.isProtected(hit.block.x, hit.block.y, hit.block.z)) {
+      toast("🧱 This is part of a villager's house — use the key, not a pickaxe.");
+      return;
+    }
 
     // Water can only be picked up with a bucket. A water bucket keeps a running
     // count of how many waters it holds and can scoop up an unlimited amount.
@@ -1312,10 +1331,12 @@
       S.inv = restore.inventory;
       S.selected = restore.selected || 0;
       S.chests = restore.chests || {};
+      S.questKeysGiven = restore.questKeysGiven || {};
     } else {
       S.inv = new Array(36).fill(null);
       S.selected = 0;
       S.chests = {};
+      S.questKeysGiven = {};
     }
     S.riding = null;
     S.playClock = 0;
@@ -1391,7 +1412,8 @@
       },
       inventory: S.inv,
       selected: S.selected,
-      chests: S.chests
+      chests: S.chests,
+      questKeysGiven: S.questKeysGiven
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1426,7 +1448,8 @@
     // make sure the inventory array is the right length
     const inv = new Array(36).fill(null);
     (data.inventory || []).forEach((s, i) => { if (s && i < 36) inv[i] = s; });
-    startWorld(world, { player: data.player, inventory: inv, selected: data.selected, chests: data.chests || {} });
+    startWorld(world, { player: data.player, inventory: inv, selected: data.selected,
+      chests: data.chests || {}, questKeysGiven: data.questKeysGiven || {} });
     return true;
   }
 

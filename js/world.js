@@ -365,9 +365,19 @@
     this.spawn = { x: C.WORLD / 2, y: 0, z: C.WORLD / 2 };
     this.animals = [];
     this.trees = [];                 // trunk tops, so monkeys can swing in them
+    this.protectedCells = new Set(); // quest-house shells you can't mine through
   }
 
   World.key = (x, y, z) => x + "," + y + "," + z;
+
+  // Quest structures (the locked houses) are sealed: their walls, roof, floor
+  // and door can't be mined, so the only way in is the matching key.
+  World.prototype.markProtected = function (x, y, z) {
+    this.protectedCells.add(World.key(x, y, z));
+  };
+  World.prototype.isProtected = function (x, y, z) {
+    return this.protectedCells.has(World.key(x, y, z));
+  };
 
   World.prototype.get = function (x, y, z) {
     return this.blocks.get(World.key(x, y, z)) || null;
@@ -1119,6 +1129,8 @@
     for (let dx = -hr; dx <= hr; dx++) {
       for (let dz = -hr; dz <= hr; dz++) {
         const x = cx + dx, z = cz + dz;
+        // Seal the whole footprint's floor so you can't tunnel up into the house.
+        this.markProtected(x, floorY, z);
         const edge = Math.max(Math.abs(dx), Math.abs(dz)) === hr;
         if (!edge) continue;
         if (dz === -hr && dx === 0) {
@@ -1126,15 +1138,21 @@
           const doorId = num === 1 ? "door" : ("locked_door_" + num);
           this.blocks.set(World.key(x, floorY + 1, z), doorId);
           this.blocks.set(World.key(x, floorY + 3, z), wall);   // lintel (foot+2 stays open)
+          this.markProtected(x, floorY + 1, z);                 // the (locked) door
+          this.markProtected(x, floorY + 3, z);                 // the lintel above it
         } else {
           this.fillColumn(x, z, floorY + 1, top, wall);
           if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) this.blocks.set(World.key(x, floorY + 2, z), "glass");
+          for (let y = floorY + 1; y <= top; y++) this.markProtected(x, y, z); // walls + windows
         }
       }
     }
     // Flat roof.
     for (let dx = -hr; dx <= hr; dx++) {
-      for (let dz = -hr; dz <= hr; dz++) this.blocks.set(World.key(cx + dx, floorY + 4, cz + dz), roof);
+      for (let dz = -hr; dz <= hr; dz++) {
+        this.blocks.set(World.key(cx + dx, floorY + 4, cz + dz), roof);
+        this.markProtected(cx + dx, floorY + 4, cz + dz);
+      }
     }
     // A torch inside so it isn't pitch dark.
     this.blocks.set(World.key(cx + hr - 1, floorY + 3, cz + hr - 1), "torch");
