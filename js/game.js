@@ -34,6 +34,11 @@
     chests: {},              // "x,y,z" -> array of stored item stacks
     openChestKey: null,      // which chest the chest panel is showing
     tradingWith: null,       // the villager whose trade panel is open
+    overworld: null,         // the surface world (kept while you visit the Nether)
+    netherWorld: null,       // the Nether dimension (built on first entry)
+    inNether: false,         // true while the player is in the Nether
+    portalCooldown: 0,       // brief delay after a portal so it doesn't bounce you
+    questPortalExit: null,   // the overworld cell you return to from the Nether
     playClock: 0,            // seconds of *active* play since the last break
     onBreak: false,          // true while the take-a-break overlay is showing
     breakLeft: 0,            // seconds remaining on the break countdown
@@ -663,10 +668,42 @@
     toast("Traded for " + Game.itemName(t.gives.id) + "! 💚");
     renderTrades();
   }
+  // The quest villagers each offer one special key (the third wants netherite).
+  function buyQuest(q) {
+    if (q.cost && countItem(q.cost.id) < q.cost.count) {
+      toast("You need " + q.cost.count + " " + Game.itemName(q.cost.id) + " for that key.");
+      return;
+    }
+    if (q.cost) removeItems({ [q.cost.id]: q.cost.count });
+    addItem(q.gives, 1);
+    toast("Traded for the " + Game.itemName(q.gives) + "! 🗝️");
+    renderTrades();
+  }
+
   function renderTrades() {
     $("trade-emeralds").textContent = "💚 Your emeralds: " + countItem("emerald");
     const list = $("trade-list");
     list.innerHTML = "";
+
+    // A quest villager's key trade sits at the top, highlighted.
+    const q = S.tradingWith && S.tradingWith.userData && S.tradingWith.userData.quest;
+    if (q) {
+      const btn = document.createElement("button");
+      btn.className = "recipe-book-item quest-trade";
+      const canBuy = !q.cost || countItem(q.cost.id) >= q.cost.count;
+      btn.disabled = !canBuy;
+      const costText = q.cost
+        ? ("needs " + q.cost.count + " " + Game.itemName(q.cost.id))
+        : "a gift — just take it!";
+      const have = countItem(q.gives) > 0 ? " · you have one" : "";
+      btn.innerHTML =
+        '<span class="rb-icon">' + iconHTML(q.gives) + "</span>" +
+        '<span class="rb-text"><b>🗝️ ' + Game.itemName(q.gives) + "</b><br><small>" +
+        costText + have + "</small></span>";
+      btn.addEventListener("click", () => buyQuest(q));
+      list.appendChild(btn);
+    }
+
     Game.Trades.forEach((t) => {
       const btn = document.createElement("button");
       btn.className = "recipe-book-item";
@@ -729,12 +766,101 @@
     if (id === "crafting_table") { openCrafting(true); return true; }
     if (id === "furnace") { openFurnace(); return true; }
     if (id === "chest") { openChest(hit.block); return true; }
+    if (id === "credits_block") { showCredits(); return true; }
+    if (id === "nether_portal") { return true; } // step in to travel; tap does nothing
+    if (Game.LOCKED[id]) { tryUnlock(hit.block); return true; }
     if (Game.OPENABLE[id]) {
       S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, Game.OPENABLE[id]);
       S.swing = 0.18;
       return true;
     }
     return false;
+  }
+
+  // ===============================================================
+  //  Locked doors, the credits plaque, and the Nether portal
+  // ===============================================================
+  // Tap a locked door with its matching key to open it for good.
+  function tryUnlock(block) {
+    const id = S.world.get(block.x, block.y, block.z);
+    const houseNum = Game.LOCKED[id];
+    if (!houseNum) return;
+    const keyId = "key" + houseNum;
+    S.swing = 0.18;
+    if (countItem(keyId) > 0) {
+      removeItems({ [keyId]: 1 });
+      S.world.setBlock(block.x, block.y, block.z, "door_open");
+      toast("🔓 Unlocked with the " + Game.itemName(keyId) + "!");
+      if (houseNum === 4) setTimeout(showCredits, 700); // the grand finale
+    } else {
+      toast("🔒 Locked! Trade a villager for the " + Game.itemName(keyId) + ".");
+    }
+  }
+
+  function showCredits() {
+    // Restart the scroll from the bottom each time it's opened.
+    const scroll = $("credits-scroll");
+    if (scroll) { scroll.style.animation = "none"; void scroll.offsetWidth; scroll.style.animation = ""; }
+    showPanel("credits-panel");
+  }
+
+  // Build (once) and switch the active scene to a world, moving the camera (and
+  // its held-item viewmodel) and the player's collision world along with it.
+  function buildWorldScene(world) {
+    if (world._scene) return;
+    const scene = buildScene(world.biome);
+    world.scene = scene;
+    world.material = world.material || new THREE.MeshLambertMaterial({ vertexColors: true });
+    world.buildMeshes();
+    world.animals.forEach((a) => scene.add(a));
+    world._scene = scene;
+    world._highlight = buildHighlight(scene);
+  }
+
+  function activateWorld(world, spawn) {
+    buildWorldScene(world);
+    if (S.camera.parent) S.camera.parent.remove(S.camera);
+    world._scene.add(S.camera);
+    S.world = world;
+    S.scene = world._scene;
+    S.highlight = world._highlight;
+    S.player.world = world;
+    if (spawn) {
+      S.player.pos.set(spawn.x, spawn.y, spawn.z);
+      S.player.vel.set(0, 0, 0);
+      S.player.fallPeak = spawn.y;
+      S.player.syncCamera();
+    }
+  }
+
+  function enterNether() {
+    if (!S.netherWorld) {
+      const nw = new Game.World(null, S.overworld.seed, "nether");
+      nw.generateNether();
+      S.netherWorld = nw;
+    }
+    activateWorld(S.netherWorld, S.netherWorld.spawn);
+    S.inNether = true;
+    S.portalCooldown = 2;
+    toast("🔥 Into the Nether! Mine netherite — and dodge the ghasts' fire!");
+  }
+
+  function exitNether() {
+    const exit = S.questPortalExit || (S.overworld && S.overworld.spawn);
+    activateWorld(S.overworld, exit);
+    S.inNether = false;
+    S.portalCooldown = 2;
+    toast("🌳 Back to the overworld!");
+  }
+
+  // Standing in a portal block carries you between the worlds.
+  function handlePortal(dt) {
+    if (S.portalCooldown > 0) { S.portalCooldown -= dt; return; }
+    const p = S.player.pos;
+    const id = S.world.get(Math.floor(p.x), Math.floor(p.y + 0.2), Math.floor(p.z));
+    if (id === "nether_portal") {
+      if (S.inNether) exitNether(); else enterNether();
+    }
   }
 
   // ===============================================================
@@ -850,6 +976,11 @@
     if (!def) return;
     S.swing = 0.18;
 
+    // Quest fixtures can't be mined away — they're used, not broken.
+    if (Game.LOCKED[id]) { tryUnlock(hit.block); return; }
+    if (id === "credits_block") { showCredits(); return; }
+    if (id === "nether_portal") return; // travel by walking into it
+
     // Water can only be picked up with a bucket. A water bucket keeps a running
     // count of how many waters it holds and can scoop up an unlimited amount.
     if (id === "water") {
@@ -907,8 +1038,9 @@
     if (hit) {
       const id = S.world.get(hit.block.x, hit.block.y, hit.block.z);
       if (Game.harvestOnTap(id)) { doHit(); return; }
-      // Doors / windows / table / furnace / chest are used by a tap.
-      if (id === "crafting_table" || id === "furnace" || id === "chest" || Game.OPENABLE[id]) {
+      // Doors / windows / table / furnace / chest / locks / plaque are used by a tap.
+      if (id === "crafting_table" || id === "furnace" || id === "chest" || Game.OPENABLE[id] ||
+          Game.LOCKED[id] || id === "credits_block" || id === "nether_portal") {
         tryBlockInteract(hit); return;
       }
     }
@@ -948,7 +1080,8 @@
     }
     const colors = { apple: 0xd23b32, stick: 0x9a6a32, coal: 0x2a2a2c, emerald: 0x2ecc71,
       battery: 0xd8c24a, paint_red: 0xc0392b, paint_blue: 0x2f6fd8, paint_green: 0x2ecc71,
-      paint_yellow: 0xe6c34a, iron_ingot: 0xd0d3da, bucket: 0x9aa0a8, water_bucket: 0x3a6ff0 };
+      paint_yellow: 0xe6c34a, iron_ingot: 0xd0d3da, bucket: 0x9aa0a8, water_bucket: 0x3a6ff0,
+      netherite: 0x5a4f45, key2: 0xb87333, key3: 0xb8c0c8, key4: 0xf2c14e };
     const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
@@ -963,6 +1096,17 @@
   // ===============================================================
   function buildScene(biome) {
     const scene = new THREE.Scene();
+    // The Nether is a hazy, fiery red cavern with close fog and warm light.
+    if (biome === "nether") {
+      const sky = 0x3a0e0a;
+      scene.background = new THREE.Color(sky);
+      scene.fog = new THREE.Fog(sky, 8, 34);
+      scene.add(new THREE.AmbientLight(0xffd2b0, 0.78));
+      const glow = new THREE.DirectionalLight(0xff7a3a, 0.5);
+      glow.position.set(0.3, 1, 0.2);
+      scene.add(glow);
+      return scene;
+    }
     const sky = biome === "desert" ? 0xbfe0ef : 0x87ceeb;
     scene.background = new THREE.Color(sky);
     scene.fog = new THREE.Fog(sky, 22, 58);
@@ -1043,6 +1187,8 @@
       if (S.riding) updateRiding(dt);
       else S.player.update(dt, S.input);
       S.world.updateAnimals(dt);
+      if (S.inNether) S.world.updateNether(dt, S.player);
+      handlePortal(dt);
       updateTargeting();
       renderVitals();
 
@@ -1152,6 +1298,8 @@
     S.camera.add(S.viewmodel);
 
     S.highlight = buildHighlight(S.scene);
+    world._scene = S.scene;          // cache so we can swap back from the Nether
+    world._highlight = S.highlight;
     S.player = new Game.Player(S.camera, world);
 
     if (restore) {
@@ -1173,6 +1321,14 @@
     S.playClock = 0;
     S.onBreak = false;
     S.breakLeft = 0;
+
+    // Dimension bookkeeping: this fresh world is the overworld; the Nether is
+    // built lazily the first time you step through a portal.
+    S.overworld = world;
+    S.netherWorld = null;
+    S.inNether = false;
+    S.portalCooldown = 0;
+    S.questPortalExit = world.questPortalExit || null;
 
     renderHotbar();
     updateHand();
@@ -1214,18 +1370,22 @@
   //  Saving / loading (localStorage)
   // ===============================================================
   function saveGame(quiet) {
-    if (!S.world || !S.player) return;
+    const ow = S.overworld;
+    if (!ow || !S.player) return;
     const changes = [];
-    S.world.changes.forEach((id, key) => {
+    ow.changes.forEach((id, key) => {
       const p = key.split(",");
       changes.push({ x: +p[0], y: +p[1], z: +p[2], id: id });
     });
+    // If you're saving while in the Nether, store the safe overworld cell you'd
+    // return to, so loading never drops you into the (regenerated) Nether.
+    const pos = S.inNether ? (S.questPortalExit || ow.spawn) : S.player.pos;
     const data = {
-      seed: S.world.seed,
-      biome: S.world.biome,
+      seed: ow.seed,
+      biome: ow.biome,
       changes: changes,
       player: {
-        x: S.player.pos.x, y: S.player.pos.y, z: S.player.pos.z,
+        x: pos.x, y: pos.y, z: pos.z,
         yaw: S.player.yaw, pitch: S.player.pitch,
         hp: S.player.hp, food: S.player.food
       },

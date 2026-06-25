@@ -121,7 +121,23 @@ window.Game = window.Game || {};
     gold_ore:     { name: "Gold Ore",    all: 0xe6c34a, base: 0x8a8a8d, tool: "pickaxe", drop: "gold_ore" },
     redstone_ore: { name: "Redstone Ore",all: 0xc0392b, base: 0x8a8a8d, tool: "pickaxe", drop: "redstone_ore" },
     diamond_ore:  { name: "Diamond Ore", all: 0x4fe3d8, base: 0x8a8a8d, tool: "pickaxe", drop: "diamond_ore" },
-    emerald_ore:  { name: "Emerald Ore", all: 0x2ecc71, base: 0x8a8a8d, tool: "pickaxe", drop: "emerald_ore" }
+    emerald_ore:  { name: "Emerald Ore", all: 0x2ecc71, base: 0x8a8a8d, tool: "pickaxe", drop: "emerald_ore" },
+
+    // ---- Quest / road / Nether blocks ----
+    // The yellow brick road that links the four settlements together.
+    yellow_brick: { name: "Yellow Brick", all: 0xf2cf3b, top: 0xf7dd63, tool: "hand", drop: "yellow_brick" },
+    // The Nether: a fiery red underworld you reach through a portal.
+    netherrack:   { name: "Netherrack", all: 0x6e2b27, top: 0x7d322d, tool: "hand", drop: "netherrack" },
+    netherite_ore:{ name: "Netherite Ore", all: 0x8d7b66, base: 0x5a2622, tool: "pickaxe", drop: "netherite" },
+    nether_portal:{ name: "Nether Portal", all: 0x9b3fd6, top: 0xc77bf0, tool: "hand", drop: null, solid: false },
+    lava:         { name: "Lava", all: 0xff6a1a, top: 0xffa83a, tool: "pickaxe", drop: null },
+    glowstone:    { name: "Glowstone", all: 0xffe08a, top: 0xfff0bd, tool: "hand", drop: "glowstone" },
+    // A glowing plaque on the wall of the fourth house: tap it for the credits.
+    credits_block:{ name: "Hall of Fame", all: 0x2a2350, top: 0xf2c14e, tool: "hand", drop: null },
+    // Locked doors, one per house (2,3,4). Each needs its matching key.
+    locked_door_2:{ name: "Locked Door", all: 0x8a5a2c, top: 0x7a4a22, tool: "hand", drop: null, lock: 2 },
+    locked_door_3:{ name: "Locked Door", all: 0x8a5a2c, top: 0x7a4a22, tool: "hand", drop: null, lock: 3 },
+    locked_door_4:{ name: "Locked Door", all: 0x8a5a2c, top: 0x7a4a22, tool: "hand", drop: null, lock: 4 }
   };
 
   // Open variants of the doors/window are generated from their closed defs so
@@ -195,6 +211,12 @@ window.Game = window.Game || {};
   // The open door/window states are never carried around — drop their tidy form.
   ["window_open", "door_open", "door_window_open"].forEach((id) => { Game.ItemDefs[id].hidden = true; });
 
+  // World-only blocks the player never carries or places (portals, locked doors,
+  // the credits plaque) are hidden from the inventory and not placeable.
+  ["nether_portal", "credits_block", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
+    if (Game.ItemDefs[id]) { Game.ItemDefs[id].hidden = true; Game.ItemDefs[id].placeable = false; }
+  });
+
   // Special non-block items. NOTE: "apple" is also a world block, so this
   // MUST come after the loop above to override it.
   Game.ItemDefs.stick   = { name: "Stick", emoji: "🥢", placeable: false, desc: "A handy stick for tools, ladders and torches." };
@@ -204,6 +226,12 @@ window.Game = window.Game || {};
   Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 8, desc: "Burns in a furnace. Makes torches too." };
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
+  // Netherite: a rare metal you mine in the Nether and trade for the gold key.
+  Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x6a5a4a, swatchSide: 0x4a3f3a, placeable: false, desc: "A rare metal mined deep in the Nether. The third villager prizes it." };
+  // The three keys, each opening one locked house door.
+  Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door of the second house." };
+  Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
+  Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the locked door of the fourth house." };
   Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
   Game.ItemDefs.bucket  = { name: "Bucket", emoji: "🪣", placeable: false, desc: "Tap water with it to scoop the water up." };
   Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "The number shows how many waters it holds. Tap more water to scoop up as much as you like; tap the ground to pour one back out." };
@@ -318,6 +346,14 @@ window.Game = window.Game || {};
   Game.canSmelt = (id) => !!Game.SmeltRecipes[id];
   Game.isFuel = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].fuel);
   Game.fuelValue = (id) => (Game.ItemDefs[id] ? (Game.ItemDefs[id].fuel || 0) : 0);
+
+  // ---- Locked doors & keys ---------------------------------------
+  // Each locked door block maps to the house number it guards; the matching
+  // key item is "key" + that number. Tapping the door with the key unlocks it.
+  Game.LOCKED = { locked_door_2: 2, locked_door_3: 3, locked_door_4: 4 };
+  Game.keyForDoor = (id) => (Game.LOCKED[id] ? "key" + Game.LOCKED[id] : null);
+  // Colours for each key's lock plate (drawn on the door) and key icon tint.
+  Game.LOCK_COLORS = { 2: 0xb87333, 3: 0xb8c0c8, 4: 0xf2c14e };
 
   // ---- Villager trades -------------------------------------------
   // What a villager will sell you for emeralds.

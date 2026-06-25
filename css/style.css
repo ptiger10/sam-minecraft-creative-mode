@@ -645,6 +645,47 @@ html, body {
   margin: 0 0 12px;
   font-size: 16px;
 }
+/* The quest key trade sits at the top of the list, highlighted in gold. */
+.recipe-book-item.quest-trade {
+  background: linear-gradient(#fff7df, #ffe7a6);
+  border: 2px solid #e0a93b;
+  box-shadow: 0 0 0 2px #fff3c9 inset;
+}
+.recipe-book-item.quest-trade:disabled { opacity: 0.6; }
+
+/* ---------- Credits (the fourth house's Hall of Fame) ---------- */
+#credits-panel { flex-direction: column; }
+.credits-stage {
+  position: relative;
+  width: min(92vw, 560px);
+  height: min(70vh, 620px);
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 30%, #2a2350, #0b0a1f 80%);
+  border: 4px solid #f2c14e;
+  border-radius: 14px;
+  box-shadow: 0 0 30px rgba(242, 193, 78, 0.4);
+}
+.credits-scroll {
+  position: absolute;
+  left: 0; right: 0;
+  top: 100%;
+  text-align: center;
+  color: #fff;
+  padding: 0 18px;
+  animation: credits-roll 26s linear forwards;
+}
+.credits-scroll h1 { color: #ffe08a; font-size: 30px; margin: 10px 0 4px; text-shadow: 0 2px 6px #000; }
+.credits-scroll h2 { color: #ffd23b; font-size: 26px; margin: 6px 0; text-shadow: 0 2px 6px #000; }
+.credits-scroll p { font-size: 17px; margin: 4px 0; line-height: 1.4; }
+.credits-tag { color: #c9c0ff; font-style: italic; margin-bottom: 18px; }
+.credits-big { color: #9be36a; font-weight: bold; margin-top: 16px; }
+.credits-amp { color: #ffd23b; font-size: 22px; }
+.credits-spacer { height: 26px; }
+.credits-close { width: min(92vw, 560px); margin-top: 14px; }
+@keyframes credits-roll {
+  from { top: 100%; }
+  to   { top: -130%; }
+}
 
 /* ---------- Start & death panels ---------- */
 .start-panel { max-width: 600px; }

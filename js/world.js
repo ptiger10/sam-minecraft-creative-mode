@@ -280,8 +280,46 @@
     ]);
   }
 
+  // A locked door: a plain closed door with a coloured lock plate and keyhole,
+  // so each house's lock visibly matches the key that opens it.
+  function lockedDoorGeometry(num) {
+    const wood = new THREE.Color(Game.BlockDefs.door.all);
+    const plate = new THREE.Color((Game.LOCK_COLORS && Game.LOCK_COLORS[num]) || 0xb8c0c8);
+    const hole = new THREE.Color(0x140f12);
+    return mergeColoredBoxes([
+      { g: Box(0.92, 0.98, 0.16), x: 0, y: 0, z: 0, c: wood },
+      { g: Box(0.36, 0.36, 0.22), x: 0, y: 0.0, z: 0, c: plate },   // lock plate
+      { g: Box(0.1, 0.18, 0.26), x: 0, y: -0.03, z: 0, c: hole }    // keyhole
+    ]);
+  }
+
+  // A nether portal: a glowing purple block built as a cross of two thin panels
+  // so it reads from every side. You walk into it to travel between worlds.
+  function netherPortalGeometry() {
+    const a = new THREE.Color(Game.BlockDefs.nether_portal.top);
+    const b = new THREE.Color(Game.BlockDefs.nether_portal.all);
+    return mergeColoredBoxes([
+      { g: Box(0.86, 1.0, 0.2), x: 0, y: 0, z: 0, c: a },
+      { g: Box(0.2, 1.0, 0.86), x: 0, y: 0, z: 0, c: b }
+    ]);
+  }
+
+  // The "Hall of Fame" plaque: a gold-framed dark screen with a little star, on
+  // the back wall of the fourth house. Tap it to roll the credits.
+  function creditsBlockGeometry() {
+    const frame = new THREE.Color(0xf2c14e), screen = new THREE.Color(0x16133a), star = new THREE.Color(0xffe9a8);
+    return mergeColoredBoxes([
+      { g: Box(1.0, 1.0, 0.5), x: 0, y: 0, z: -0.25, c: frame },     // gold frame
+      { g: Box(0.84, 0.84, 0.14), x: 0, y: 0, z: 0.06, c: screen },  // dark screen (+z)
+      { g: Box(0.2, 0.2, 0.08), x: 0, y: 0.16, z: 0.16, c: star }    // a little star
+    ]);
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
+    if (id === "nether_portal") return (geomCache[id] = netherPortalGeometry());
+    if (id === "credits_block") return (geomCache[id] = creditsBlockGeometry());
+    if (Game.LOCKED && Game.LOCKED[id]) return (geomCache[id] = lockedDoorGeometry(Game.LOCKED[id]));
     if (id === "stairs") return (geomCache[id] = stairsGeometry());
     if (id === "furnace") return (geomCache[id] = furnaceGeometry());
     if (id === "crafting_table") return (geomCache[id] = craftingTableGeometry());
@@ -434,7 +472,8 @@
     this.spawn = { x: sx + 0.5, y: this.surfaceY(sx, sz) + 1, z: sz + 0.5 };
 
     this.spawnAnimals(desert ? 3 : 4);
-    this.spawnVillagers(desert ? 1 : 2);
+    // Four settlements joined by a yellow brick road, with the quest villagers.
+    this.buildQuestWorld();
   };
 
   // Desert surface is mostly sand, with the odd patch of coloured clay.
@@ -849,6 +888,32 @@
   }
   World.makeVillager = makeVillager;
 
+  // A ghast: a big pale floating jelly-cube with a sad face and nine dangling
+  // tentacles. It drifts overhead in the Nether and spits fireballs at you.
+  function makeGhast() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const bodyC = 0xf2efe9, faceC = 0x37343a, tentC = 0xd9d4c8;
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.1), mat(bodyC)));
+    [-0.28, 0.28].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.06), mat(faceC));
+      e.position.set(x, 0.12, 0.56); group.add(e);
+    });
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.06), mat(faceC));
+    mouth.position.set(0, -0.28, 0.56); group.add(mouth);
+    let i = 0;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const len = 0.45 + ((i * 7) % 5) * 0.13; i++;
+        const t = new THREE.Mesh(new THREE.BoxGeometry(0.15, len, 0.15), mat(tentC));
+        t.position.set(dx * 0.34, -0.55 - len / 2 + 0.1, dz * 0.34); group.add(t);
+      }
+    }
+    group.userData.kind = "ghast";
+    return group;
+  }
+  World.makeGhast = makeGhast;
+
   // Fill a single column from fromY..toY (inclusive) with one block id.
   World.prototype.fillColumn = function (x, z, fromY, toY, id) {
     if (x < 0 || z < 0 || x >= C.WORLD || z >= C.WORLD) return;
@@ -942,6 +1007,244 @@
     }
   };
 
+  // ================================================================
+  //  The quest: four settlements joined by a yellow brick road.
+  // ================================================================
+  World.prototype.buildQuestWorld = function () {
+    const sc = Math.floor(C.WORLD / 2); // spawn / world centre
+    // Four settlement centres around the spawn, each more elaborate than the last.
+    const sites = [
+      { cx: 9,  cz: sc, level: 1 },
+      { cx: sc, cz: 9,  level: 2 },
+      { cx: C.WORLD - 9, cz: sc, level: 3 },
+      { cx: sc, cz: C.WORLD - 9, level: 4 }
+    ];
+    this.questSites = sites;
+
+    // The yellow brick road starts at the spawn and links the settlements in
+    // order: spawn -> 1 -> 2 -> 3 -> 4.
+    this.layRoad(sc, sc, sites[0].cx, sites[0].cz, sites);
+    for (let i = 0; i < sites.length - 1; i++) {
+      this.layRoad(sites[i].cx, sites[i].cz, sites[i + 1].cx, sites[i + 1].cz, sites);
+    }
+
+    this.questVillagers = [];
+    this.questPortalExit = null;
+    sites.forEach((s, i) => this.buildQuestSettlement(s.cx, s.cz, s.level, i + 1));
+  };
+
+  // True if (x,z) sits within (or just outside) a settlement's footprint.
+  World.prototype.insideSite = function (x, z, sites, pad) {
+    pad = pad || 0;
+    return sites.some((s) => Math.abs(x - s.cx) <= 5 + pad && Math.abs(z - s.cz) <= 5 + pad);
+  };
+
+  // Paint a 1-wide yellow brick path along an L-shaped route, stopping at any
+  // settlement wall. Over a pond the bricks form a little bridge at water level.
+  World.prototype.layRoad = function (x0, z0, x1, z1, sites) {
+    let x = x0, z = z0;
+    const stepX = Math.sign(x1 - x0), stepZ = Math.sign(z1 - z0);
+    const pts = [];
+    while (x !== x1) { pts.push([x, z]); x += stepX; }
+    while (z !== z1) { pts.push([x, z]); z += stepZ; }
+    pts.push([x1, z1]);
+    pts.forEach(([rx, rz]) => {
+      if (rx < 1 || rz < 1 || rx >= C.WORLD - 1 || rz >= C.WORLD - 1) return;
+      if (this.insideSite(rx, rz, sites)) return; // road meets the wall, not through it
+      const y = (this._isWater && this._isWater(rx, rz)) ? C.WATER_LEVEL : this.surfaceY(rx, rz);
+      this.blocks.set(World.key(rx, y, rz), "yellow_brick");
+    });
+  };
+
+  // One settlement: a paved, walled keep with tall torch-topped corner spires
+  // (so it's visible for miles) and a house in the middle holding the villager.
+  World.prototype.buildQuestSettlement = function (cx, cz, level, num) {
+    const R = 5;
+    const floorY = this.surfaceY(cx, cz);
+    const wallTop = floorY + 2 + level;            // taller walls for later towns
+    const spireTop = C.MAX_Y - 1;                  // spires nearly touch the sky
+    const wallMat = ["brown_brick", "brown_brick", "brick", "red_brick"][level - 1] || "brick";
+    const crown = ["wood_red", "wood_blue", "wood_green", "wood_yellow"][level - 1] || "wood_red";
+
+    // 1) Flatten + pave the plaza (fancier paving in the later settlements).
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+        this.fillColumn(x, z, Math.max(0, floorY - 1), floorY - 1, "dirt");
+        const floorMat = level >= 3 ? (((dx + dz) & 1) ? "red_brick" : "brick") : "planks";
+        this.blocks.set(World.key(x, floorY, z), floorMat);
+      }
+    }
+
+    // 2) Perimeter wall with windows; a gateway on the -z (spawn-facing) side.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== R) continue;
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        if (dz === -R && Math.abs(dx) <= 1) continue;          // open gateway
+        this.fillColumn(x, z, floorY + 1, wallTop, wallMat);
+        if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) this.blocks.set(World.key(x, floorY + 2, z), "glass");
+        // Later settlements get torch-topped battlements on their corners.
+        if (level >= 2 && Math.abs(dx) === R && Math.abs(dz) === R) {
+          this.blocks.set(World.key(x, wallTop + 1, z), "torch");
+        }
+      }
+    }
+
+    // 3) Four tall corner spires, each crowned with a glowing beacon torch.
+    [[-R, -R], [R, -R], [-R, R], [R, R]].forEach(([dx, dz]) => {
+      const x = cx + dx, z = cz + dz;
+      if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) return;
+      this.fillColumn(x, z, floorY + 1, spireTop - 1, "brick");
+      this.blocks.set(World.key(x, spireTop, z), crown);
+      if (spireTop + 1 <= C.MAX_Y) this.blocks.set(World.key(x, spireTop + 1, z), "torch");
+    });
+
+    // 4) The house in the middle, with the door / contents for this stage.
+    this.buildQuestHouse(cx, cz, floorY, level, num);
+  };
+
+  // A little house in the centre of a settlement. House 1 has a plain door;
+  // houses 2-4 are locked and need the matching key. House 3 hides the Nether
+  // portal; house 4 holds the credits plaque.
+  World.prototype.buildQuestHouse = function (cx, cz, floorY, level, num) {
+    const hr = level >= 3 ? 3 : 2;                  // bigger houses later on
+    const wall = num >= 3 ? "brick" : "brown_brick";
+    const roof = num >= 3 ? "red_brick" : "planks";
+    const top = floorY + 3;                         // walls are 3 blocks tall
+
+    for (let dx = -hr; dx <= hr; dx++) {
+      for (let dz = -hr; dz <= hr; dz++) {
+        const x = cx + dx, z = cz + dz;
+        const edge = Math.max(Math.abs(dx), Math.abs(dz)) === hr;
+        if (!edge) continue;
+        if (dz === -hr && dx === 0) {
+          // The doorway: a door at foot height, clear space above, a lintel up top.
+          const doorId = num === 1 ? "door" : ("locked_door_" + num);
+          this.blocks.set(World.key(x, floorY + 1, z), doorId);
+          this.blocks.set(World.key(x, floorY + 3, z), wall);   // lintel (foot+2 stays open)
+        } else {
+          this.fillColumn(x, z, floorY + 1, top, wall);
+          if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) this.blocks.set(World.key(x, floorY + 2, z), "glass");
+        }
+      }
+    }
+    // Flat roof.
+    for (let dx = -hr; dx <= hr; dx++) {
+      for (let dz = -hr; dz <= hr; dz++) this.blocks.set(World.key(cx + dx, floorY + 4, cz + dz), roof);
+    }
+    // A torch inside so it isn't pitch dark.
+    this.blocks.set(World.key(cx + hr - 1, floorY + 3, cz + hr - 1), "torch");
+
+    // House 3 hides the Nether portal at the back; remember the safe cell the
+    // player returns to when they come back out of the Nether.
+    if (num === 3) {
+      this.buildPortal(cx, floorY + 1, cz + hr - 1);
+      this.questPortalExit = { x: cx + 0.5, y: floorY + 1, z: cz + 0.5 };
+    }
+    // House 4 mounts the "Hall of Fame" credits plaque on the back wall.
+    if (num === 4) {
+      this.blocks.set(World.key(cx, floorY + 2, cz + hr), "credits_block");
+    }
+
+    // The villager living here (none in house 4 — that one holds the credits).
+    if (num <= 3) {
+      const v = makeVillager();
+      v.position.set(cx + 0.5, floorY + 1, cz + 0.5);
+      v.userData.home = { x: cx + 0.5, z: cz + 0.5 };
+      v.userData.roam = hr - 1.2;                 // amble inside the house only
+      v.userData.dir = 0;
+      v.userData.timer = 1 + num;
+      v.userData.moving = false;
+      v.userData.house = num;
+      // The trade that advances the quest (a key; the third costs netherite).
+      if (num === 1) v.userData.quest = { gives: "key2" };
+      else if (num === 2) v.userData.quest = { gives: "key3" };
+      else if (num === 3) v.userData.quest = { gives: "key4", cost: { id: "netherite", count: 1 } };
+      this.questVillagers.push(v);
+      this.animals.push(v);
+    }
+  };
+
+  // A 1-wide, 2-tall purple portal framed in obsidian, centred on (x,z) with its
+  // base at y. Used for the overworld portal and the Nether return portal.
+  World.prototype.buildPortal = function (x, y, z) {
+    const O = "obsidian";
+    this.blocks.set(World.key(x, y - 1, z), O);     // sill
+    this.blocks.set(World.key(x, y + 2, z), O);     // lintel
+    for (let dy = 0; dy < 2; dy++) {
+      this.blocks.set(World.key(x - 1, y + dy, z), O);
+      this.blocks.set(World.key(x + 1, y + dy, z), O);
+      this.blocks.set(World.key(x, y + dy, z), "nether_portal");
+    }
+    return { x: x, y: y, z: z };
+  };
+
+  // ================================================================
+  //  The Nether: a fiery cavern of netherrack, lava, ghasts & netherite.
+  // ================================================================
+  World.prototype.generateNether = function () {
+    this.isNether = true;
+    this.fireballs = [];
+    const SZ = C.WORLD, FLOOR = 2, CEIL = 14;
+
+    for (let x = 0; x < SZ; x++) {
+      for (let z = 0; z < SZ; z++) {
+        for (let y = 0; y <= FLOOR; y++) this.blocks.set(World.key(x, y, z), "netherrack");
+        this.blocks.set(World.key(x, CEIL, z), "netherrack");
+        if (Game.hash(this.seed ^ 0xce11, x, 0, z) < 0.18) this.blocks.set(World.key(x, CEIL - 1, z), "netherrack");
+        if (x === 0 || z === 0 || x === SZ - 1 || z === SZ - 1) {
+          for (let y = FLOOR + 1; y < CEIL; y++) this.blocks.set(World.key(x, y, z), "netherrack");
+        }
+      }
+    }
+
+    // Netherite veins, lava pools, glowstone lights and a few netherrack pillars.
+    for (let x = 2; x < SZ - 2; x++) {
+      for (let z = 2; z < SZ - 2; z++) {
+        if (Game.hash(this.seed ^ 0x9e7, x, FLOOR, z) < 0.07) this.blocks.set(World.key(x, FLOOR, z), "netherite_ore");
+        if (Game.hash(this.seed ^ 0x9e8, x, FLOOR - 1, z) < 0.08) this.blocks.set(World.key(x, FLOOR - 1, z), "netherite_ore");
+        if (Game.hash(this.seed ^ 0x47e, x, 1, z) < 0.03) this.blocks.set(World.key(x, FLOOR, z), "lava");
+        if (Game.hash(this.seed ^ 0x6105, x, 0, z) < 0.025) this.blocks.set(World.key(x, CEIL - 1, z), "glowstone");
+        if (Game.hash(this.seed ^ 0xb09, x, 0, z) < 0.02) {
+          const h = 1 + Math.floor(Game.hash(this.seed ^ 0xb10, x, 0, z) * 5);
+          for (let y = FLOOR + 1; y <= FLOOR + h; y++) this.blocks.set(World.key(x, y, z), "netherrack");
+          if (Game.hash(this.seed ^ 0xb11, x, 0, z) < 0.5) this.blocks.set(World.key(x, FLOOR + 1, z), "netherite_ore");
+        }
+      }
+    }
+
+    // A return portal in a cleared corner; the player spawns just beside it.
+    const px = 6, pz = 6;
+    for (let x = px - 2; x <= px + 2; x++) {
+      for (let z = pz - 2; z <= pz + 2; z++) {
+        for (let y = FLOOR + 1; y <= FLOOR + 3; y++) this.blocks.delete(World.key(x, y, z));
+        this.blocks.set(World.key(x, FLOOR, z), "netherrack"); // tidy floor (no lava at spawn)
+      }
+    }
+    this.buildPortal(px, FLOOR + 1, pz);
+    this.spawn = { x: px + 0.5, y: FLOOR + 1, z: pz + 2 + 0.5 };
+
+    // Floating ghasts that drift overhead and spit fire.
+    const rng = Game.mulberry32(this.seed ^ 0x6ace);
+    for (let i = 0; i < 4; i++) {
+      const g = makeGhast();
+      const gx = 12 + Math.floor(rng() * (SZ - 24));
+      const gz = 12 + Math.floor(rng() * (SZ - 24));
+      const gy = FLOOR + 5 + rng() * 3;
+      g.position.set(gx + 0.5, gy, gz + 0.5);
+      g.userData.baseY = gy;
+      g.userData.dir = rng() * Math.PI * 2;
+      g.userData.t = rng() * Math.PI * 2;
+      g.userData.timer = 1 + rng() * 3;
+      g.userData.fireTimer = 2 + rng() * 3;
+      this.animals.push(g);
+    }
+  };
+
   World.prototype.spawnAnimals = function (count) {
     const rng = Game.mulberry32(this.seed ^ 0xa11ce);
 
@@ -983,6 +1286,7 @@
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
       if (a.userData.kind === "villager") { this.updateVillager(a, dt); continue; }
+      if (a.userData.kind === "ghast") continue; // ghasts are driven by updateNether
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -1030,6 +1334,80 @@
     }
     const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
     a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+  };
+
+  // Drive the Nether: float the ghasts, let them fire, and fly the fireballs.
+  // Each fireball that reaches the player costs them two hearts. Called from the
+  // main loop with the live player while you're in the Nether.
+  World.prototype.updateNether = function (dt, player) {
+    const eye = player.eyePosition();
+    const FLOOR = 2, CEIL = 14;
+
+    for (const g of this.animals) {
+      if (g.userData.kind !== "ghast") continue;
+      const u = g.userData;
+      // Bob up and down, drift slowly, turning every so often.
+      u.t += dt;
+      u.timer -= dt;
+      if (u.timer <= 0) { u.timer = 2 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+      const speed = 0.7;
+      const nx = g.position.x + Math.cos(u.dir) * speed * dt;
+      const nz = g.position.z + Math.sin(u.dir) * speed * dt;
+      if (nx > 3 && nx < C.WORLD - 3) g.position.x = nx; else u.dir = Math.PI - u.dir;
+      if (nz > 3 && nz < C.WORLD - 3) g.position.z = nz; else u.dir = -u.dir;
+      g.position.y = u.baseY + Math.sin(u.t * 0.8) * 0.6;
+      g.position.y = Math.max(FLOOR + 3.5, Math.min(CEIL - 1.5, g.position.y));
+      // Face roughly toward the player.
+      g.rotation.y = Math.atan2(eye.x - g.position.x, eye.z - g.position.z);
+
+      // Fire at random intervals when the player is within range.
+      u.fireTimer -= dt;
+      if (u.fireTimer <= 0) {
+        u.fireTimer = 2.5 + Math.random() * 3;
+        const dx = eye.x - g.position.x, dy = eye.y - g.position.y, dz = eye.z - g.position.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 22 && dist > 1.5) this.spawnFireball(g.position, { x: dx / dist, y: dy / dist, z: dz / dist });
+      }
+    }
+
+    this.updateFireballs(dt, player);
+  };
+
+  World.prototype.spawnFireball = function (from, dir) {
+    const SPEED = 9;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.3, 0.3),
+      new THREE.MeshLambertMaterial({ color: 0xff7a1a, emissive: 0xff4500 })
+    );
+    mesh.position.set(from.x, from.y, from.z);
+    if (this.scene) this.scene.add(mesh);
+    this.fireballs.push({ mesh: mesh, vel: { x: dir.x * SPEED, y: dir.y * SPEED, z: dir.z * SPEED }, life: 4 });
+  };
+
+  World.prototype.updateFireballs = function (dt, player) {
+    if (!this.fireballs) return;
+    const eye = player.eyePosition();
+    const remove = (fb) => { if (this.scene) this.scene.remove(fb.mesh); if (fb.mesh.geometry) fb.mesh.geometry.dispose(); };
+    this.fireballs = this.fireballs.filter((fb) => {
+      const m = fb.mesh;
+      m.position.x += fb.vel.x * dt;
+      m.position.y += fb.vel.y * dt;
+      m.position.z += fb.vel.z * dt;
+      m.rotation.x += dt * 6; m.rotation.y += dt * 6;
+      fb.life -= dt;
+      // Hit the player? Two hearts of damage.
+      const dx = m.position.x - eye.x, dy = m.position.y - eye.y, dz = m.position.z - eye.z;
+      if (dx * dx + dy * dy + dz * dz < 0.8 * 0.8) {
+        player.damage(4, "were scorched by a ghast's fireball");
+        if (Game.toast) Game.toast("🔥 A ghast's fireball hit you! (-2 ❤️)");
+        remove(fb); return false;
+      }
+      // Hit a block or fizzle out.
+      if (this.solidAt(Math.floor(m.position.x), Math.floor(m.position.y), Math.floor(m.position.z)) || fb.life <= 0) {
+        remove(fb); return false;
+      }
+      return true;
+    });
   };
 
   // Monkeys hang in place and sway back and forth like they're swinging.
