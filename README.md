@@ -101,6 +101,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - The **third villager** wants **netherite** in exchange for the **last key**,
     which opens the **fourth house**: a **scrolling Hall of Fame** honouring
     **Sam Fort** and **Dave Fort** for inventing the game. 🏆
+  - Each villager gives you a key **only once**, and the **walls, roof and floor
+    of every locked house are sealed** — no mining through them, so the key is
+    the only way in.
 - 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
   red) to dig up near the water and underground — smelt it into bricks.
 - 🪣 **Buckets.** Tap water with a bucket to scoop it up; the **Water Bucket**
