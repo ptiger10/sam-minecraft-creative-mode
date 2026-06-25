@@ -84,11 +84,23 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   ground animal to climb on and ride it** — then **steer it with the normal
   controls** (drag to look, ⬆ to walk, 🤸 to jump); tap again to hop off. Build a
   **fence** around a field and the animals stay penned inside it.
-- 🧑‍🌾 **Villagers** live in a **tall walled settlement** with soaring,
-  torch-topped corner spires and a central beacon mast — easy to spot poking up
-  above the treetops from anywhere in the world. **Tap one to trade** — they
-  take 💚 **emeralds** (smelt emerald ore in a furnace) and sell you paints and
-  other goodies to decorate your house.
+- 🧑‍🌾 **Villagers** live in **tall walled settlements** with soaring,
+  torch-topped corner spires — easy to spot poking up above the treetops from
+  anywhere in the world. **Tap one to trade** — they take 💚 **emeralds** (smelt
+  emerald ore in a furnace) and sell you paints and other goodies to decorate
+  your house.
+- 🟨 **A four-settlement adventure on a yellow brick road.** A bright **yellow
+  brick road** starts near where you spawn and winds out to **four settlements**,
+  each grander than the last:
+  - The **first villager** trades you a 🗝️ **key** to the **locked house** where
+    the **second villager** lives.
+  - The second villager hands you the **key to the third house** — also locked.
+  - Inside the third house is a 🔥 **portal to the Nether**, a fiery red cavern
+    where **👻 ghasts float overhead and spit fireballs** at random intervals —
+    a hit costs you **two hearts** — and where you can **mine ⬛ netherite**.
+  - The **third villager** wants **netherite** in exchange for the **last key**,
+    which opens the **fourth house**: a **scrolling Hall of Fame** honouring
+    **Sam Fort** and **Dave Fort** for inventing the game. 🏆
 - 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
   red) to dig up near the water and underground — smelt it into bricks.
 - 🪣 **Buckets.** Tap water with a bucket to scoop it up; the **Water Bucket**
@@ -148,6 +160,7 @@ js/game.js            ties it together: inventory, crafting, controls, saving, l
 vendor/three.min.js   the Three.js 3D library (bundled so it runs offline)
 test/smoke.mjs        an automated headless browser test
 test/verify-features.mjs  headless tests for the newer gameplay features
+test/verify-quest.mjs     headless tests for the four-settlement Nether quest
 tools/make-icons.mjs  regenerates the app icons from media/icon.svg
 ```
 
@@ -168,6 +181,8 @@ eat, and save/load. It uses [Playwright](https://playwright.dev/):
 PW_ROOT="$(npm root -g)" node test/smoke.mjs
 # and the feature tests (inverted look, water bucket, stairs, riding, …)
 PW_ROOT="$(npm root -g)" node test/verify-features.mjs
+# and the quest tests (road, keys, locked doors, Nether, ghasts, credits)
+PW_ROOT="$(npm root -g)" node test/verify-quest.mjs
 ```
 
 The smoke test prints a checklist and writes `test/screenshot.png` (forest) and
