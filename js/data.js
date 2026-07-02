@@ -97,6 +97,7 @@ window.Game = window.Game || {};
     cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
+    sugarcane:    { name: "Sugar Cane", top: 0xa6d16a, side: 0x86b04a, bottom: 0x6f9a3f, tool: "hand", drop: "sugarcane", harvestOnTap: true, solid: false },
     crafting_table:{ name: "Crafting Table", top: 0xc28a3a, side: 0x7a4a22, bottom: 0xb18a4f, tool: "hand", drop: "crafting_table" },
     furnace:      { name: "Furnace",     top: 0x6b6b70, side: 0x5a5a5e, bottom: 0x4a4a4e, tool: "pickaxe", drop: "furnace" },
     chest:        { name: "Chest",       top: 0xc79a4f, side: 0x8a5a2c, bottom: 0x6f4a26, tool: "hand", drop: "chest" },
@@ -233,11 +234,22 @@ window.Game = window.Game || {};
   Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
   Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the locked door of the fourth house." };
   Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
+  Game.ItemDefs.gold_ingot = { name: "Gold Ingot", swatch: 0xe6c34a, swatchSide: 0xc9a52f, placeable: false, desc: "Smelted from gold ore. Shiny!" };
+  Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore. Craft a redstone bucket with it." };
+  Game.ItemDefs.diamond = { name: "Diamond", emoji: "💎", placeable: false, desc: "Smelted from diamond ore. Super shiny!" };
+  Game.ItemDefs.paper = { name: "Paper", emoji: "📄", placeable: false, desc: "Made from sugar cane at a crafting table." };
   Game.ItemDefs.bucket  = { name: "Bucket", emoji: "🪣", placeable: false, desc: "Tap water with it to scoop the water up." };
   Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "The number shows how many waters it holds. Tap more water to scoop up as much as you like; tap the ground to pour one back out." };
+  // A redstone bucket is the only thing that can scoop up lava. Tap lava to fill
+  // it (it becomes a lava bucket); pour lava onto water to make obsidian.
+  Game.ItemDefs.redstone_bucket = { name: "Redstone Bucket", swatch: 0xb0392c, swatchSide: 0x7f2a20, placeable: false, desc: "Tap lava with it to scoop the lava up." };
+  Game.ItemDefs.lava_bucket = { name: "Lava Bucket", emoji: "🌋", placeable: true, places: "lava", empties: "redstone_bucket", desc: "The number shows how many lavas it holds. Pour it onto water (or water onto it) to make obsidian." };
   // You can only get water with a bucket — never carry/place a raw water block.
   Game.ItemDefs.water.placeable = false;
   Game.ItemDefs.water.hidden = true;
+  // Same for lava — only a redstone bucket picks it up.
+  Game.ItemDefs.lava.placeable = false;
+  Game.ItemDefs.lava.hidden = true;
   Game.ItemDefs.paint_red    = { name: "Red Paint",    swatch: 0xc0392b, placeable: false, paint: "red",    desc: "Paint wood red at a crafting table." };
   Game.ItemDefs.paint_blue   = { name: "Blue Paint",   swatch: 0x2f6fd8, placeable: false, paint: "blue",   desc: "Paint wood blue at a crafting table." };
   Game.ItemDefs.paint_green  = { name: "Green Paint",  swatch: 0x2ecc71, placeable: false, paint: "green",  desc: "Paint wood green at a crafting table." };
@@ -259,8 +271,12 @@ window.Game = window.Game || {};
     window: "Tap it to open and close the window.",
     door: "Tap it to open and close the door.",
     door_window: "A door with a window built in. Tap to open.",
-    obsidian: "The hardest, darkest block.",
-    emerald_ore: "Smelt it in a furnace to get an emerald."
+    obsidian: "The hardest, darkest block. Make it by pouring water on lava.",
+    emerald_ore: "Smelt it in a furnace to get an emerald.",
+    gold_ore: "Smelt it in a furnace to get a gold ingot.",
+    redstone_ore: "Smelt it in a furnace to get redstone.",
+    diamond_ore: "Smelt it in a furnace to get a diamond.",
+    sugarcane: "Craft three into paper at a crafting table."
   };
   Object.keys(DESCS).forEach((id) => { if (Game.ItemDefs[id]) Game.ItemDefs[id].desc = DESCS[id]; });
 
@@ -321,7 +337,13 @@ window.Game = window.Game || {};
       pattern: [[G, G], [W, W], [W, W]] },
     // Three iron ingots in a V -> a bucket (for scooping up water).
     { id: "bucket", gives: { id: "bucket", count: 1 }, table: true,
-      pattern: [["iron_ingot", null, "iron_ingot"], [null, "iron_ingot", null]] }
+      pattern: [["iron_ingot", null, "iron_ingot"], [null, "iron_ingot", null]] },
+    // A bucket + redstone -> a redstone bucket (the only thing that scoops lava).
+    { id: "redstone_bucket", gives: { id: "redstone_bucket", count: 1 },
+      pattern: [["bucket", "redstone"]] },
+    // Three sugar canes in a row -> 3 paper.
+    { id: "paper", gives: { id: "paper", count: 3 }, table: true,
+      pattern: [["sugarcane", "sugarcane", "sugarcane"]] }
   ];
 
   // Painting recipes: wood + a paint -> coloured wood.
@@ -337,6 +359,9 @@ window.Game = window.Game || {};
   Game.SmeltRecipes = {
     sand: { id: "glass", count: 1 },
     iron_ore: { id: "iron_ingot", count: 1 },
+    gold_ore: { id: "gold_ingot", count: 1 },
+    redstone_ore: { id: "redstone", count: 1 },
+    diamond_ore: { id: "diamond", count: 1 },
     clay: { id: "brick", count: 1 },
     brown_clay: { id: "brown_brick", count: 1 },
     red_clay: { id: "red_brick", count: 1 },

@@ -106,9 +106,13 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     the only way in.
 - 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
   red) to dig up near the water and underground — smelt it into bricks.
+- 🎋 **Sugar cane** grows along the water's edge. Punch it to collect it, then
+  **craft 3 sugar cane into 3 📄 paper** at a crafting table.
 - 🪣 **Buckets.** Tap water with a bucket to scoop it up; the **Water Bucket**
   then shows **how many waters** it's holding and can keep collecting **as much
-  as you like**. Tap the ground to pour one back out.
+  as you like**. Tap the ground to pour one back out. Craft a **Redstone Bucket**
+  (a bucket + a piece of redstone) and it can **scoop up 🔥 lava** the same way —
+  the only thing that can.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
   a stone block **speckled** with its own colour so you can spot it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
@@ -116,10 +120,15 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🔥 **Furnaces.** Craft one from **4 stone** (it has a distinctive glowing
   firebox so it's easy to spot), place it and tap it. Load a **fuel** (coal, or
   a long-lasting **battery**) and something to **smelt**: sand → **glass**, clay
-  → **brick**, coal → **obsidian**, emerald ore → **emerald**. The smelting
-  recipes are listed **right in the furnace** — tap one to load it. **Coal can
-  go in both slots at once**, so it can fuel the smelting of itself into
-  obsidian.
+  → **brick**, coal → **obsidian**, emerald ore → **emerald**, **gold ore → gold
+  ingot**, **redstone ore → redstone**, and **diamond ore → 💎 diamond**. The
+  smelting recipes are listed **right in the furnace** — tap one to load it.
+  **Coal can go in both slots at once**, so it can fuel the smelting of itself
+  into obsidian.
+- ⬛ **Make obsidian by combining lava and water.** Scoop lava with a **redstone
+  bucket** (bring it back from the Nether, where lava pools), then **pour the
+  lava onto a water block** — or pour water onto lava — and the two cool into
+  **obsidian** right where they meet.
 - 🚪 **Doors & windows** you can **tap to open and close**, **🛏️ beds**, **🔦
   torches**, and a **📦 chest** that stores lots of extra items.
 - 🎒 An **inventory** + hotbar with distinctive material icons and a title that
