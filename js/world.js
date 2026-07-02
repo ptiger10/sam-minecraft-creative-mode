@@ -472,7 +472,14 @@
         const h = H[x][z];
         if (h < WATER - 1 || h > WATER + 1) continue;
         if (isWater(x + 1, z) || isWater(x - 1, z) || isWater(x, z + 1) || isWater(x, z - 1)) {
-          if (!this.occupied(x, h + 1, z)) this.blocks.set(World.key(x, h, z), "sand");
+          if (!this.occupied(x, h + 1, z)) {
+            this.blocks.set(World.key(x, h, z), "sand");
+            // Sugar cane sprouts along the water's edge, 1–2 blocks tall.
+            if (Game.hash(this.seed ^ 0x5ca9e, x, 0, z) < 0.4) {
+              const tall = 1 + Math.floor(Game.hash(this.seed ^ 0x5ca9e, x, 7, z) * 2);
+              for (let i = 0; i < tall; i++) this.blocks.set(World.key(x, h + 1 + i, z), "sugarcane");
+            }
+          }
         }
       }
     }

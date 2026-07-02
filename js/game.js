@@ -133,6 +133,20 @@
     addItem("water_bucket", n);
   }
 
+  // A lava bucket works just like a water bucket, but for lava — it holds any
+  // number of lavas, so pour them into an existing lava bucket if there is one.
+  function collectLava(n) {
+    for (const s of S.inv) {
+      if (s && s.id === "lava_bucket") {
+        s.count += n;
+        renderHotbar();
+        if (!$("inventory-panel").classList.contains("hidden")) renderInventory();
+        return;
+      }
+    }
+    addItem("lava_bucket", n);
+  }
+
   function countItem(id) {
     let n = 0;
     for (const s of S.inv) if (s && s.id === id) n += s.count;
@@ -158,7 +172,7 @@
 
   // Show a number on a slot whenever there's more than one — and always for a
   // water bucket, so you can read off how many waters it holds at a glance.
-  function showSlotCount(s) { return !!(s && (s.count > 1 || s.id === "water_bucket")); }
+  function showSlotCount(s) { return !!(s && (s.count > 1 || s.id === "water_bucket" || s.id === "lava_bucket")); }
 
   function selectedSlot() { return S.inv[S.selected]; }
 
@@ -937,6 +951,21 @@
     // a plain bucket.
     if (s && s.id === "water_bucket") {
       if (!hit) { toast("Aim at a block to pour water on."); return; }
+      // Water poured onto lava cools it into obsidian.
+      if (S.world.get(hit.block.x, hit.block.y, hit.block.z) === "lava") {
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, "obsidian");
+        s.count -= 1;
+        if (s.count <= 0) {
+          S.inv[S.selected] = { id: "bucket", count: 1 };
+          toast("The water cooled the lava into obsidian! 🪨 The bucket is empty now.");
+        } else {
+          toast("The water cooled the lava into obsidian! 🪨 — " + s.count + " 💧 left");
+        }
+        renderHotbar(); updateHand();
+        setViewmodel(selectedSlot() ? selectedSlot().id : null);
+        S.swing = 0.18;
+        return;
+      }
       const c = hit.place;
       if (S.world.occupied(c.x, c.y, c.z)) return;
       if (placeOverlapsPlayer(c.x, c.y, c.z)) { toast("No room to pour water here."); return; }
@@ -947,6 +976,43 @@
         toast("The bucket is empty now.");
       } else {
         toast("Poured water — " + s.count + " 💧 left");
+      }
+      renderHotbar(); updateHand();
+      setViewmodel(selectedSlot() ? selectedSlot().id : null);
+      S.swing = 0.18;
+      return;
+    }
+
+    // Lava bucket: pour ONE lava out per tap. Pour it onto water and the two
+    // combine into obsidian; otherwise it lays a lava block like the water
+    // bucket lays water. Empties back into a redstone bucket on the last pour.
+    if (s && s.id === "lava_bucket") {
+      if (!hit) { toast("Aim at a block to pour lava on."); return; }
+      // Lava poured onto water cools into obsidian.
+      if (S.world.get(hit.block.x, hit.block.y, hit.block.z) === "water") {
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, "obsidian");
+        s.count -= 1;
+        if (s.count <= 0) {
+          S.inv[S.selected] = { id: "redstone_bucket", count: 1 };
+          toast("The lava met the water and made obsidian! 🪨 The bucket is empty now.");
+        } else {
+          toast("The lava met the water and made obsidian! 🪨 — " + s.count + " 🔥 left");
+        }
+        renderHotbar(); updateHand();
+        setViewmodel(selectedSlot() ? selectedSlot().id : null);
+        S.swing = 0.18;
+        return;
+      }
+      const c = hit.place;
+      if (S.world.occupied(c.x, c.y, c.z)) return;
+      if (placeOverlapsPlayer(c.x, c.y, c.z)) { toast("No room to pour lava here."); return; }
+      S.world.setBlock(c.x, c.y, c.z, "lava");
+      s.count -= 1;
+      if (s.count <= 0) {
+        S.inv[S.selected] = { id: "redstone_bucket", count: 1 };
+        toast("The bucket is empty now.");
+      } else {
+        toast("Poured lava — " + s.count + " 🔥 left");
       }
       renderHotbar(); updateHand();
       setViewmodel(selectedSlot() ? selectedSlot().id : null);
@@ -1019,6 +1085,29 @@
         toast("Scooped up water! 🪣");
       } else {
         toast("You need a 🪣 bucket to scoop up water.");
+      }
+      return;
+    }
+
+    // Lava can only be picked up with a redstone bucket. A lava bucket keeps a
+    // running count and can scoop up as much lava as you like.
+    if (id === "lava") {
+      const sel = selectedSlot();
+      if (sel && sel.id === "lava_bucket") {
+        sel.count += 1;                       // top up the lava bucket you're holding
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
+        renderHotbar(); updateHand();
+        toast("Collected lava — " + sel.count + " 🔥 in the bucket");
+      } else if (sel && sel.id === "redstone_bucket") {
+        sel.count -= 1;
+        if (sel.count <= 0) S.inv[S.selected] = null;
+        collectLava(1);
+        S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, null);
+        renderHotbar(); updateHand();
+        setViewmodel(selectedSlot() ? selectedSlot().id : null);
+        toast("Scooped up lava! 🪣");
+      } else {
+        toast("You need a redstone bucket to scoop up lava.");
       }
       return;
     }
@@ -1100,6 +1189,8 @@
     const colors = { apple: 0xd23b32, stick: 0x9a6a32, coal: 0x2a2a2c, emerald: 0x2ecc71,
       battery: 0xd8c24a, paint_red: 0xc0392b, paint_blue: 0x2f6fd8, paint_green: 0x2ecc71,
       paint_yellow: 0xe6c34a, iron_ingot: 0xd0d3da, bucket: 0x9aa0a8, water_bucket: 0x3a6ff0,
+      redstone_bucket: 0xb0392c, lava_bucket: 0xff6a1a, redstone: 0xc0392b, gold_ingot: 0xe6c34a,
+      diamond: 0x4fe3d8, paper: 0xf2efe4,
       netherite: 0x5a4f45, key2: 0xb87333, key3: 0xb8c0c8, key4: 0xf2c14e };
     const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
