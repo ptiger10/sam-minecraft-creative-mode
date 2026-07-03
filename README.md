@@ -106,13 +106,17 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     the only way in.
 - 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
   red) to dig up near the water and underground — smelt it into bricks.
+- ☁️ **Clouds** drift high across the sky in puffy white patches. They're just
+  fluffy sky, so **you can't mine them** — try and the game gently says so.
 - 🎋 **Sugar cane** grows along the water's edge. Punch it to collect it, then
-  **craft 3 sugar cane into 3 📄 paper** at a crafting table.
-- 🪣 **Buckets.** Tap water with a bucket to scoop it up; the **Water Bucket**
-  then shows **how many waters** it's holding and can keep collecting **as much
-  as you like**. Tap the ground to pour one back out. Craft a **Redstone Bucket**
-  (a bucket + a piece of redstone) and it can **scoop up 🔥 lava** the same way —
-  the only thing that can.
+  **craft 3 sugar cane into 3 📄 paper** at a crafting table — and **craft paper
+  over wood into a 📖 book**.
+- 🪣 **Water Bucket.** Tap water with a bucket to scoop it up; the **Water
+  Bucket** then shows **how many waters** it's holding and can keep collecting
+  **as much as you like**. Tap the ground to pour one back out — or **pour it
+  onto 🔥 lava to make ⬛ obsidian**.
+- 🔥 **Lava pools** hide deep underground — dig straight down to find them. Lava
+  is far too hot to pick up, but **pour water on it and it cools into obsidian**.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
   a stone block **speckled** with its own colour so you can spot it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
@@ -120,15 +124,19 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🔥 **Furnaces.** Craft one from **4 stone** (it has a distinctive glowing
   firebox so it's easy to spot), place it and tap it. Load a **fuel** (coal, or
   a long-lasting **battery**) and something to **smelt**: sand → **glass**, clay
-  → **brick**, coal → **obsidian**, emerald ore → **emerald**, **gold ore → gold
-  ingot**, **redstone ore → redstone**, and **diamond ore → 💎 diamond**. The
-  smelting recipes are listed **right in the furnace** — tap one to load it.
-  **Coal can go in both slots at once**, so it can fuel the smelting of itself
-  into obsidian.
-- ⬛ **Make obsidian by combining lava and water.** Scoop lava with a **redstone
-  bucket** (bring it back from the Nether, where lava pools), then **pour the
-  lava onto a water block** — or pour water onto lava — and the two cool into
-  **obsidian** right where they meet.
+  → **brick**, **iron ore → iron ingot**, **iron ingot → 🔩 steel**, emerald ore
+  → **emerald**, **gold ore → gold ingot**, **redstone ore → redstone**, and
+  **diamond ore → 💎 diamond**. The smelting recipes are listed **right in the
+  furnace** — tap one to load it.
+- ⬛ **Make obsidian from lava and water.** Dig down to an underground **lava
+  pool**, then **pour a bucket of water onto the lava** and it cools into
+  **obsidian** right where they meet. Mine the obsidian with a pickaxe to build
+  with it.
+- 🌀 **Build your own Nether portal.** Stand obsidian up into a **frame** (a
+  ring of obsidian around a pocket of air), then **light the inside with 🔥
+  flint & steel** — the air flares into a purple portal. Walk in to reach the
+  Nether. To make flint & steel: **chip flint from a piece of coal**, **smelt an
+  iron ingot into steel**, then **craft the two together**.
 - 🚪 **Doors & windows** you can **tap to open and close**, **🛏️ beds**, **🔦
   torches**, and a **📦 chest** that stores lots of extra items.
 - 🎒 An **inventory** + hotbar with distinctive material icons and a title that
@@ -146,6 +154,8 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     *(3×3 table)*
   - **Stairs** (×4) = 6 planks in a staircase shape — **just walk into them to
     go up or down a level, no jumping needed**
+  - **Paper** (×3) = 3 sugar cane · **Book** = paper over wood
+  - **Flint** = 1 coal · **Flint & Steel** = flint + steel (lights a portal)
   - **Paint wood** any colour = wood + a paint (bought from a villager)
   - Place ladders up a wall, then **face one and hold forward (or jump)** to
     climb; let go to slide back down. Ladders never cause fall damage.

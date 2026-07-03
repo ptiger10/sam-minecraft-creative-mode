@@ -133,6 +133,8 @@ window.Game = window.Game || {};
     nether_portal:{ name: "Nether Portal", all: 0x9b3fd6, top: 0xc77bf0, tool: "hand", drop: null, solid: false },
     lava:         { name: "Lava", all: 0xff6a1a, top: 0xffa83a, tool: "pickaxe", drop: null },
     glowstone:    { name: "Glowstone", all: 0xffe08a, top: 0xfff0bd, tool: "hand", drop: "glowstone" },
+    // Fluffy white clouds drifting high in the sky. You can't mine them.
+    cloud:        { name: "Cloud", all: 0xf4f8fb, top: 0xffffff, bottom: 0xe6edf4, tool: "hand", drop: null, solid: false },
     // A glowing plaque on the wall of the fourth house: tap it for the credits.
     credits_block:{ name: "Hall of Fame", all: 0x2a2350, top: 0xf2c14e, tool: "hand", drop: null },
     // Locked doors, one per house (2,3,4). Each needs its matching key.
@@ -214,7 +216,7 @@ window.Game = window.Game || {};
 
   // World-only blocks the player never carries or places (portals, locked doors,
   // the credits plaque) are hidden from the inventory and not placeable.
-  ["nether_portal", "credits_block", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
+  ["nether_portal", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
     if (Game.ItemDefs[id]) { Game.ItemDefs[id].hidden = true; Game.ItemDefs[id].placeable = false; }
   });
 
@@ -235,19 +237,19 @@ window.Game = window.Game || {};
   Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the locked door of the fourth house." };
   Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
   Game.ItemDefs.gold_ingot = { name: "Gold Ingot", swatch: 0xe6c34a, swatchSide: 0xc9a52f, placeable: false, desc: "Smelted from gold ore. Shiny!" };
-  Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore. Craft a redstone bucket with it." };
+  Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore." };
   Game.ItemDefs.diamond = { name: "Diamond", emoji: "💎", placeable: false, desc: "Smelted from diamond ore. Super shiny!" };
-  Game.ItemDefs.paper = { name: "Paper", emoji: "📄", placeable: false, desc: "Made from sugar cane at a crafting table." };
+  Game.ItemDefs.paper = { name: "Paper", emoji: "📄", placeable: false, desc: "Made from sugar cane at a crafting table. Craft it with wood into a book." };
+  Game.ItemDefs.book = { name: "Book", emoji: "📖", placeable: false, desc: "Crafted from paper and wood at a crafting table." };
+  Game.ItemDefs.steel = { name: "Steel", swatch: 0xc7ccd4, swatchSide: 0x9aa0a8, placeable: false, desc: "Smelt an iron ingot to get steel. Craft it with flint into flint & steel." };
+  Game.ItemDefs.flint = { name: "Flint", swatch: 0x3a3a40, swatchSide: 0x2a2a2e, placeable: false, desc: "Chipped from coal at a crafting table. Craft it with steel into flint & steel." };
+  Game.ItemDefs.flint_and_steel = { name: "Flint & Steel", emoji: "🔥", placeable: false, ignites: true, desc: "Tap an obsidian portal frame to light it and open a way to the Nether." };
   Game.ItemDefs.bucket  = { name: "Bucket", emoji: "🪣", placeable: false, desc: "Tap water with it to scoop the water up." };
-  Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "The number shows how many waters it holds. Tap more water to scoop up as much as you like; tap the ground to pour one back out." };
-  // A redstone bucket is the only thing that can scoop up lava. Tap lava to fill
-  // it (it becomes a lava bucket); pour lava onto water to make obsidian.
-  Game.ItemDefs.redstone_bucket = { name: "Redstone Bucket", swatch: 0xb0392c, swatchSide: 0x7f2a20, placeable: false, desc: "Tap lava with it to scoop the lava up." };
-  Game.ItemDefs.lava_bucket = { name: "Lava Bucket", emoji: "🌋", placeable: true, places: "lava", empties: "redstone_bucket", desc: "The number shows how many lavas it holds. Pour it onto water (or water onto it) to make obsidian." };
+  Game.ItemDefs.water_bucket = { name: "Water Bucket", emoji: "💧", placeable: true, places: "water", empties: "bucket", desc: "The number shows how many waters it holds. Tap more water to scoop up as much as you like; pour it onto lava to make obsidian, or tap the ground to pour one back out." };
   // You can only get water with a bucket — never carry/place a raw water block.
   Game.ItemDefs.water.placeable = false;
   Game.ItemDefs.water.hidden = true;
-  // Same for lava — only a redstone bucket picks it up.
+  // Lava can't be scooped up or carried — pour water on it to make obsidian.
   Game.ItemDefs.lava.placeable = false;
   Game.ItemDefs.lava.hidden = true;
   Game.ItemDefs.paint_red    = { name: "Red Paint",    swatch: 0xc0392b, placeable: false, paint: "red",    desc: "Paint wood red at a crafting table." };
@@ -260,7 +262,7 @@ window.Game = window.Game || {};
 
   // A few descriptions for placeable blocks (shown in the inventory title).
   const DESCS = {
-    furnace: "Place it and tap to smelt sand, clay, coal and ore.",
+    furnace: "Place it and tap to smelt sand, clay, ore and iron ingots.",
     chest: "Place it and tap to store lots of items.",
     crafting_table: "Place it and tap for the full 3×3 crafting grid.",
     stairs: "Walk straight up or down them to change height — no jumping needed.",
@@ -338,12 +340,16 @@ window.Game = window.Game || {};
     // Three iron ingots in a V -> a bucket (for scooping up water).
     { id: "bucket", gives: { id: "bucket", count: 1 }, table: true,
       pattern: [["iron_ingot", null, "iron_ingot"], [null, "iron_ingot", null]] },
-    // A bucket + redstone -> a redstone bucket (the only thing that scoops lava).
-    { id: "redstone_bucket", gives: { id: "redstone_bucket", count: 1 },
-      pattern: [["bucket", "redstone"]] },
     // Three sugar canes in a row -> 3 paper.
     { id: "paper", gives: { id: "paper", count: 3 }, table: true,
-      pattern: [["sugarcane", "sugarcane", "sugarcane"]] }
+      pattern: [["sugarcane", "sugarcane", "sugarcane"]] },
+    // Paper over wood -> a book.
+    { id: "book", gives: { id: "book", count: 1 }, pattern: [["paper"], [W]] },
+    // A single piece of coal -> a chip of flint.
+    { id: "flint", gives: { id: "flint", count: 1 }, pattern: [[CO]] },
+    // Flint + steel -> flint & steel (lights a Nether portal).
+    { id: "flint_and_steel", gives: { id: "flint_and_steel", count: 1 },
+      pattern: [["flint", "steel"]] }
   ];
 
   // Painting recipes: wood + a paint -> coloured wood.
@@ -359,13 +365,13 @@ window.Game = window.Game || {};
   Game.SmeltRecipes = {
     sand: { id: "glass", count: 1 },
     iron_ore: { id: "iron_ingot", count: 1 },
+    iron_ingot: { id: "steel", count: 1 },
     gold_ore: { id: "gold_ingot", count: 1 },
     redstone_ore: { id: "redstone", count: 1 },
     diamond_ore: { id: "diamond", count: 1 },
     clay: { id: "brick", count: 1 },
     brown_clay: { id: "brown_brick", count: 1 },
     red_clay: { id: "red_brick", count: 1 },
-    coal: { id: "obsidian", count: 1 },
     emerald_ore: { id: "emerald", count: 1 }
   };
   Game.canSmelt = (id) => !!Game.SmeltRecipes[id];

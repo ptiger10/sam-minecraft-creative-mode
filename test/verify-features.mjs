@@ -1,7 +1,9 @@
 // Focused verification of the new features: inverted look + setting, the
-// counting/indefinite water bucket, coal as both fuel & smelt, tall villager
-// settlements, leaves dropping into the backpack, and the break button staying
-// locked until the timer ends. Run alongside smoke.mjs.
+// counting/indefinite water bucket, smelting iron ingots into steel, the
+// flint/book/flint-&-steel recipes, water-on-lava obsidian, lighting an
+// obsidian portal frame, sky clouds, tall villager settlements, leaves dropping
+// into the backpack, and the break button staying locked until the timer ends.
+// Run alongside smoke.mjs.
 import { createServer } from "http";
 import { readFile } from "fs/promises";
 import { extname, join, normalize } from "path";
@@ -102,32 +104,88 @@ check("an empty bucket scoops one water (and empties)", water.afterScoop.waters 
 check("water bucket collected 131 waters (indefinite, past 99)", water.waters === 131);
 check("the water count lives in a single bucket", water.stacks === 1);
 
-// --- Coal can be loaded into BOTH the fuel and smelt slots ---
-const coal = await page.evaluate(() => {
-  const S = window.Game.S, G = window.Game, FUR = S.furnace;
-  S.inv.fill(null); S.inv[0] = { id: "coal", count: 8 };
-  window.Game._openFurnace();
-  // brush coal -> load all into fuel
-  FUR.brush = "coal"; document.getElementById("furnace-fuel").click();
-  const afterFuel = { fuelN: FUR.fuelN, inputN: FUR.inputN };
-  // brush coal again (still listed because coal is dual-use) -> split into smelt
-  FUR.brush = "coal"; document.getElementById("furnace-input").click();
-  const afterSplit = { fuel: FUR.fuel, fuelN: FUR.fuelN, input: FUR.input, inputN: FUR.inputN };
-  return { afterFuel, afterSplit };
-});
-check("loading fuel grabs the whole coal stack", coal.afterFuel.fuelN === 8 && coal.afterFuel.inputN === 0);
-check("coal then splits into the smelt slot", coal.afterSplit.fuel === "coal" && coal.afterSplit.input === "coal");
-check("coal sits in both slots at once", coal.afterSplit.fuelN > 0 && coal.afterSplit.inputN > 0);
-
-// --- Smelting coal-with-coal yields obsidian ---
+// --- Smelting iron ingots with coal fuel yields steel ---
 const smelt = await page.evaluate(() => {
-  const S = window.Game.S;
+  const S = window.Game.S, G = window.Game, FUR = S.furnace;
+  S.inv.fill(null); S.inv[0] = { id: "coal", count: 4 }; S.inv[1] = { id: "iron_ingot", count: 3 };
+  G._openFurnace();
+  FUR.brush = "coal"; document.getElementById("furnace-fuel").click();
+  FUR.brush = "iron_ingot"; document.getElementById("furnace-input").click();
+  const loaded = { fuelN: FUR.fuelN, input: FUR.input, inputN: FUR.inputN };
   document.getElementById("furnace-smelt").click();
   const count = (q) => S.inv.reduce((n, s) => n + (s && s.id === q ? s.count : 0), 0);
   document.querySelector("#furnace-panel .close-btn").click();
-  return { obsidian: count("obsidian") };
+  return { loaded, steel: count("steel") };
 });
-check("smelting coal with coal produced obsidian", smelt.obsidian > 0);
+check("coal loads as fuel and iron ingots as the smelt input",
+  smelt.loaded.fuelN === 4 && smelt.loaded.input === "iron_ingot" && smelt.loaded.inputN === 3);
+check("smelting iron ingots produced steel", smelt.steel === 3);
+
+// --- The reworked recipe set: flint, book, flint & steel; no redstone bucket ---
+const recipes = await page.evaluate(() => {
+  const G = window.Game;
+  const has = (id) => G.Recipes.some((r) => r.id === id);
+  return {
+    flint: has("flint"), book: has("book"), fas: has("flint_and_steel"),
+    noRedBucket: !has("redstone_bucket"),
+    steelSmelt: !!(G.SmeltRecipes.iron_ingot && G.SmeltRecipes.iron_ingot.id === "steel"),
+    noCoalSmelt: !G.SmeltRecipes.coal
+  };
+});
+check("a flint recipe (from coal) exists", recipes.flint);
+check("a book recipe (paper + wood) exists", recipes.book);
+check("a flint & steel recipe exists", recipes.fas);
+check("the redstone bucket recipe is gone", recipes.noRedBucket);
+check("coal no longer smelts into obsidian", recipes.noCoalSmelt);
+
+// --- Pouring water onto lava cools it into obsidian ---
+const obby = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+  const eye = p.eyePosition(), dir = p.lookDir();
+  for (let i = 0; i <= 5; i++) W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+  const bx = Math.floor(eye.x + dir.x * 2.5), by = Math.floor(eye.y + dir.y * 2.5), bz = Math.floor(eye.z + dir.z * 2.5);
+  W.blocks.set(key(bx, by, bz), "lava"); W.buildMeshes();
+  S.inv.fill(null); S.inv[0] = { id: "water_bucket", count: 3 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  document.getElementById("btn-place").click(); // pour water at the lava
+  return { made: W.get(bx, by, bz) };
+});
+check("pouring water on lava makes obsidian", obby.made === "obsidian");
+
+// --- Flint & steel lights an obsidian frame into a Nether portal ---
+const portal = await page.evaluate(() => {
+  const W = window.Game.S.world;
+  const key = (a, b, c) => a + "," + b + "," + c;
+  const ox = 3, oy = 3, oz = 3;
+  for (let x = ox - 2; x <= ox + 2; x++)
+    for (let y = oy - 2; y <= oy + 4; y++)
+      for (let z = oz - 1; z <= oz + 1; z++) W.blocks.delete(key(x, y, z));
+  // A 1-wide, 2-tall interior ringed by obsidian (in the x-y plane).
+  W.blocks.set(key(ox - 1, oy, oz), "obsidian"); W.blocks.set(key(ox - 1, oy + 1, oz), "obsidian");
+  W.blocks.set(key(ox + 1, oy, oz), "obsidian"); W.blocks.set(key(ox + 1, oy + 1, oz), "obsidian");
+  W.blocks.set(key(ox, oy - 1, oz), "obsidian"); W.blocks.set(key(ox, oy + 2, oz), "obsidian");
+  const lit = W.lightPortal(ox - 1, oy, oz);
+  return { lit, a: W.get(ox, oy, oz), b: W.get(ox, oy + 1, oz) };
+});
+check("flint & steel lights an obsidian frame into a portal",
+  portal.lit && portal.a === "nether_portal" && portal.b === "nether_portal");
+
+// --- Clouds fill the sky and can't be mined ---
+const clouds = await page.evaluate(() => {
+  const W = window.Game.S.world, G = window.Game;
+  let cloudCount = 0;
+  for (const [, id] of W.blocks) if (id === "cloud") cloudCount++;
+  return {
+    cloudCount, drop: G.BlockDefs.cloud.drop, solid: G.isSolidBlock("cloud"),
+    hidden: !!(G.ItemDefs.cloud && G.ItemDefs.cloud.hidden)
+  };
+});
+check("clouds fill the sky", clouds.cloudCount > 20);
+check("clouds can't be mined (they drop nothing)", clouds.drop === null);
+check("clouds are non-solid (fluffy walk-through sky)", clouds.solid === false);
+check("clouds aren't a carryable item", clouds.hidden);
 
 // --- Mining leaves drops leaves into the backpack ---
 const leaves = await page.evaluate(() => {
