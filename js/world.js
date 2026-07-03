@@ -488,9 +488,62 @@
     const sx = Math.floor(C.WORLD / 2), sz = Math.floor(C.WORLD / 2);
     this.spawn = { x: sx + 0.5, y: this.surfaceY(sx, sz) + 1, z: sz + 0.5 };
 
+    // Pools of lava tucked away deep underground — dig down to find them.
+    this.scatterLavaPools();
+
     this.spawnAnimals(desert ? 3 : 4);
     // Four settlements joined by a yellow brick road, with the quest villagers.
     this.buildQuestWorld();
+
+    // Fluffy clouds drifting high above everything else.
+    this.scatterClouds();
+  };
+
+  // Fluffy white clouds sit in a single layer high in the sky — puffy patches
+  // with ragged gaps, far above the terrain, trees and settlement towers.
+  World.prototype.scatterClouds = function () {
+    const CLOUD_Y = C.MAX_Y + 3;   // clear of the tallest settlement mast
+    const CELL = 6;                // size of each cloudy/clear sky patch
+    for (let x = 1; x < C.WORLD - 1; x++) {
+      for (let z = 1; z < C.WORLD - 1; z++) {
+        const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+        if (Game.hash(this.seed ^ 0xc10d, gx, 0, gz) > 0.4) continue; // clear patch
+        if (Game.hash(this.seed ^ 0xc10e, x, 0, z) < 0.22) continue;  // ragged gap
+        this.blocks.set(World.key(x, CLOUD_Y, z), "cloud");
+      }
+    }
+  };
+
+  // Scatter a few small lava pools deep underground, well away from spawn. Each
+  // is a rounded basin of lava with an air gap above, so digging down reveals a
+  // glowing pool rather than a solid block.
+  World.prototype.scatterLavaPools = function () {
+    const cx = Math.floor(C.WORLD / 2), cz = Math.floor(C.WORLD / 2);
+    for (let x = 4; x < C.WORLD - 4; x++) {
+      for (let z = 4; z < C.WORLD - 4; z++) {
+        if (Math.abs(x - cx) <= 4 && Math.abs(z - cz) <= 4) continue; // not under spawn
+        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.006) continue; // sparse centres
+        let py = 2 + Math.floor(Game.hash(this.seed ^ 0x1a0b, x, 0, z) * 3); // deep (2..4)
+        const surf = this.surfaceY(x, z);
+        if (py > surf - 3) py = surf - 3;   // always keep it well underground
+        if (py < 1) continue;
+        this.carveLavaPool(x, py, z);
+      }
+    }
+  };
+
+  World.prototype.carveLavaPool = function (cx, py, cz) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) > 3) continue; // rounded blob
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        this.blocks.set(World.key(x, py, z), "lava");
+        this.blocks.delete(World.key(x, py + 1, z)); // air gap above the pool
+        this.blocks.delete(World.key(x, py + 2, z));
+        if (!this.occupied(x, py - 1, z)) this.blocks.set(World.key(x, py - 1, z), "stone");
+      }
+    }
   };
 
   // Desert surface is mostly sand, with the odd patch of coloured clay.
@@ -1206,6 +1259,60 @@
       this.blocks.set(World.key(x, y + dy, z), "nether_portal");
     }
     return { x: x, y: y, z: z };
+  };
+
+  // Try to light a Nether portal from an obsidian block struck with flint &
+  // steel. Looks for a flat, obsidian-ringed pocket of air touching this block
+  // (in either vertical plane) and fills it with glowing portal blocks. Returns
+  // true if a portal was lit.
+  World.prototype.lightPortal = function (bx, by, bz) {
+    if (this.get(bx, by, bz) !== "obsidian") return false;
+    // Two candidate portal planes: one spanning X & Y (fixed z, faces ±z), one
+    // spanning Z & Y (fixed x, faces ±x). We only travel along the plane's axes.
+    const planes = [
+      [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]],
+      [[0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]]
+    ];
+    for (const dirs of planes) {
+      for (const d of dirs) {
+        const sx = bx + d[0], sy = by + d[1], sz = bz + d[2];
+        if (this.occupied(sx, sy, sz)) continue;      // seed must be open air
+        const cells = this.portalPocket(sx, sy, sz, dirs);
+        if (cells) {
+          cells.forEach((k) => {
+            const p = k.split(",");
+            this.setBlock(+p[0], +p[1], +p[2], "nether_portal");
+          });
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Flood-fill empty cells within a plane from a seed. Returns the list of cell
+  // keys if it's a small pocket fully ringed by obsidian, or null if the air
+  // escapes (no complete frame) or something else lines the edge.
+  World.prototype.portalPocket = function (sx, sy, sz, dirs) {
+    const MAX = 40;
+    const seen = new Set([World.key(sx, sy, sz)]);
+    const stack = [[sx, sy, sz]];
+    const cells = [];
+    while (stack.length) {
+      const [x, y, z] = stack.pop();
+      cells.push(World.key(x, y, z));
+      if (cells.length > MAX) return null;             // ran away — not enclosed
+      for (const d of dirs) {
+        const nx = x + d[0], ny = y + d[1], nz = z + d[2];
+        const id = this.get(nx, ny, nz);
+        if (id === "obsidian") continue;               // a good frame edge
+        if (id) return null;                           // some other block — not a clean frame
+        if (ny < 0) return null;                       // escaped below the world
+        const k = World.key(nx, ny, nz);
+        if (!seen.has(k)) { seen.add(k); stack.push([nx, ny, nz]); }
+      }
+    }
+    return cells.length ? cells : null;
   };
 
   // ================================================================
