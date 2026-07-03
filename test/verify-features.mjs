@@ -57,6 +57,20 @@ await page.click("#btn-new-forest");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(300);
 
+// --- Carved surface watering holes flood with water ---
+const holes = await page.evaluate(() => {
+  const W = window.Game.S.world, C = window.Game.CONST;
+  const holes = W._holes ? W._holes.size : 0;
+  let flooded = 0;
+  if (W._holes) for (const k of W._holes) {
+    const [x, z] = k.split(",").map(Number);
+    if (W.get(x, C.WATER_LEVEL, z) === "water") flooded++;
+  }
+  return { holes, flooded };
+});
+check("the world carves surface watering holes", holes.holes >= 1);
+check("watering holes fill with surface water", holes.flooded >= 1);
+
 // --- The pointer-look pitch obeys the inverted setting ---
 const lookMath = await page.evaluate(() => {
   const S = window.Game.S, p = S.player;

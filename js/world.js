@@ -433,11 +433,19 @@
         H[x][z] = Math.max(2, Math.min(C.MAX_Y - 6, height(x, z)));
       }
     }
+    // Stamp a few deliberate watering holes into the heightmap so every world
+    // gets some surface water (an oasis or two even in the dry desert).
+    this._holes = new Set();
+    this.stampWateringHoles(H, WATER);
+
     // A column floods if it dips below the water line (kept away from spawn so
-    // you never start in a puddle). Deserts stay dry.
+    // you never start in a puddle). Natural low-terrain ponds are forest-only,
+    // but a carved watering hole floods in either biome.
     const isWater = (x, z) => {
       if (x < 0 || x >= C.WORLD || z < 0 || z >= C.WORLD) return false;
-      return !desert && !nearSpawn(x, z) && H[x][z] < WATER;
+      if (nearSpawn(x, z)) return false;
+      if (this._holes.has(x + "," + z)) return true;
+      return !desert && H[x][z] < WATER;
     };
     this._isWater = isWater;
 
@@ -552,6 +560,36 @@
     if (r < 0.04) return "red_clay";
     if (r < 0.075) return "brown_clay";
     return "sand";
+  };
+
+  // Carve a handful of shallow, rounded basins into the heightmap. Each dips
+  // below the water line so the normal pond-bed / shore / sugar-cane passes fill
+  // it in. Holes are kept off the spawn plaza and clear of the settlements.
+  World.prototype.stampWateringHoles = function (H, WATER) {
+    const sc = Math.floor(C.WORLD / 2);
+    const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
+    const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
+    const rng = Game.mulberry32(this.seed ^ 0x0a51de);
+    let made = 0, tries = 0;
+    while (made < 4 && tries < 80) {
+      tries++;
+      const r = 2 + Math.floor(rng() * 2);              // radius 2..3
+      const x = 5 + Math.floor(rng() * (C.WORLD - 10));
+      const z = 5 + Math.floor(rng() * (C.WORLD - 10));
+      if (cheb(x, z, sc, sc) <= 5) continue;            // off the spawn plaza
+      if (siteCenters.some(([ox, oz]) => cheb(x, z, ox, oz) <= r + 6)) continue; // clear of towns
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          const dist = Math.abs(dx) + Math.abs(dz);
+          if (dist > r) continue;                        // rounded bowl
+          const hx = x + dx, hz = z + dz;
+          if (hx < 1 || hz < 1 || hx >= C.WORLD - 1 || hz >= C.WORLD - 1) continue;
+          H[hx][hz] = Math.max(1, Math.min(H[hx][hz], WATER - 1 - (r - dist)));
+          this._holes.add(hx + "," + hz);
+        }
+      }
+      made++;
+    }
   };
 
   // Stone, or an ore — rarer + special ores appear deeper.
