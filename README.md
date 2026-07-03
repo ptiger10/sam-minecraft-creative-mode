@@ -104,8 +104,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - Each villager gives you a key **only once**, and the **walls, roof and floor
     of every locked house are sealed** — no mining through them, so the key is
     the only way in.
-- 💧 **Ponds** of water with **sandy shores**, plus **clay** (grey, brown and
-  red) to dig up near the water and underground — smelt it into bricks.
+- 💧 **Ponds and watering holes** of water with **sandy shores** dot the
+  surface — every world gets a few (even the desert gets an **oasis** or two) —
+  plus **clay** (grey, brown and red) to dig up near the water and underground,
+  which you can smelt into bricks.
 - ☁️ **Clouds** drift high across the sky in puffy white patches. They're just
   fluffy sky, so **you can't mine them** — try and the game gently says so.
 - 🎋 **Sugar cane** grows along the water's edge. Punch it to collect it, then
