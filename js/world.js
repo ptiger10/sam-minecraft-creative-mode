@@ -496,8 +496,10 @@
     const sx = Math.floor(C.WORLD / 2), sz = Math.floor(C.WORLD / 2);
     this.spawn = { x: sx + 0.5, y: this.surfaceY(sx, sz) + 1, z: sz + 0.5 };
 
-    // Pools of lava tucked away deep underground — dig down to find them.
+    // Lava: pools tucked underground (dig down to find them) plus the odd
+    // glowing lake right on the surface.
     this.scatterLavaPools();
+    this.scatterSurfaceLava();
 
     this.spawnAnimals(desert ? 3 : 4);
     // Four settlements joined by a yellow brick road, with the quest villagers.
@@ -522,20 +524,57 @@
     }
   };
 
-  // Scatter a few small lava pools deep underground, well away from spawn. Each
-  // is a rounded basin of lava with an air gap above, so digging down reveals a
-  // glowing pool rather than a solid block.
+  // Scatter small lava pools underground, well away from spawn, at a range of
+  // depths so you meet them whether you dig shallow or deep. Each is a rounded
+  // basin of lava with an air gap above, so digging down reveals a glowing pool
+  // rather than a solid block.
   World.prototype.scatterLavaPools = function () {
     const cx = Math.floor(C.WORLD / 2), cz = Math.floor(C.WORLD / 2);
     for (let x = 4; x < C.WORLD - 4; x++) {
       for (let z = 4; z < C.WORLD - 4; z++) {
         if (Math.abs(x - cx) <= 4 && Math.abs(z - cz) <= 4) continue; // not under spawn
-        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.006) continue; // sparse centres
-        let py = 2 + Math.floor(Game.hash(this.seed ^ 0x1a0b, x, 0, z) * 3); // deep (2..4)
+        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.014) continue; // scattered centres
+        let py = 2 + Math.floor(Game.hash(this.seed ^ 0x1a0b, x, 0, z) * 5); // depth 2..6
         const surf = this.surfaceY(x, z);
         if (py > surf - 3) py = surf - 3;   // always keep it well underground
         if (py < 1) continue;
         this.carveLavaPool(x, py, z);
+      }
+    }
+  };
+
+  // A couple of glowing lava lakes right on the surface, kept away from spawn
+  // and the settlements. Lava is solid, so you can walk up to the edge — and
+  // pour a bucket of water on it to make obsidian.
+  World.prototype.scatterSurfaceLava = function () {
+    const sc = Math.floor(C.WORLD / 2);
+    const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
+    const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
+    const rng = Game.mulberry32(this.seed ^ 0x1a0ace);
+    let made = 0, tries = 0;
+    while (made < 2 && tries < 80) {
+      tries++;
+      const r = 1 + Math.floor(rng() * 2);              // radius 1..2 (small lakes)
+      const x = 5 + Math.floor(rng() * (C.WORLD - 10));
+      const z = 5 + Math.floor(rng() * (C.WORLD - 10));
+      if (cheb(x, z, sc, sc) <= 6) continue;            // away from the spawn plaza
+      if (siteCenters.some(([ox, oz]) => cheb(x, z, ox, oz) <= r + 6)) continue; // clear of towns
+      if (this._holes && this._holes.has(x + "," + z)) continue; // not in a water hole
+      this.carveSurfaceLavaLake(x, z, r);
+      made++;
+    }
+  };
+
+  World.prototype.carveSurfaceLavaLake = function (cx, cz, r) {
+    const baseY = this.surfaceY(cx, cz);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.abs(dx) + Math.abs(dz) > r) continue;  // rounded blob
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        for (let y = baseY; y <= C.MAX_Y; y++) this.blocks.delete(World.key(x, y, z)); // clear plants/soil above
+        this.blocks.set(World.key(x, baseY, z), "lava");
+        if (!this.occupied(x, baseY - 1, z)) this.blocks.set(World.key(x, baseY - 1, z), "stone"); // support
       }
     }
   };

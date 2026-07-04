@@ -71,6 +71,21 @@ const holes = await page.evaluate(() => {
 check("the world carves surface watering holes", holes.holes >= 1);
 check("watering holes fill with surface water", holes.flooded >= 1);
 
+// --- Lava turns up all over: underground pools and surface lakes ---
+const lava = await page.evaluate(() => {
+  const W = window.Game.S.world;
+  let total = 0, surface = 0;
+  for (const [k, id] of W.blocks) {
+    if (id !== "lava") continue;
+    total++;
+    const [x, y, z] = k.split(",").map(Number);
+    if (!W.get(x, y + 1, z) && y >= W.surfaceY(x, z)) surface++;
+  }
+  return { total, surface };
+});
+check("lava is scattered widely through the overworld", lava.total >= 40);
+check("some lava sits in surface lakes", lava.surface >= 1);
+
 // --- The pointer-look pitch obeys the inverted setting ---
 const lookMath = await page.evaluate(() => {
   const S = window.Game.S, p = S.player;

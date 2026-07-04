@@ -117,8 +117,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   Bucket** then shows **how many waters** it's holding and can keep collecting
   **as much as you like**. Tap the ground to pour one back out — or **pour it
   onto 🔥 lava to make ⬛ obsidian**.
-- 🔥 **Lava pools** hide deep underground — dig straight down to find them. Lava
-  is far too hot to pick up, but **pour water on it and it cools into obsidian**.
+- 🔥 **Lava** turns up all over: **pools scattered underground** at every depth
+  (dig down to find them) and the odd **glowing lava lake right on the surface**.
+  Lava is far too hot to pick up, but **pour water on it and it cools into
+  obsidian**.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
   a stone block **speckled** with its own colour so you can spot it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
