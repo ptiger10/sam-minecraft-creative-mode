@@ -39,6 +39,7 @@
     netherWorld: null,       // the Nether dimension (built on first entry)
     inNether: false,         // true while the player is in the Nether
     portalCooldown: 0,       // brief delay after a portal so it doesn't bounce you
+    portalLinks: [],         // player-lit overworld portals <-> their Nether twins
     questPortalExit: null,   // the overworld cell you return to from the Nether
     playClock: 0,            // seconds of *active* play since the last break
     onBreak: false,          // true while the take-a-break overlay is showing
@@ -68,10 +69,13 @@
       const top = hex(def.swatch);
       const side = hex(def.swatchSide !== undefined ? def.swatchSide : Game.mix(def.swatch, 0x000000, 0.34));
       let bg = "linear-gradient(150deg," + top + " 0 54%," + side + " 54% 100%)";
-      if (def.ore) {
+      if ((def.ore || def.speckled) && def.speckle !== undefined) {
+        // Little SQUARE specks (not round dots), to match the game's blocky look.
+        // A one-quadrant conic gradient fills a small square in each 9px tile, so
+        // the specks read as a sparse grid of little blocks over the base colour.
         const sp = hex(def.speckle);
-        bg = "radial-gradient(" + sp + " 17%, transparent 19%) 0 0/8px 8px," +
-             "radial-gradient(" + sp + " 17%, transparent 19%) 4px 4px/8px 8px," + bg;
+        const sq = "conic-gradient(" + sp + " 0 25%, transparent 0)";
+        bg = sq + " 0 0/9px 9px," + bg;
       }
       return '<span class="swatch" style="background:' + bg + '"></span>';
     }
@@ -766,9 +770,26 @@
     const animal = aimedAnimal(blockDist);
     if (!animal) return false;
     if (animal.userData.kind === "villager") openTrade(animal);
+    else if (animal.userData.kind === "piglin") tradePiglin(animal);
     else toggleRide(animal);
     S.swing = 0.18;
     return true;
+  }
+
+  // Tap a piglin holding a gold ingot to trade it away for a random treasure:
+  // a diamond, an emerald, or (a lucky day!) a piece of netherite.
+  function tradePiglin(piglin) {
+    if (countItem("gold_ingot") < 1) {
+      toast("The piglin grunts and eyes your hands — trade it a 🪙 gold ingot!");
+      return;
+    }
+    removeItems({ gold_ingot: 1 });
+    const pool = ["diamond", "emerald", "netherite"];
+    const got = pool[Math.floor(Math.random() * pool.length)];
+    addItem(got, 1);
+    const emoji = got === "netherite" ? "🖤" : (got === "diamond" ? "💎" : "💚");
+    toast("The piglin snorts and hands you a " + Game.itemName(got) + "! " + emoji);
+    renderHotbar(); updateHand();
   }
 
   // Tapping an interactive block (table / furnace / chest / door / window).
@@ -845,33 +866,107 @@
     }
   }
 
-  function enterNether() {
+  // Build the Nether world (once), and prepare its scene so blocks added to it
+  // later (e.g. a linked portal) can re-mesh even before you first step through.
+  function ensureNether() {
     if (!S.netherWorld) {
       const nw = new Game.World(null, S.overworld.seed, "nether");
       nw.generateNether();
       S.netherWorld = nw;
+      buildWorldScene(nw);       // give it a scene so edits re-mesh safely
+      prefillNetherChests(nw);   // stock the fortress chest with netherite
     }
-    activateWorld(S.netherWorld, S.netherWorld.spawn);
-    S.inNether = true;
-    S.portalCooldown = 2;
-    toast("🔥 Into the Nether! Mine netherite — and dodge the ghasts' fire!");
+    return S.netherWorld;
   }
 
-  function exitNether() {
-    const exit = S.questPortalExit || (S.overworld && S.overworld.spawn);
-    activateWorld(S.overworld, exit);
+  // Stock each Nether fortress chest with treasure — but only if the player
+  // hasn't already opened it (a saved chest key means "leave it as they left it").
+  function prefillNetherChests(nw) {
+    (nw.fortressChests || []).forEach((c) => {
+      const key = c.x + "," + c.y + "," + c.z;
+      if (key in S.chests) return;
+      const arr = new Array(CHEST_SIZE).fill(null);
+      arr[0] = { id: "netherite", count: 3 };
+      arr[1] = { id: "gold_ingot", count: 4 }; // some gold to trade with the piglin
+      S.chests[key] = arr;
+    });
+  }
+
+  // A ghast fires only once per Nether visit; re-arm every ghast on entry.
+  function resetGhasts(world) {
+    world.animals.forEach((a) => {
+      if (a.userData.kind === "ghast") {
+        a.userData.hasFired = false;
+        a.userData.fireTimer = 2 + Math.random() * 3;
+      }
+    });
+  }
+
+  function travelToNether(spawn) {
+    ensureNether();
+    activateWorld(S.netherWorld, spawn || S.netherWorld.spawn);
+    S.inNether = true;
+    S.portalCooldown = 2;
+    resetGhasts(S.netherWorld);
+    toast("🔥 Into the Nether! Trade the piglin gold — and dodge the ghasts' fire!");
+  }
+
+  function travelToOverworld(spawn) {
+    activateWorld(S.overworld, spawn || S.questPortalExit || S.overworld.spawn);
     S.inNether = false;
     S.portalCooldown = 2;
     toast("🌳 Back to the overworld!");
   }
 
-  // Standing in a portal block carries you between the worlds.
+  // Thin wrappers kept for the quest's built-in portals (no player-made link).
+  function enterNether() { travelToNether(S.netherWorld ? S.netherWorld.spawn : null); }
+  function exitNether() { travelToOverworld(); }
+
+  // ---- Linked portals -------------------------------------------------------
+  // Each portal a player lights in the overworld opens onto a FRESH portal at a
+  // random spot in the Nether (never the pre-existing one). We remember the pair
+  // so walking in travels to the right place, and destroying the overworld
+  // portal tears its Nether twin down too.
+  function findLinkByOw(id) { return S.portalLinks.find((l) => l.owId === id) || null; }
+  function findLinkByNe(id) { return S.portalLinks.find((l) => l.neId === id) || null; }
+
+  // When a portal is lit in the overworld, carve its twin into the Nether.
+  function linkNewOverworldPortal(owCells) {
+    const owId = Game.World.portalId(owCells);
+    if (findLinkByOw(owId)) return;               // already linked
+    ensureNether();
+    const nw = S.netherWorld;
+    const spot = nw.findNetherPortalSpot();
+    const made = nw.openNetherPortalAt(spot.x, spot.z);
+    // Where you land coming back: the overworld portal's lowest cell.
+    let low = null;
+    owCells.forEach((k) => { const p = k.split(",").map(Number); if (!low || p[1] < low[1]) low = p; });
+    const owReturn = { x: low[0] + 0.5, y: low[1], z: low[2] + 0.5 };
+    S.portalLinks.push({
+      owId: owId,
+      neId: Game.World.portalId(made.cells),
+      neSpawn: made.spawn,
+      owReturn: owReturn
+    });
+  }
+
+  // Standing in a portal block carries you between the worlds. Player-lit portals
+  // travel to their own linked twin; the quest's built-in portals fall back to
+  // the default spawn / return cell.
   function handlePortal(dt) {
     if (S.portalCooldown > 0) { S.portalCooldown -= dt; return; }
     const p = S.player.pos;
-    const id = S.world.get(Math.floor(p.x), Math.floor(p.y + 0.2), Math.floor(p.z));
-    if (id === "nether_portal") {
-      if (S.inNether) exitNether(); else enterNether();
+    const bx = Math.floor(p.x), by = Math.floor(p.y + 0.2), bz = Math.floor(p.z);
+    if (S.world.get(bx, by, bz) !== "nether_portal") return;
+    const id = Game.World.portalId(S.world.portalCellsFrom(bx, by, bz));
+    if (!S.inNether) {
+      const link = findLinkByOw(id);
+      if (link) travelToNether(link.neSpawn);
+      else enterNether();
+    } else {
+      const link = findLinkByNe(id);
+      if (link) travelToOverworld(link.owReturn);
+      else exitNether();
     }
   }
 
@@ -978,7 +1073,11 @@
         toast("Aim at an obsidian portal frame to light it. 🔥");
         return;
       }
-      if (S.world.lightPortal(hit.block.x, hit.block.y, hit.block.z)) {
+      const litCells = S.world.lightPortal(hit.block.x, hit.block.y, hit.block.z);
+      if (litCells) {
+        // A portal lit in the overworld opens a brand-new twin somewhere in the
+        // Nether (rather than reusing the one that's already there).
+        if (!S.inNether) linkNewOverworldPortal(litCells);
         toast("Whoosh! The portal flares to life. 🔥 Step in to reach the Nether!");
       } else {
         toast("Build a complete obsidian frame first, then light the inside. 🔥");
@@ -1084,6 +1183,42 @@
       addItem(def.drop, 1);
       toast("+1 " + Game.itemName(def.drop));
     }
+
+    // Removing obsidian that framed a portal snuffs that portal's purple light —
+    // and if it was a player-lit overworld portal, its Nether twin winks out too.
+    if (id === "obsidian") onObsidianRemoved(hit.block.x, hit.block.y, hit.block.z);
+  }
+
+  // Snuff any portal that lost its frame when this obsidian was mined, and tear
+  // down the matching portal in the other dimension for a player-lit pair.
+  function onObsidianRemoved(x, y, z) {
+    const broken = S.world.snuffBrokenPortals(x, y, z);
+    if (!broken.length) return;
+    let toldTwin = false;
+    broken.forEach((b) => {
+      const link = S.inNether ? findLinkByNe(b.id) : findLinkByOw(b.id);
+      if (link) {
+        // Snuff the twin's portal cells in the other world.
+        const twinWorld = S.inNether ? S.overworld : S.netherWorld;
+        const twinId = S.inNether ? link.owId : link.neId;
+        snuffPortalById(twinWorld, twinId);
+        S.portalLinks = S.portalLinks.filter((l) => l !== link);
+        toldTwin = true;
+      }
+    });
+    if (toldTwin) toast("The portal goes dark — its twin fades away too. 🌑");
+    else toast("The portal's purple light fizzles out. 🌑");
+  }
+
+  // Delete every nether_portal cell of the portal identified by `id` in `world`.
+  function snuffPortalById(world, id) {
+    if (!world || !id) return;
+    const p = id.split(",").map(Number);
+    if (world.get(p[0], p[1], p[2]) !== "nether_portal") return;
+    world.portalCellsFrom(p[0], p[1], p[2]).forEach((k) => {
+      const c = k.split(",").map(Number);
+      world.setBlock(c[0], c[1], c[2], null);
+    });
   }
 
   // A tap on the world acts on whatever the crosshair is pointing at.
@@ -1147,7 +1282,7 @@
       redstone: 0xc0392b, gold_ingot: 0xe6c34a, steel: 0xc7ccd4, flint: 0x3a3a40,
       flint_and_steel: 0xb0b4bc, book: 0xb5843a,
       diamond: 0x4fe3d8, paper: 0xf2efe4,
-      netherite: 0x5a4f45, key2: 0xb87333, key3: 0xb8c0c8, key4: 0xf2c14e };
+      netherite: 0x0a0a0c, key2: 0xb87333, key3: 0xb8c0c8, key4: 0xf2c14e };
     const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
@@ -1218,24 +1353,28 @@
   //  Vitals UI
   // ===============================================================
   function renderVitals() {
-    drawPips($("health-row"), S.player.hp, C.MAX_HP, "❤️", "🖤");
-    drawPips($("food-row"), S.player.food, C.MAX_FOOD, "🍗", "🦴");
+    drawPips($("health-row"), S.player.hp, C.MAX_HP, "hp");
+    drawPips($("food-row"), S.player.food, C.MAX_FOOD, "food");
     // Air bubbles only appear while you're underwater (and draining/refilling).
     const airRow = $("air-row");
     if (S.player.air < C.MAX_AIR - 0.05) {
       airRow.style.display = "";
-      drawPips(airRow, S.player.air, C.MAX_AIR, "🫧", "⚫");
+      drawPips(airRow, S.player.air, C.MAX_AIR, "air");
     } else {
       airRow.style.display = "none";
       airRow.innerHTML = "";
     }
   }
 
-  function drawPips(row, value, max, full, empty) {
-    const pairs = max / 2;        // each icon = 2 points
+  // Draw a vitals bar as a row of little blocky squares (each square = 2 points),
+  // filled ones lit in the bar's colour and the rest a dark empty cell.
+  function drawPips(row, value, max, cls) {
+    const cells = max / 2;        // each square = 2 points
     const filled = Math.round(value / 2);
     let html = "";
-    for (let i = 0; i < pairs; i++) html += '<span class="pip">' + (i < filled ? full : empty) + "</span>";
+    for (let i = 0; i < cells; i++) {
+      html += '<span class="vcell ' + cls + (i < filled ? " on" : "") + '"></span>';
+    }
     row.innerHTML = html;
   }
 
@@ -1396,6 +1535,7 @@
     S.netherWorld = null;
     S.inNether = false;
     S.portalCooldown = 0;
+    S.portalLinks = [];
     S.questPortalExit = world.questPortalExit || null;
 
     renderHotbar();

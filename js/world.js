@@ -53,25 +53,38 @@
   // so the pattern is stable but each ore looks different.
   function oreGeometry(id) {
     const def = Game.BlockDefs[id];
+    return speckledGeometry(id, def.base, def.all, 0.3);
+  }
+
+  // Build a cube that is mostly baseColor with little square specks of
+  // speckColor. Because the cube is subdivided into a coarse grid and each grid
+  // cell shares one flat colour, every speck reads as a crisp little square —
+  // keeping with the game's blocky look. Deterministic per id so it's stable.
+  function speckledGeometry(id, baseColor, speckColor, density) {
     const seg = 5;
     const g = new THREE.BoxGeometry(1, 1, 1, seg, seg, seg);
     const pos = g.attributes.position;
-    const stone = new THREE.Color(def.base);
-    const ore = new THREE.Color(def.all);
-    // Give each ore type its own speckle layout.
+    const base = new THREE.Color(baseColor);
+    const speck = new THREE.Color(speckColor);
     let salt = 0;
     for (let i = 0; i < id.length; i++) salt = (salt * 31 + id.charCodeAt(i)) | 0;
     const colors = [];
     for (let i = 0; i < pos.count; i++) {
-      // Snap the vertex to its cell on the cube so a whole speckle shares a colour.
+      // Snap the vertex to its cell on the cube so a whole speck shares a colour.
       const gx = Math.round((pos.getX(i) + 0.5) * seg);
       const gy = Math.round((pos.getY(i) + 0.5) * seg);
       const gz = Math.round((pos.getZ(i) + 0.5) * seg);
-      const c = Game.hash(salt ^ 0x5eed, gx, gy, gz) < 0.3 ? ore : stone;
+      const c = Game.hash(salt ^ 0x5eed, gx, gy, gz) < density ? speck : base;
       colors.push(c.r, c.g, c.b);
     }
     g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     return g;
+  }
+
+  // Obsidian: a pitch-black block flecked with small purple squares.
+  function obsidianGeometry() {
+    const def = Game.BlockDefs.obsidian;
+    return speckledGeometry("obsidian", def.all, def.speckle, 0.22);
   }
 
   // Ladder: instead of a plain cube, build a recognisable ladder shape — two
@@ -319,6 +332,7 @@
     if (geomCache[id]) return geomCache[id];
     if (id === "nether_portal") return (geomCache[id] = netherPortalGeometry());
     if (id === "credits_block") return (geomCache[id] = creditsBlockGeometry());
+    if (id === "obsidian") return (geomCache[id] = obsidianGeometry());
     if (Game.LOCKED && Game.LOCKED[id]) return (geomCache[id] = lockedDoorGeometry(Game.LOCKED[id]));
     if (id === "stairs") return (geomCache[id] = stairsGeometry());
     if (id === "furnace") return (geomCache[id] = furnaceGeometry());
@@ -1061,6 +1075,48 @@
   }
   World.makeGhast = makeGhast;
 
+  // A piglin: a stubby pink-brown brute with a flat golden snout and little
+  // tusks. It wanders the Nether floor; trade it a gold ingot for treasure.
+  function makePiglin() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const skin = 0xd98f86, snout = 0xcaa04a, dark = 0x2c211f, cloth = 0x6f4a2c;
+    // Legs
+    [-0.16, 0.16].forEach((x) => {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.44, 0.24), mat(cloth));
+      l.position.set(x, 0.22, 0); group.add(l);
+    });
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.36), mat(skin));
+    body.position.set(0, 0.74, 0); group.add(body);
+    // Arms
+    [-0.4, 0.4].forEach((x) => {
+      const a = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.54, 0.2), mat(skin));
+      a.position.set(x, 0.72, 0); group.add(a);
+    });
+    // Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.5, 0.5), mat(skin));
+    head.position.set(0, 1.28, 0); group.add(head);
+    // Golden snout
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.14), mat(snout));
+    nose.position.set(0, 1.2, 0.3); group.add(nose);
+    // Eyes + tusks
+    [-0.14, 0.14].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), mat(dark));
+      e.position.set(x, 1.34, 0.26); group.add(e);
+      const tusk = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.06), mat(0xf3efe2));
+      tusk.position.set(x, 1.06, 0.28); group.add(tusk);
+    });
+    // Pointy ears
+    [-0.32, 0.32].forEach((x) => {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), mat(skin));
+      ear.position.set(x, 1.38, 0); group.add(ear);
+    });
+    group.userData.kind = "piglin";
+    return group;
+  }
+  World.makePiglin = makePiglin;
+
   // Fill a single column from fromY..toY (inclusive) with one block id.
   World.prototype.fillColumn = function (x, z, fromY, toY, id) {
     if (x < 0 || z < 0 || x >= C.WORLD || z >= C.WORLD) return;
@@ -1341,9 +1397,9 @@
   // Try to light a Nether portal from an obsidian block struck with flint &
   // steel. Looks for a flat, obsidian-ringed pocket of air touching this block
   // (in either vertical plane) and fills it with glowing portal blocks. Returns
-  // true if a portal was lit.
+  // the list of lit portal cell keys if a portal was lit, or null otherwise.
   World.prototype.lightPortal = function (bx, by, bz) {
-    if (this.get(bx, by, bz) !== "obsidian") return false;
+    if (this.get(bx, by, bz) !== "obsidian") return null;
     // Two candidate portal planes: one spanning X & Y (fixed z, faces ±z), one
     // spanning Z & Y (fixed x, faces ±x). We only travel along the plane's axes.
     const planes = [
@@ -1360,11 +1416,11 @@
             const p = k.split(",");
             this.setBlock(+p[0], +p[1], +p[2], "nether_portal");
           });
-          return true;
+          return cells;
         }
       }
     }
-    return false;
+    return null;
   };
 
   // Flood-fill empty cells within a plane from a seed. Returns the list of cell
@@ -1392,6 +1448,137 @@
     return cells.length ? cells : null;
   };
 
+  // Flood the connected run of nether_portal blocks starting at (x,y,z),
+  // returning their cell keys (the whole "sheet" of purple light).
+  World.prototype.portalCellsFrom = function (x, y, z) {
+    if (this.get(x, y, z) !== "nether_portal") return [];
+    const seen = new Set([World.key(x, y, z)]);
+    const stack = [[x, y, z]];
+    const cells = [];
+    const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    while (stack.length && cells.length < 60) {
+      const [cx, cy, cz] = stack.pop();
+      cells.push(World.key(cx, cy, cz));
+      for (const d of dirs) {
+        const nx = cx + d[0], ny = cy + d[1], nz = cz + d[2];
+        if (this.get(nx, ny, nz) !== "nether_portal") continue;
+        const k = World.key(nx, ny, nz);
+        if (!seen.has(k)) { seen.add(k); stack.push([nx, ny, nz]); }
+      }
+    }
+    return cells;
+  };
+
+  // A portal is only alive while its purple cells are fully framed by obsidian.
+  // Given the connected portal cells, decide which vertical plane they lie in,
+  // then confirm every in-plane neighbour is either portal or obsidian. Returns
+  // true if the frame is complete.
+  World.prototype.portalIntact = function (cells) {
+    if (!cells.length) return false;
+    const coords = cells.map((k) => k.split(",").map(Number));
+    const inSet = new Set(cells);
+    const xs = new Set(coords.map((c) => c[0]));
+    const zs = new Set(coords.map((c) => c[2]));
+    // Pick the horizontal axis the portal spans. A single column is ambiguous,
+    // so choose whichever axis actually has obsidian beside it.
+    let axis; // "x" or "z"
+    if (xs.size > 1) axis = "x";
+    else if (zs.size > 1) axis = "z";
+    else {
+      const c = coords[0];
+      const xFrame = this.get(c[0] - 1, c[1], c[2]) === "obsidian" || this.get(c[0] + 1, c[1], c[2]) === "obsidian";
+      axis = xFrame ? "x" : "z";
+    }
+    const dirs = axis === "x"
+      ? [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]
+      : [[0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]];
+    for (const c of coords) {
+      for (const d of dirs) {
+        const k = World.key(c[0] + d[0], c[1] + d[1], c[2] + d[2]);
+        if (inSet.has(k)) continue;                 // another portal cell — fine
+        if (this.get(c[0] + d[0], c[1] + d[1], c[2] + d[2]) !== "obsidian") return false;
+      }
+    }
+    return true;
+  };
+
+  // After an obsidian block at (x,y,z) is removed, any portal that touched it may
+  // no longer be framed. Snuff out (delete) every such broken portal. Returns an
+  // array of the removed portals, each { cells:[...], id: minCellKey }, so the
+  // game can also tear down any linked portal in the other dimension.
+  World.prototype.snuffBrokenPortals = function (x, y, z) {
+    const removed = [];
+    const done = new Set();
+    const neighbours = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (const d of neighbours) {
+      const nx = x + d[0], ny = y + d[1], nz = z + d[2];
+      if (this.get(nx, ny, nz) !== "nether_portal") continue;
+      const cells = this.portalCellsFrom(nx, ny, nz);
+      const id = World.portalId(cells);
+      if (done.has(id)) continue;
+      done.add(id);
+      if (!this.portalIntact(cells)) {
+        cells.forEach((k) => {
+          const p = k.split(",");
+          this.setBlock(+p[0], +p[1], +p[2], null);
+        });
+        removed.push({ cells: cells, id: id });
+      }
+    }
+    return removed;
+  };
+
+  // A stable identity for a portal: the lexicographically smallest of its cells.
+  World.portalId = function (cells) {
+    let best = null;
+    for (const k of cells) if (best === null || k < best) best = k;
+    return best;
+  };
+
+  // Carve out a fresh 1-wide, 2-tall lit portal on the Nether floor at (px,pz),
+  // clearing room around it and giving a tidy netherrack floor. Uses setBlock so
+  // an already-rendered Nether re-meshes. Returns { pos, cells, spawn }.
+  World.prototype.openNetherPortalAt = function (px, pz) {
+    const FLOOR = 2, base = FLOOR + 1, O = "obsidian";
+    for (let x = px - 2; x <= px + 2; x++) {
+      for (let z = pz - 1; z <= pz + 3; z++) {
+        for (let y = base; y <= base + 4; y++) this.setBlock(x, y, z, null);
+        this.setBlock(x, FLOOR, z, "netherrack");
+      }
+    }
+    this.setBlock(px, base - 1, pz, O);   // sill
+    this.setBlock(px, base + 2, pz, O);   // lintel
+    const cells = [];
+    for (let dy = 0; dy < 2; dy++) {
+      this.setBlock(px - 1, base + dy, pz, O);
+      this.setBlock(px + 1, base + dy, pz, O);
+      this.setBlock(px, base + dy, pz, "nether_portal");
+      cells.push(World.key(px, base + dy, pz));
+    }
+    return { pos: { x: px, y: base, z: pz }, cells: cells,
+      spawn: { x: px + 0.5, y: base, z: pz + 2.5 } };
+  };
+
+  // Find a clear floor spot in the Nether interior to drop a new portal, away
+  // from lava, the existing portals and the fortress.
+  World.prototype.findNetherPortalSpot = function () {
+    const SZ = C.WORLD, FLOOR = 2;
+    const clear = (px, pz) => {
+      for (let x = px - 1; x <= px + 1; x++)
+        for (let z = pz - 1; z <= pz + 3; z++) {
+          if (this.get(x, FLOOR, z) === "lava") return false;
+          if (this.get(x, FLOOR + 1, z) === "nether_portal") return false;
+        }
+      return true;
+    };
+    for (let tries = 0; tries < 200; tries++) {
+      const px = 6 + Math.floor(Math.random() * (SZ - 12));
+      const pz = 6 + Math.floor(Math.random() * (SZ - 12));
+      if (clear(px, pz)) return { x: px, z: pz };
+    }
+    return { x: (SZ >> 1), z: (SZ >> 1) }; // fallback: the middle
+  };
+
   // ================================================================
   //  The Nether: a fiery cavern of netherrack, lava, ghasts & netherite.
   // ================================================================
@@ -1411,17 +1598,18 @@
       }
     }
 
-    // Netherite veins, lava pools, glowstone lights and a few netherrack pillars.
+    // Lava pools, glowstone lights and a few netherrack pillars. Netherite is
+    // now VERY rare to mine — the reliable ways to get it are the fortress chest
+    // and the piglin trade, so only the odd speck hides in the floor.
     for (let x = 2; x < SZ - 2; x++) {
       for (let z = 2; z < SZ - 2; z++) {
-        if (Game.hash(this.seed ^ 0x9e7, x, FLOOR, z) < 0.07) this.blocks.set(World.key(x, FLOOR, z), "netherite_ore");
-        if (Game.hash(this.seed ^ 0x9e8, x, FLOOR - 1, z) < 0.08) this.blocks.set(World.key(x, FLOOR - 1, z), "netherite_ore");
+        if (Game.hash(this.seed ^ 0x9e7, x, FLOOR, z) < 0.004) this.blocks.set(World.key(x, FLOOR, z), "netherite_ore");
+        if (Game.hash(this.seed ^ 0x9e8, x, FLOOR - 1, z) < 0.004) this.blocks.set(World.key(x, FLOOR - 1, z), "netherite_ore");
         if (Game.hash(this.seed ^ 0x47e, x, 1, z) < 0.03) this.blocks.set(World.key(x, FLOOR, z), "lava");
         if (Game.hash(this.seed ^ 0x6105, x, 0, z) < 0.025) this.blocks.set(World.key(x, CEIL - 1, z), "glowstone");
         if (Game.hash(this.seed ^ 0xb09, x, 0, z) < 0.02) {
           const h = 1 + Math.floor(Game.hash(this.seed ^ 0xb10, x, 0, z) * 5);
           for (let y = FLOOR + 1; y <= FLOOR + h; y++) this.blocks.set(World.key(x, y, z), "netherrack");
-          if (Game.hash(this.seed ^ 0xb11, x, 0, z) < 0.5) this.blocks.set(World.key(x, FLOOR + 1, z), "netherite_ore");
         }
       }
     }
@@ -1437,6 +1625,10 @@
     this.buildPortal(px, FLOOR + 1, pz);
     this.spawn = { x: px + 0.5, y: FLOOR + 1, z: pz + 2 + 0.5 };
 
+    // A brick fortress in the far corner, holding a chest of netherite.
+    this.fortressChests = [];
+    this.buildNetherFortress(SZ - 8, SZ - 8);
+
     // Floating ghasts that drift overhead and spit fire.
     const rng = Game.mulberry32(this.seed ^ 0x6ace);
     for (let i = 0; i < 4; i++) {
@@ -1450,8 +1642,56 @@
       g.userData.t = rng() * Math.PI * 2;
       g.userData.timer = 1 + rng() * 3;
       g.userData.fireTimer = 2 + rng() * 3;
+      g.userData.hasFired = false; // fires just once per Nether visit
       this.animals.push(g);
     }
+
+    // A couple of piglins snuffling around the floor, ready to trade.
+    for (let i = 0; i < 2; i++) {
+      const pg = makePiglin();
+      let gx, gz, tries = 0;
+      do {
+        gx = 8 + Math.floor(rng() * (SZ - 16));
+        gz = 8 + Math.floor(rng() * (SZ - 16));
+        tries++;
+      } while (tries < 30 && this.get(gx, FLOOR, gz) === "lava");
+      pg.position.set(gx + 0.5, FLOOR + 1, gz + 0.5);
+      pg.userData.dir = rng() * Math.PI * 2;
+      pg.userData.timer = rng() * 3;
+      this.animals.push(pg);
+    }
+  };
+
+  // A small Nether fortress: a red-brick room on the floor, lit by glowstone,
+  // with a doorway and a chest of netherite waiting inside. The chest position
+  // is recorded on fortressChests so the game can stock it on first visit.
+  World.prototype.buildNetherFortress = function (cx, cz) {
+    const FLOOR = 2, base = FLOOR + 1, R = 3, top = base + 3;
+    const wall = "red_brick", floor = "brown_brick";
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
+        // Clear the interior first so nothing generated blocks the room.
+        for (let y = base; y <= top + 1; y++) this.blocks.delete(World.key(x, y, z));
+        this.blocks.set(World.key(x, FLOOR, z), floor);           // solid floor
+        const edge = Math.max(Math.abs(dx), Math.abs(dz)) === R;
+        if (edge) {
+          // Leave a 1-wide doorway on the -z side.
+          if (!(dz === -R && dx === 0)) {
+            for (let y = base; y <= top; y++) this.blocks.set(World.key(x, y, z), wall);
+          }
+        }
+        this.blocks.set(World.key(x, top + 1, z), wall);           // roof
+      }
+    }
+    // Glowstone lamps in two corners so the vault isn't pitch dark.
+    this.blocks.set(World.key(cx - R + 1, top, cz - R + 1), "glowstone");
+    this.blocks.set(World.key(cx + R - 1, top, cz + R - 1), "glowstone");
+    // The treasure chest against the back wall.
+    const chestCell = { x: cx, y: base, z: cz + R - 1 };
+    this.blocks.set(World.key(chestCell.x, chestCell.y, chestCell.z), "chest");
+    this.fortressChests.push(chestCell);
   };
 
   World.prototype.spawnAnimals = function (count) {
@@ -1495,7 +1735,7 @@
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
       if (a.userData.kind === "villager") { this.updateVillager(a, dt); continue; }
-      if (a.userData.kind === "ghast") continue; // ghasts are driven by updateNether
+      if (a.userData.kind === "ghast" || a.userData.kind === "piglin") continue; // driven by updateNether
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -1553,6 +1793,7 @@
     const FLOOR = 2, CEIL = 14;
 
     for (const g of this.animals) {
+      if (g.userData.kind === "piglin") { this.updatePiglin(g, dt); continue; }
       if (g.userData.kind !== "ghast") continue;
       const u = g.userData;
       // Bob up and down, drift slowly, turning every so often.
@@ -1569,17 +1810,42 @@
       // Face roughly toward the player.
       g.rotation.y = Math.atan2(eye.x - g.position.x, eye.z - g.position.z);
 
-      // Fire at random intervals when the player is within range.
-      u.fireTimer -= dt;
-      if (u.fireTimer <= 0) {
-        u.fireTimer = 2.5 + Math.random() * 3;
-        const dx = eye.x - g.position.x, dy = eye.y - g.position.y, dz = eye.z - g.position.z;
-        const dist = Math.hypot(dx, dy, dz);
-        if (dist < 22 && dist > 1.5) this.spawnFireball(g.position, { x: dx / dist, y: dy / dist, z: dz / dist });
+      // A ghast fires a single fireball per Nether visit, then goes quiet until
+      // the player leaves and comes back (which resets hasFired).
+      if (!u.hasFired) {
+        u.fireTimer -= dt;
+        if (u.fireTimer <= 0) {
+          const dx = eye.x - g.position.x, dy = eye.y - g.position.y, dz = eye.z - g.position.z;
+          const dist = Math.hypot(dx, dy, dz);
+          if (dist < 22 && dist > 1.5) {
+            this.spawnFireball(g.position, { x: dx / dist, y: dy / dist, z: dz / dist });
+            u.hasFired = true;
+          } else {
+            u.fireTimer = 1 + Math.random() * 2; // player out of range — try again soon
+          }
+        }
       }
     }
 
     this.updateFireballs(dt, player);
+  };
+
+  // A piglin snuffles along the Nether floor, turning at walls, lava and edges.
+  World.prototype.updatePiglin = function (a, dt) {
+    const FLOOR = 2;
+    const u = a.userData;
+    u.timer -= dt;
+    if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+    const speed = 0.8;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    const fx = Math.floor(nx), fz = Math.floor(nz);
+    const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
+      this.solidAt(fx, FLOOR + 1, fz) || this.get(fx, FLOOR, fz) === "lava";
+    if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
+    else { a.position.x = nx; a.position.z = nz; }
+    a.position.y = FLOOR + 1;
+    a.rotation.y = -u.dir + Math.PI / 2;
   };
 
   World.prototype.spawnFireball = function (from, dir) {

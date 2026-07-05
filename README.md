@@ -74,8 +74,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   aim the crosshair at one and tap to pick it (even with a block in your hand).
 - 🍉 **Watermelons** grow on the ground (light green with dark-green stripes) —
   pick them up, build with them, or eat them.
-- 🍎 **Health and food bars.** Food drips down *slowly* — eat apples or
-  watermelons so you don't starve. If your food runs out you start losing health.
+- 🍎 **Blocky health and food bars.** Two rows of chunky little squares in the
+  top corner — red for health, tan for food — in keeping with the pixel look.
+  Food drips down *slowly* — eat apples or watermelons so you don't starve. If
+  your food runs out you start losing health.
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 😴 If your health runs out, a gentle **"You needed a nap!"** screen pops up —
   then you can respawn.
@@ -96,8 +98,13 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     the **second villager** lives.
   - The second villager hands you the **key to the third house** — also locked.
   - Inside the third house is a 🔥 **portal to the Nether**, a fiery red cavern
-    where **👻 ghasts float overhead and spit fireballs** at random intervals —
-    a hit costs you **two hearts** — and where you can **mine ⬛ netherite**.
+    where **👻 ghasts float overhead and spit fireballs** — a hit costs you
+    **two hearts**, and each ghast only fires **once per visit** (it goes quiet
+    until you leave and come back). Down there a **🐷 piglin** snuffles around
+    the floor: **trade it a gold ingot** and it hands back a random **💎 diamond,
+    💚 emerald, or 🖤 netherite**. **Netherite** is now **pitch black** and very
+    **rare** to mine — the surest supply is the **chest inside the brick Nether
+    fortress**, or the piglin.
   - The **third villager** wants **netherite** in exchange for the **last key**,
     which opens the **fourth house**: a **scrolling Hall of Fame** honouring
     **Sam Fort** and **Dave Fort** for inventing the game. 🏆
@@ -116,13 +123,19 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🪣 **Water Bucket.** Tap water with a bucket to scoop it up; the **Water
   Bucket** then shows **how many waters** it's holding and can keep collecting
   **as much as you like**. Tap the ground to pour one back out — or **pour it
-  onto 🔥 lava to make ⬛ obsidian**.
+  onto 🔥 lava to make ⬛ obsidian** (**pitch black, flecked with purple**).
+  Frame a doorway in obsidian and **light it with flint & steel**: each portal
+  you make opens onto a **fresh portal at a random spot in the Nether**, and if
+  you **mine away the frame** the purple light — and its Nether twin — **wink
+  out**.
 - 🔥 **Lava** turns up all over: **pools scattered underground** at every depth
   (dig down to find them) and the odd **glowing lava lake right on the surface**.
   Lava is far too hot to pick up, but **pour water on it and it cools into
   obsidian**.
 - ⛏️ **Ores to mine:** coal, iron, gold, redstone, diamond and emerald — each
-  a stone block **speckled** with its own colour so you can spot it underground.
+  a stone block **speckled with little square flecks** of its own colour (in the
+  world and on its inventory icon), keeping with the blocky look, so you can spot
+  it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
   cyan-flecked blocks for diamond.
 - 🔥 **Furnaces.** Craft one from **4 stone** (it has a distinctive glowing

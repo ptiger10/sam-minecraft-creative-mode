@@ -122,21 +122,43 @@ const portal = await page.evaluate(() => {
 check("a nether portal exists in the overworld", portal.portals >= 1);
 check("the overworld remembers the portal return cell", portal.exit);
 
-// --- Entering the Nether: netherite to mine and ghasts overhead ---
+// --- Entering the Nether: a fortress, a piglin, rare netherite & ghasts ---
 const nether = await page.evaluate(() => {
   const Game = window.Game, S = Game.S;
   // Build the Nether the way enterNether does and inspect it.
   const nw = new Game.World(null, S.overworld.seed, "nether");
   nw.generateNether();
-  let ore = 0, ghasts = 0, lava = 0;
-  for (const [, id] of nw.blocks) { if (id === "netherite_ore") ore++; else if (id === "lava") lava++; }
-  for (const a of nw.animals) if (a.userData.kind === "ghast") ghasts++;
-  return { ore, ghasts, lava, oreDrop: Game.BlockDefs.netherite_ore.drop, isNether: nw.isNether };
+  let ore = 0, ghasts = 0, lava = 0, piglins = 0, chests = 0;
+  for (const [, id] of nw.blocks) {
+    if (id === "netherite_ore") ore++;
+    else if (id === "lava") lava++;
+    else if (id === "chest") chests++;
+  }
+  for (const a of nw.animals) {
+    if (a.userData.kind === "ghast") ghasts++;
+    else if (a.userData.kind === "piglin") piglins++;
+  }
+  return { ore, ghasts, lava, piglins, chests,
+    fortressChests: (nw.fortressChests || []).length,
+    oreDrop: Game.BlockDefs.netherite_ore.drop, isNether: nw.isNether };
 });
-check("the Nether is full of netherite ore", nether.ore > 20);
+check("netherite ore is now rare in the Nether", nether.ore >= 0 && nether.ore < 30);
 check("mining netherite ore drops netherite", nether.oreDrop === "netherite");
+check("a Nether fortress holds a chest", nether.fortressChests >= 1 && nether.chests >= 1);
+check("piglins wander the Nether", nether.piglins >= 1);
 check("ghasts float in the Nether", nether.ghasts >= 1);
 check("the Nether has lava", nether.lava >= 1);
+
+// --- The piglin trades a gold ingot for random treasure ---
+const piglinTrade = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const pool = ["diamond", "emerald", "netherite"];
+  // Netherite is now pitch black in the inventory.
+  const swatch = Game.ItemDefs.netherite.swatch;
+  return { black: swatch <= 0x111111, pool: pool.every((id) => !!Game.ItemDefs[id]) };
+});
+check("netherite is pitch black", piglinTrade.black);
+check("piglin treasure items all exist", piglinTrade.pool);
 
 // --- A ghast's fireball costs the player two hearts (4 HP) ---
 const fire = await page.evaluate(() => {
@@ -283,6 +305,71 @@ const sealed = await page.evaluate(async () => {
 check("locked houses register protected wall cells", sealed.ok && sealed.isProtected === true);
 check("a pickaxe can aim right at a house wall", sealed.aimedWall === true);
 check("but the wall can't be mined away", !!sealed.before && sealed.after === sealed.before);
+
+// --- Blocky health/food bars (little squares, not emoji) ---
+const bars = await page.evaluate(() => ({
+  hp: document.querySelectorAll("#health-row .vcell").length,
+  food: document.querySelectorAll("#food-row .vcell").length,
+  lit: document.querySelectorAll("#health-row .vcell.on").length
+}));
+check("the health bar is blocky squares", bars.hp === 10 && bars.lit > 0);
+check("the food bar is blocky squares", bars.food === 10);
+
+// --- A ghast fires only one fireball per Nether visit ---
+const oneShot = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  nw.scene = { add() {}, remove() {} };
+  const p = S.player;
+  // Put the player at a controlled spot with a ghast clearly in firing range
+  // (well within 22 blocks, well beyond the 1.5-block minimum), so the check
+  // exercises the "fire only once" rule without boundary flakiness.
+  p.pos.set(20.5, 5 - Game.CONST.EYE, 20.5); p.pitch = 0; p.yaw = 0; p.syncCamera();
+  const eye = p.eyePosition();
+  const g = nw.animals.find((a) => a.userData.kind === "ghast");
+  nw.animals = nw.animals.filter((a) => a === g || a.userData.kind !== "ghast");
+  g.userData.hasFired = false; g.userData.fireTimer = 0.01; g.userData.baseY = 10;
+  let fired = 0; const real = nw.spawnFireball.bind(nw);
+  nw.spawnFireball = (f, d) => { fired++; real(f, d); };
+  for (let i = 0; i < 300; i++) { g.position.set(eye.x, 10, eye.z); nw.updateNether(0.05, p); }
+  return { fired, hasFired: g.userData.hasFired };
+});
+check("a ghast fires only once per Nether visit", oneShot.fired === 1 && oneShot.hasFired === true);
+
+// --- Lighting a portal spawns a Nether twin; breaking its frame snuffs both ---
+const twin = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world;
+  const cx = 20, Z = 12, y0 = 10;
+  S.player.pos.set(cx - 1 + 0.5, y0 - 1.62 + 0.5, Z + 2.5);
+  S.player.yaw = 0; S.player.pitch = 0; S.player.vel.set(0, 0, 0); S.player.syncCamera();
+  for (let x = cx - 2; x <= cx + 2; x++)
+    for (let y = y0 - 2; y <= y0 + 3; y++)
+      for (let z = Z; z <= Z + 3; z++) W.setBlock(x, y, z, null);
+  W.setBlock(cx - 1, y0, Z, "obsidian"); W.setBlock(cx - 1, y0 + 1, Z, "obsidian");
+  W.setBlock(cx + 1, y0, Z, "obsidian"); W.setBlock(cx + 1, y0 + 1, Z, "obsidian");
+  W.setBlock(cx, y0 - 1, Z, "obsidian"); W.setBlock(cx, y0 + 2, Z, "obsidian");
+  W.setBlock(cx - 1, y0 - 2, Z + 2, "stone");
+  S.portalCooldown = 99;
+  S.inv.fill(null); S.inv[0] = { id: "flint_and_steel", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  document.getElementById("btn-place").click();
+  const lit = W.get(cx, y0, Z) === "nether_portal";
+  const link = S.portalLinks[0];
+  const nw = S.netherWorld;
+  const twinCell = link ? link.neId.split(",").map(Number) : null;
+  const twinLit = !!(nw && twinCell && nw.get(twinCell[0], twinCell[1], twinCell[2]) === "nether_portal");
+  // Break the frame with a pickaxe.
+  S.inv.fill(null); S.inv[0] = { id: "pickaxe", count: 1 };
+  document.querySelectorAll("#hotbar .slot")[0].click();
+  document.getElementById("btn-mine").click();
+  const litAfter = W.get(cx, y0, Z) === "nether_portal";
+  const twinAfter = !!(nw && twinCell && nw.get(twinCell[0], twinCell[1], twinCell[2]) === "nether_portal");
+  return { lit, links: S.portalLinks.length + (litAfter ? 0 : 0), hadLink: !!link, twinLit, litAfter, twinAfter, linksAfter: S.portalLinks.length };
+});
+check("lighting a portal opens a fresh Nether twin", twin.lit && twin.hadLink && twin.twinLit);
+check("breaking the frame snuffs the overworld portal", twin.litAfter === false);
+check("...and its Nether twin vanishes too", twin.twinAfter === false && twin.linksAfter === 0);
 
 // ---- Report ----
 await browser.close();

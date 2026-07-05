@@ -116,7 +116,8 @@ window.Game = window.Game || {};
     brick:        { name: "Brick",       all: 0xa5503c, tool: "pickaxe", drop: "brick" },
     brown_brick:  { name: "Brown Brick", all: 0x6b4a32, tool: "pickaxe", drop: "brown_brick" },
     red_brick:    { name: "Red Brick",   all: 0xb33a2c, tool: "pickaxe", drop: "red_brick" },
-    obsidian:     { name: "Obsidian",    all: 0x241a36, top: 0x342a4a, tool: "pickaxe", drop: "obsidian" },
+    // Pitch-black obsidian flecked with little purple squares (see obsidianGeometry).
+    obsidian:     { name: "Obsidian",    all: 0x0b0b12, top: 0x0b0b12, speckle: 0x7a3fd6, tool: "pickaxe", drop: "obsidian" },
     coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal" },
     iron_ore:     { name: "Iron Ore",    all: 0xb9846a, base: 0x8a8a8d, tool: "pickaxe", drop: "iron_ore" },
     gold_ore:     { name: "Gold Ore",    all: 0xe6c34a, base: 0x8a8a8d, tool: "pickaxe", drop: "gold_ore" },
@@ -129,7 +130,7 @@ window.Game = window.Game || {};
     yellow_brick: { name: "Yellow Brick", all: 0xf2cf3b, top: 0xf7dd63, tool: "hand", drop: "yellow_brick" },
     // The Nether: a fiery red underworld you reach through a portal.
     netherrack:   { name: "Netherrack", all: 0x6e2b27, top: 0x7d322d, tool: "hand", drop: "netherrack" },
-    netherite_ore:{ name: "Netherite Ore", all: 0x8d7b66, base: 0x5a2622, tool: "pickaxe", drop: "netherite" },
+    netherite_ore:{ name: "Netherite Ore", all: 0x08080a, base: 0x2e2a2c, tool: "pickaxe", drop: "netherite" },
     nether_portal:{ name: "Nether Portal", all: 0x9b3fd6, top: 0xc77bf0, tool: "hand", drop: null, solid: false },
     lava:         { name: "Lava", all: 0xff6a1a, top: 0xffa83a, tool: "pickaxe", drop: null },
     glowstone:    { name: "Glowstone", all: 0xffe08a, top: 0xfff0bd, tool: "hand", drop: "glowstone" },
@@ -211,6 +212,12 @@ window.Game = window.Game || {};
   Object.keys(B).forEach((id) => {
     if (B[id].base !== undefined) { Game.ItemDefs[id].speckle = B[id].all; Game.ItemDefs[id].ore = true; }
   });
+  // Obsidian isn't an ore, but its icon still shows its purple speckles.
+  Object.keys(B).forEach((id) => {
+    if (B[id].speckle !== undefined && B[id].base === undefined) {
+      Game.ItemDefs[id].speckle = B[id].speckle; Game.ItemDefs[id].speckled = true;
+    }
+  });
   // The open door/window states are never carried around — drop their tidy form.
   ["window_open", "door_open", "door_window_open"].forEach((id) => { Game.ItemDefs[id].hidden = true; });
 
@@ -230,7 +237,7 @@ window.Game = window.Game || {};
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
   // Netherite: a rare metal you mine in the Nether and trade for the gold key.
-  Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x6a5a4a, swatchSide: 0x4a3f3a, placeable: false, desc: "A rare metal mined deep in the Nether. The third villager prizes it." };
+  Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x0a0a0c, swatchSide: 0x050506, placeable: false, desc: "A rare, pitch-black metal. Found in a Nether fortress chest, traded from a piglin, or (rarely) mined. The third villager prizes it." };
   // The three keys, each opening one locked house door.
   Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door of the second house." };
   Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
@@ -273,7 +280,7 @@ window.Game = window.Game || {};
     window: "Tap it to open and close the window.",
     door: "Tap it to open and close the door.",
     door_window: "A door with a window built in. Tap to open.",
-    obsidian: "The hardest, darkest block. Make it by pouring water on lava.",
+    obsidian: "The hardest, pitch-black block, flecked with purple. Make it by pouring water on lava.",
     emerald_ore: "Smelt it in a furnace to get an emerald.",
     gold_ore: "Smelt it in a furnace to get a gold ingot.",
     redstone_ore: "Smelt it in a furnace to get redstone.",
