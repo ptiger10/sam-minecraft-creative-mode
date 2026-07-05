@@ -70,14 +70,30 @@ html, body {
 }
 .bar-row {
   display: flex;
-  gap: 2px;
-  margin-bottom: 4px;
+  gap: 3px;
+  margin-bottom: 5px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
 }
-.pip {
-  font-size: 20px;
-  line-height: 1;
+/* Blocky vitals: each square is one "pip" (2 points). Filled squares glow in
+   the bar's colour with a chunky pixel highlight; empty ones sit dark. */
+.vcell {
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid rgba(0, 0, 0, 0.6);
+  background: #2a2a30;
+  image-rendering: pixelated;
 }
+.vcell.on {
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35),
+              inset 0 -4px 0 rgba(0, 0, 0, 0.30);
+}
+.vcell.hp.on   { background: #e23b2f; }
+.vcell.food.on { background: #d68a34; }
+.vcell.air.on  { background: #4fa6f0; }
+.vcell.hp   { background: #3a2222; }
+.vcell.food { background: #33291c; }
+.vcell.air  { background: #1f2c38; }
 
 /* ---------- Top buttons ---------- */
 #top-buttons {
