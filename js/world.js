@@ -1080,7 +1080,7 @@
   function makePiglin() {
     const group = new THREE.Group();
     const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const skin = 0xd98f86, snout = 0xcaa04a, dark = 0x2c211f, cloth = 0x6f4a2c;
+    const skin = 0xd98f86, snout = 0xcaa04a, cloth = 0x6f4a2c;
     // Legs
     [-0.16, 0.16].forEach((x) => {
       const l = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.44, 0.24), mat(cloth));
@@ -1100,9 +1100,9 @@
     // Golden snout
     const nose = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.14), mat(snout));
     nose.position.set(0, 1.2, 0.3); group.add(nose);
-    // Eyes + tusks
+    // Eyes (white) + tusks
     [-0.14, 0.14].forEach((x) => {
-      const e = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), mat(dark));
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.05), mat(0xffffff));
       e.position.set(x, 1.34, 0.26); group.add(e);
       const tusk = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.06), mat(0xf3efe2));
       tusk.position.set(x, 1.06, 0.28); group.add(tusk);
@@ -1125,7 +1125,7 @@
     const group = new THREE.Group();
     const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
     const bone = 0x33333a, boneDark = 0x27272c, skull = 0x1b1b20;
-    const eyeMat = () => new THREE.MeshLambertMaterial({ color: 0xff6a2a, emissive: 0xcc3a10 });
+    const eyeMat = () => new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x777777 });
     // Wide shoulder bar the three heads sit on.
     const yoke = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.18, 0.22), mat(boneDark));
     yoke.position.set(0, 0, 0); group.add(yoke);
