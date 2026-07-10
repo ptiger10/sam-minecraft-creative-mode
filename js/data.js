@@ -104,6 +104,7 @@ window.Game = window.Game || {};
     bed:          { name: "Bed",         top: 0xd23b52, side: 0xc0392b, bottom: 0x9c7a48, tool: "hand", drop: "bed" },
     ladder:       { name: "Ladder", top: 0x8a5a2c, side: 0xb8863f, bottom: 0x8a5a2c, tool: "hand", drop: "ladder" },
     stairs:       { name: "Stairs", top: 0xc79a55, side: 0xa57d3e, bottom: 0x8a652f, tool: "hand", drop: "stairs" },
+    brick_stairs: { name: "Brick Stairs", top: 0xc24632, side: 0xb33a2c, bottom: 0x8f2e22, tool: "pickaxe", drop: "brick_stairs" },
     fence:        { name: "Fence",  top: 0x8a5a2c, side: 0x6f5230, bottom: 0x6f5230, tool: "hand", drop: "fence" },
     torch:        { name: "Torch",  top: 0xffcc33, side: 0x8a5a2c, bottom: 0x6f5230, tool: "hand", drop: "torch", solid: false },
     glass:        { name: "Glass",  all: 0xbfe3ef, top: 0xd6f0f7, tool: "hand", drop: "glass" },
@@ -182,6 +183,11 @@ window.Game = window.Game || {};
   Game.BlockDefs = B;
   Game.isBlock = (id) => Object.prototype.hasOwnProperty.call(B, id);
   Game.isSolidBlock = (id) => !!(B[id] && B[id].solid);
+  // Blocks you can walk straight up without jumping (auto-step).
+  Game.isStairs = (id) => id === "stairs" || id === "brick_stairs";
+  // Masonry bricks that render with a running-bond brick pattern.
+  Game.BRICK_BLOCKS = ["brick", "red_brick", "brown_brick"];
+  Game.isBrickBlock = (id) => Game.BRICK_BLOCKS.indexOf(id) !== -1;
   // "Natural" blocks (trees, leaves, cactus, apples) that a tap always
   // grabs/punches — even when you're holding a block. Intent is read from what
   // you're pointing at, so a block in your hand never turns a "punch the tree"

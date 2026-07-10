@@ -128,23 +128,29 @@ const nether = await page.evaluate(() => {
   // Build the Nether the way enterNether does and inspect it.
   const nw = new Game.World(null, S.overworld.seed, "nether");
   nw.generateNether();
-  let ore = 0, ghasts = 0, lava = 0, piglins = 0, chests = 0;
+  let ore = 0, ghasts = 0, lava = 0, piglins = 0, chests = 0, stairs = 0;
   for (const [, id] of nw.blocks) {
     if (id === "netherite_ore") ore++;
     else if (id === "lava") lava++;
     else if (id === "chest") chests++;
+    else if (id === "brick_stairs") stairs++;
   }
   for (const a of nw.animals) {
     if (a.userData.kind === "ghast") ghasts++;
     else if (a.userData.kind === "piglin") piglins++;
   }
-  return { ore, ghasts, lava, piglins, chests,
+  const fc = (nw.fortressChests || [])[0];
+  // Is the chest sitting up on the second floor (well above the ground floor)?
+  const chestUpstairs = !!fc && fc.y >= 6;
+  return { ore, ghasts, lava, piglins, chests, stairs, chestUpstairs,
     fortressChests: (nw.fortressChests || []).length,
     oreDrop: Game.BlockDefs.netherite_ore.drop, isNether: nw.isNether };
 });
 check("netherite ore is now rare in the Nether", nether.ore >= 0 && nether.ore < 30);
 check("mining netherite ore drops netherite", nether.oreDrop === "netherite");
 check("a Nether fortress holds a chest", nether.fortressChests >= 1 && nether.chests >= 1);
+check("the fortress has brick stairs", nether.stairs >= 4);
+check("the loot chest sits on the second floor", nether.chestUpstairs);
 check("piglins wander the Nether", nether.piglins >= 1);
 check("ghasts float in the Nether", nether.ghasts >= 1);
 check("the Nether has lava", nether.lava >= 1);
@@ -370,6 +376,103 @@ const twin = await page.evaluate(() => {
 check("lighting a portal opens a fresh Nether twin", twin.lit && twin.hadLink && twin.twinLit);
 check("breaking the frame snuffs the overworld portal", twin.litAfter === false);
 check("...and its Nether twin vanishes too", twin.twinAfter === false && twin.linksAfter === 0);
+
+// --- Wither skeletons guard the fortress and fling skulls ---
+const wskel = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  const fc = nw.fortressChests[0];
+  let count = 0, nearFort = 0, heads = 0;
+  for (const a of nw.animals) {
+    if (a.userData.kind !== "wither") continue;
+    count++;
+    heads = a.userData.heads;
+    if (Math.hypot(a.position.x - fc.x, a.position.z - fc.z) < 12) nearFort++;
+  }
+  return { count, nearFort, heads, tracksSkulls: Array.isArray(nw.skulls) };
+});
+check("exactly one Wither lives in the Nether", wskel.count === 1);
+check("the Wither has three heads", wskel.heads === 3);
+check("the Wither guards the fortress", wskel.nearFort === 1);
+check("the Nether tracks flying skulls", wskel.tracksSkulls);
+
+const fling = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  nw.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const ws = nw.animals.find((a) => a.userData.kind === "wither");
+  p.pos.set(ws.position.x, ws.position.y - Game.CONST.EYE, ws.position.z + 1); p.syncCamera();
+  ws.userData.skullTimer = 0.01;
+  let spawned = 0; const real = nw.spawnSkull.bind(nw);
+  nw.spawnSkull = (f, d) => { spawned++; real(f, d); };
+  const dirs = new Set();
+  for (let i = 0; i < 40; i++) { ws.userData.skullTimer = 0.01; nw.updateWither(ws, 0.05, p.eyePosition()); }
+  nw.skulls.forEach((sk) => dirs.add(Math.round(Math.atan2(sk.vel.z, sk.vel.x) * 4)));
+  return { spawned, distinctDirs: dirs.size };
+});
+check("the Wither flings skulls", fling.spawned >= 1);
+check("...in varied (random) directions", fling.distinctDirs >= 2);
+
+// --- A skull hit inflicts the wither effect: ~2 hearts over 6s, then it lifts ---
+const wither = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  nw.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const savedWorld = p.world;
+  p.world = nw;
+  const sp = nw.spawn;
+  p.pos.set(sp.x, sp.y, sp.z); p.vel.set(0, 0, 0); p.onGround = true;
+  p.hp = Game.CONST.MAX_HP; p.food = 10; p.dead = false; p.wither = 0; p.witherDmgTimer = 0;
+  p.fallPeak = p.pos.y; p.syncCamera();
+  const eye = p.eyePosition();
+  nw.spawnSkull({ x: eye.x + 0.4, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 20; i++) nw.updateSkulls(0.03, p);
+  const witheredNow = p.wither;
+  const startHp = p.hp;
+  for (let i = 0; i < 135; i++) p.update(0.05, { forward: false }); // ~6.75s
+  const res = { witheredNow, startHp, endHp: p.hp, witherEnd: p.wither };
+  p.world = savedWorld;
+  return res;
+});
+check("a wither skull inflicts the wither effect", wither.witheredNow > 0);
+check("wither drains two hearts over its duration", wither.startHp - wither.endHp === 4);
+check("the wither effect wears off after 6s", wither.witherEnd === 0);
+
+// --- The screen tints while withered and clears when it lifts (live DOM) ---
+const tint = await page.evaluate(async () => {
+  const S = window.Game.S;
+  S.player.hp = window.Game.CONST.MAX_HP; S.player.dead = false;
+  S.player.applyWither();
+  await new Promise((r) => setTimeout(r, 150));
+  const on = document.getElementById("wither-overlay").classList.contains("on");
+  S.player.wither = 0;
+  await new Promise((r) => setTimeout(r, 150));
+  const off = !document.getElementById("wither-overlay").classList.contains("on");
+  return { on, off };
+});
+check("the screen tints while withered", tint.on);
+check("the tint lifts when the wither wears off", tint.off);
+
+// --- The fortress loot chest is stocked with the good stuff ---
+const loot = await page.evaluate(() => {
+  const S = window.Game.S;
+  const nw = S.netherWorld;                 // built earlier when we entered the Nether
+  const c = nw && nw.fortressChests && nw.fortressChests[0];
+  if (!c) return { ok: false };
+  const arr = S.chests[c.x + "," + c.y + "," + c.z] || [];
+  const has = (id) => arr.some((s) => s && s.id === id);
+  const goodBlocks = ["glowstone", "obsidian", "gold_ore"].filter(has).length;
+  return { ok: true, netherite: has("netherite"), diamond: has("diamond"),
+    emerald: has("emerald"), goodBlocks };
+});
+check("the fortress chest is stocked with netherite", loot.ok && loot.netherite);
+check("...and diamonds and emeralds", loot.diamond && loot.emerald);
+check("...and good building blocks", loot.goodBlocks >= 2);
 
 // ---- Report ----
 await browser.close();

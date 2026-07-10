@@ -103,8 +103,15 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     until you leave and come back). Down there a **🐷 piglin** snuffles around
     the floor: **trade it a gold ingot** and it hands back a random **💎 diamond,
     💚 emerald, or 🖤 netherite**. **Netherite** is now **pitch black** and very
-    **rare** to mine — the surest supply is the **chest inside the brick Nether
-    fortress**, or the piglin.
+    **rare** to mine — the surest supply is the **loot chest in the brick Nether
+    fortress**, or the piglin. That fortress is a **two-storey keep**: climb the
+    **brick stairs** to the **second floor**, where the chest holds **netherite,
+    diamonds, emeralds and good building blocks** (glowstone, obsidian, gold).
+    But it's **guarded by 💀 the Wither**
+    — a floating, three-headed, legless menace that **flings wither skulls in
+    random directions**. If a skull hits you, you get the **wither effect**: the
+    screen darkens and you **lose a heart every few seconds for 6 seconds**
+    before it wears off.
   - The **third villager** wants **netherite** in exchange for the **last key**,
     which opens the **fourth house**: a **scrolling Hall of Fame** honouring
     **Sam Fort** and **Dave Fort** for inventing the game. 🏆
@@ -114,7 +121,8 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 💧 **Ponds and watering holes** of water with **sandy shores** dot the
   surface — every world gets a few (even the desert gets an **oasis** or two) —
   plus **clay** (grey, brown and red) to dig up near the water and underground,
-  which you can smelt into bricks.
+  which you can smelt into **bricks** — each laid out with a proper
+  **running-bond brick pattern**.
 - ☁️ **Clouds** drift high across the sky in puffy white patches. They're just
   fluffy sky, so **you can't mine them** — try and the game gently says so.
 - 🎋 **Sugar cane** grows along the water's edge. Punch it to collect it, then
