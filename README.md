@@ -104,7 +104,11 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     the floor: **trade it a gold ingot** and it hands back a random **💎 diamond,
     💚 emerald, or 🖤 netherite**. **Netherite** is now **pitch black** and very
     **rare** to mine — the surest supply is the **chest inside the brick Nether
-    fortress**, or the piglin.
+    fortress**, or the piglin. But that fortress is **guarded by 💀 wither
+    skeletons** — tall charcoal-boned brutes that **fling wither skulls in random
+    directions**. If a skull hits you, you get the **wither effect**: the screen
+    darkens and you **lose a heart every few seconds for 6 seconds** before it
+    wears off.
   - The **third villager** wants **netherite** in exchange for the **last key**,
     which opens the **fourth house**: a **scrolling Hall of Fame** honouring
     **Sam Fort** and **Dave Fort** for inventing the game. 🏆

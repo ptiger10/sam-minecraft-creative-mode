@@ -26,6 +26,8 @@
     this.regenTimer = 0;
     this.air = C.MAX_AIR;        // breath remaining while underwater
     this.drownTimer = 0;
+    this.wither = 0;             // seconds of wither effect remaining
+    this.witherDmgTimer = 0;     // counts up to the next wither heart loss
     this.dead = false;
 
     camera.rotation.order = "YXZ";
@@ -260,6 +262,15 @@
       this.air = Math.min(C.MAX_AIR, this.air + dt * 4);
       this.drownTimer = 0;
     }
+
+    // Wither: a wither skull's poison drains a heart every ~3 seconds until it
+    // wears off after 6 seconds. The screen tint is driven from the game loop.
+    if (this.wither > 0) {
+      this.wither -= dt;
+      this.witherDmgTimer += dt;
+      if (this.witherDmgTimer >= 3) { this.witherDmgTimer -= 3; this.damage(2, "withered away"); }
+      if (this.wither <= 0) { this.wither = 0; this.witherDmgTimer = 0; }
+    }
   };
 
   Player.prototype.damage = function (amount, reason) {
@@ -285,9 +296,18 @@
     this.starveTimer = 0;
     this.air = C.MAX_AIR;
     this.drownTimer = 0;
+    this.wither = 0;
+    this.witherDmgTimer = 0;
     this.dead = false;
     this.fallPeak = this.pos.y;
     this.syncCamera();
+  };
+
+  // Start (or refresh) the wither effect: it lasts 6 seconds and drains one
+  // heart (2 HP) about every 3 seconds. Getting hit again tops the timer back up.
+  Player.prototype.applyWither = function () {
+    if (this.wither <= 0) this.witherDmgTimer = 0; // fresh case: start the clock
+    this.wither = 6;
   };
 
   Game.Player = Player;

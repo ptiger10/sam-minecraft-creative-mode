@@ -769,8 +769,10 @@
     }
     const animal = aimedAnimal(blockDist);
     if (!animal) return false;
-    if (animal.userData.kind === "villager") openTrade(animal);
-    else if (animal.userData.kind === "piglin") tradePiglin(animal);
+    const kind = animal.userData.kind;
+    if (kind === "villager") openTrade(animal);
+    else if (kind === "piglin") tradePiglin(animal);
+    else if (kind === "wither_skeleton") toast("💀 A wither skeleton! Keep your distance from its skulls.");
     else toggleRide(animal);
     S.swing = 0.18;
     return true;
@@ -1366,6 +1368,21 @@
     }
   }
 
+  // Darken the screen while the wither effect is draining the player, easing the
+  // tint away over the effect's final second so it fades out cleanly.
+  function updateWitherTint() {
+    const ov = $("wither-overlay");
+    if (!ov) return;
+    const w = S.player.wither || 0;
+    if (w > 0) {
+      ov.classList.add("on");
+      ov.style.opacity = String(Math.min(1, w)); // fade out over the last second
+    } else if (ov.classList.contains("on")) {
+      ov.classList.remove("on");
+      ov.style.opacity = "";
+    }
+  }
+
   // Draw a vitals bar as a row of little blocky squares (each square = 2 points),
   // filled ones lit in the bar's colour and the rest a dark empty cell.
   function drawPips(row, value, max, cls) {
@@ -1396,6 +1413,7 @@
       handlePortal(dt);
       updateTargeting();
       renderVitals();
+      updateWitherTint();
 
       // hand swing / bob
       if (S.swing > 0) S.swing = Math.max(0, S.swing - dt);
@@ -1470,6 +1488,8 @@
   function onDeath() {
     S.riding = null;
     S.paused = true;
+    S.player.wither = 0;            // clear any lingering wither so the tint lifts
+    updateWitherTint();
     $("death-reason").textContent = "You " + (S.player.lastDamage || "ran out of health") + ".";
     document.body.classList.add("menu-open");
     showPanel("death-panel");

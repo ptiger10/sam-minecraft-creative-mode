@@ -371,6 +371,85 @@ check("lighting a portal opens a fresh Nether twin", twin.lit && twin.hadLink &&
 check("breaking the frame snuffs the overworld portal", twin.litAfter === false);
 check("...and its Nether twin vanishes too", twin.twinAfter === false && twin.linksAfter === 0);
 
+// --- Wither skeletons guard the fortress and fling skulls ---
+const wskel = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  const fc = nw.fortressChests[0];
+  let count = 0, nearFort = 0;
+  for (const a of nw.animals) {
+    if (a.userData.kind !== "wither_skeleton") continue;
+    count++;
+    if (Math.hypot(a.position.x - fc.x, a.position.z - fc.z) < 12) nearFort++;
+  }
+  return { count, nearFort, tracksSkulls: Array.isArray(nw.skulls) };
+});
+check("wither skeletons live in the Nether", wskel.count >= 1);
+check("...near the fortress", wskel.nearFort >= 1);
+check("the Nether tracks flying skulls", wskel.tracksSkulls);
+
+const fling = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  nw.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const ws = nw.animals.find((a) => a.userData.kind === "wither_skeleton");
+  p.pos.set(ws.position.x, 3 - Game.CONST.EYE, ws.position.z + 1); p.syncCamera();
+  ws.userData.skullTimer = 0.01;
+  let spawned = 0; const real = nw.spawnSkull.bind(nw);
+  nw.spawnSkull = (f, d) => { spawned++; real(f, d); };
+  const dirs = new Set();
+  for (let i = 0; i < 40; i++) { ws.userData.skullTimer = 0.01; nw.updateWitherSkeleton(ws, 0.05, p.eyePosition()); }
+  nw.skulls.forEach((sk) => dirs.add(Math.round(Math.atan2(sk.vel.z, sk.vel.x) * 4)));
+  return { spawned, distinctDirs: dirs.size };
+});
+check("a wither skeleton flings skulls", fling.spawned >= 1);
+check("...in varied (random) directions", fling.distinctDirs >= 2);
+
+// --- A skull hit inflicts the wither effect: ~2 hearts over 6s, then it lifts ---
+const wither = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const nw = new Game.World(null, S.overworld.seed, "nether");
+  nw.generateNether();
+  nw.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const savedWorld = p.world;
+  p.world = nw;
+  const sp = nw.spawn;
+  p.pos.set(sp.x, sp.y, sp.z); p.vel.set(0, 0, 0); p.onGround = true;
+  p.hp = Game.CONST.MAX_HP; p.food = 10; p.dead = false; p.wither = 0; p.witherDmgTimer = 0;
+  p.fallPeak = p.pos.y; p.syncCamera();
+  const eye = p.eyePosition();
+  nw.spawnSkull({ x: eye.x + 0.4, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 20; i++) nw.updateSkulls(0.03, p);
+  const witheredNow = p.wither;
+  const startHp = p.hp;
+  for (let i = 0; i < 135; i++) p.update(0.05, { forward: false }); // ~6.75s
+  const res = { witheredNow, startHp, endHp: p.hp, witherEnd: p.wither };
+  p.world = savedWorld;
+  return res;
+});
+check("a wither skull inflicts the wither effect", wither.witheredNow > 0);
+check("wither drains two hearts over its duration", wither.startHp - wither.endHp === 4);
+check("the wither effect wears off after 6s", wither.witherEnd === 0);
+
+// --- The screen tints while withered and clears when it lifts (live DOM) ---
+const tint = await page.evaluate(async () => {
+  const S = window.Game.S;
+  S.player.hp = window.Game.CONST.MAX_HP; S.player.dead = false;
+  S.player.applyWither();
+  await new Promise((r) => setTimeout(r, 150));
+  const on = document.getElementById("wither-overlay").classList.contains("on");
+  S.player.wither = 0;
+  await new Promise((r) => setTimeout(r, 150));
+  const off = !document.getElementById("wither-overlay").classList.contains("on");
+  return { on, off };
+});
+check("the screen tints while withered", tint.on);
+check("the tint lifts when the wither wears off", tint.off);
+
 // ---- Report ----
 await browser.close();
 server.close();

@@ -775,6 +775,32 @@ body.menu-open #action-controls,
 body.menu-open #hand-display,
 body.menu-open #crosshair { display: none; }
 
+/* ---------- Wither effect tint ---------- */
+/* A dark, sickly grey-green wash over the whole screen while the wither effect
+   is active, with a heavy vignette so the edges close in. Hidden by default;
+   the game loop adds .on (and fades opacity out as the effect wears off). */
+#wither-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background:
+    radial-gradient(120% 120% at 50% 50%,
+      rgba(24, 10, 30, 0) 32%,
+      rgba(18, 8, 24, 0.55) 78%,
+      rgba(8, 4, 12, 0.82) 100%),
+    rgba(38, 30, 26, 0.34);
+  mix-blend-mode: multiply;
+  animation: wither-pulse 1.6s ease-in-out infinite;
+}
+#wither-overlay.on { opacity: 1; }
+@keyframes wither-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(0.82); }
+}
+
 /* ---------- Portrait orientation ---------- */
 /* The game plays in both landscape and portrait. In portrait the screen is
    narrow, so shrink the hotbar/controls a touch and stack the action buttons in
