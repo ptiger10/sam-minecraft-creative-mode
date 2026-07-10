@@ -887,9 +887,18 @@
     (nw.fortressChests || []).forEach((c) => {
       const key = c.x + "," + c.y + "," + c.z;
       if (key in S.chests) return;
+      // Loot: netherite, gems, and a spread of good blocks to build with.
+      const loot = [
+        { id: "netherite", count: 3 },
+        { id: "diamond", count: 5 },
+        { id: "emerald", count: 5 },
+        { id: "glowstone", count: 12 },   // good light block
+        { id: "obsidian", count: 8 },     // good sturdy block
+        { id: "gold_ore", count: 6 },     // good shiny block
+        { id: "gold_ingot", count: 4 }    // some gold to trade with the piglin
+      ];
       const arr = new Array(CHEST_SIZE).fill(null);
-      arr[0] = { id: "netherite", count: 3 };
-      arr[1] = { id: "gold_ingot", count: 4 }; // some gold to trade with the piglin
+      loot.forEach((it, i) => { arr[i] = it; });
       S.chests[key] = arr;
     });
   }

@@ -284,13 +284,49 @@
   // Stairs: a full-height back half with a lower front step, so it clearly
   // reads as something you walk up. (Collision is a normal cube — you auto-step
   // onto it — but the shape shows the slope.)
-  function stairsGeometry() {
-    const def = Game.BlockDefs.stairs;
+  function stairsGeometry(id) {
+    const def = Game.BlockDefs[id] || Game.BlockDefs.stairs;
     const lower = new THREE.Color(def.side), upper = new THREE.Color(def.top);
     return mergeColoredBoxes([
       { g: Box(1, 0.5, 1), x: 0, y: -0.25, z: 0, c: lower },   // bottom step (front)
       { g: Box(1, 0.5, 0.5), x: 0, y: 0.25, z: -0.25, c: upper } // upper step (back)
     ]);
+  }
+
+  // Masonry bricks rendered with a running-bond brick pattern: courses of bricks
+  // separated by darker mortar joints, the vertical joints offset every other
+  // row. The cube is subdivided and coloured per-triangle (non-indexed) so the
+  // mortar reads as crisp little lines rather than a smear.
+  function brickGeometry(id) {
+    const def = Game.BlockDefs[id];
+    const seg = 8;                              // 8x8 cells per face
+    const g = new THREE.BoxGeometry(1, 1, 1, seg, seg, seg).toNonIndexed();
+    const pos = g.attributes.position, nor = g.attributes.normal;
+    const brick = new THREE.Color(def.all);
+    const mortar = new THREE.Color(Game.mix(def.all, 0x000000, 0.42)); // darker joints
+    const colors = new Float32Array(pos.count * 3);
+    const ROW = 4;      // a brick course is 4 cells tall  -> 2 courses per block
+    const COL = 4;      // a brick is 4 cells wide         -> 2 bricks per course
+    for (let t = 0; t < pos.count; t += 3) {
+      // Triangle centroid, mapped to face-local (u, v) in 0..1.
+      let cx = 0, cy = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { cx += pos.getX(t + k); cy += pos.getY(t + k); cz += pos.getZ(t + k); }
+      cx = cx / 3 + 0.5; cy = cy / 3 + 0.5; cz = cz / 3 + 0.5;
+      const nx = nor.getX(t), ny = nor.getY(t);
+      let u, v;
+      if (Math.abs(ny) > 0.5) { u = cx; v = cz; }        // top / bottom
+      else if (Math.abs(nx) > 0.5) { u = cz; v = cy; }   // +/-x sides
+      else { u = cx; v = cy; }                            // +/-z sides
+      const vc = Math.floor(v * seg + 1e-4);             // vertical cell 0..7
+      const course = Math.floor(vc / ROW);               // which brick course
+      const off = (course % 2) * (COL / 2);              // running-bond offset
+      const uc = (Math.floor(u * seg + 1e-4) + off) % COL;
+      const isMortar = (vc % ROW === 0) || (uc === 0);   // bottom joint + left joint
+      const c = isMortar ? mortar : brick;
+      for (let k = 0; k < 3; k++) { colors[(t + k) * 3] = c.r; colors[(t + k) * 3 + 1] = c.g; colors[(t + k) * 3 + 2] = c.b; }
+    }
+    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    return g;
   }
 
   // A locked door: a plain closed door with a coloured lock plate and keyhole,
@@ -334,7 +370,8 @@
     if (id === "credits_block") return (geomCache[id] = creditsBlockGeometry());
     if (id === "obsidian") return (geomCache[id] = obsidianGeometry());
     if (Game.LOCKED && Game.LOCKED[id]) return (geomCache[id] = lockedDoorGeometry(Game.LOCKED[id]));
-    if (id === "stairs") return (geomCache[id] = stairsGeometry());
+    if (id === "stairs" || id === "brick_stairs") return (geomCache[id] = stairsGeometry(id));
+    if (Game.isBrickBlock && Game.isBrickBlock(id)) return (geomCache[id] = brickGeometry(id));
     if (id === "furnace") return (geomCache[id] = furnaceGeometry());
     if (id === "crafting_table") return (geomCache[id] = craftingTableGeometry());
     if (id === "watermelon") return (geomCache[id] = watermelonGeometry());
@@ -1723,34 +1760,73 @@
     this.animals.push(wither);
   };
 
-  // A small Nether fortress: a red-brick room on the floor, lit by glowstone,
-  // with a doorway and a chest of netherite waiting inside. The chest position
-  // is recorded on fortressChests so the game can stock it on first visit.
+  // A two-storey Nether fortress: a red-brick keep with a ground-floor doorway,
+  // a flight of BRICK STAIRS up one side to a second-floor deck, and the loot
+  // chest waiting up top. Lit by glowstone on both floors. The chest position is
+  // recorded on fortressChests so the game can stock it on first visit.
   World.prototype.buildNetherFortress = function (cx, cz) {
-    const FLOOR = 2, base = FLOOR + 1, R = 3, top = base + 3;
-    const wall = "red_brick", floor = "brown_brick";
+    const FLOOR = 2, R = 3;
+    const base = FLOOR + 1;      // 3  — ground-floor walk level
+    const groundTop = base + 3;  // 6  — top of the ground-floor walls
+    const deckY = base + 4;      // 7  — second-floor deck blocks (walk on top at 8)
+    const upTop = deckY + 3;     // 10 — top of the upper walls
+    const roofY = upTop + 1;     // 11 — roof
+    const wall = "red_brick", floorMat = "brown_brick", deckMat = "brown_brick";
+    const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
+
+    // 1) Clear the whole volume and lay a solid ground floor.
     for (let dx = -R; dx <= R; dx++) {
       for (let dz = -R; dz <= R; dz++) {
         const x = cx + dx, z = cz + dz;
-        if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
-        // Clear the interior first so nothing generated blocks the room.
-        for (let y = base; y <= top + 1; y++) this.blocks.delete(World.key(x, y, z));
-        this.blocks.set(World.key(x, FLOOR, z), floor);           // solid floor
-        const edge = Math.max(Math.abs(dx), Math.abs(dz)) === R;
-        if (edge) {
-          // Leave a 1-wide doorway on the -z side.
-          if (!(dz === -R && dx === 0)) {
-            for (let y = base; y <= top; y++) this.blocks.set(World.key(x, y, z), wall);
-          }
-        }
-        this.blocks.set(World.key(x, top + 1, z), wall);           // roof
+        if (!inBounds(x, z)) continue;
+        for (let y = base; y <= roofY + 1; y++) this.blocks.delete(World.key(x, y, z));
+        this.blocks.set(World.key(x, FLOOR, z), floorMat);
       }
     }
-    // Glowstone lamps in two corners so the vault isn't pitch dark.
-    this.blocks.set(World.key(cx - R + 1, top, cz - R + 1), "glowstone");
-    this.blocks.set(World.key(cx + R - 1, top, cz + R - 1), "glowstone");
-    // The treasure chest against the back wall.
-    const chestCell = { x: cx, y: base, z: cz + R - 1 };
+
+    // 2) Perimeter walls (both storeys) with a 2-tall doorway on the -z side.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== R) continue; // edge cells only
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        for (let y = base; y <= upTop; y++) {
+          if (dz === -R && dx === 0 && y <= base + 1) continue;   // doorway
+          this.blocks.set(World.key(x, y, z), wall);
+        }
+      }
+    }
+
+    // 3) Flat roof.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (inBounds(x, z)) this.blocks.set(World.key(x, roofY, z), wall);
+      }
+    }
+
+    // 4) Second-floor deck across the interior, leaving the +x column open as
+    //    the stairwell.
+    const IN = R - 1; // interior half-width (2)
+    for (let dx = -IN; dx <= IN; dx++) {
+      for (let dz = -IN; dz <= IN; dz++) {
+        if (dx === IN) continue; // stairwell column stays open
+        this.blocks.set(World.key(cx + dx, deckY, cz + dz), deckMat);
+      }
+    }
+
+    // 5) Brick stairs rising along the +x wall from the ground to the deck.
+    for (let i = 0; i <= 4; i++) {
+      this.blocks.set(World.key(cx + IN, base + i, cz - IN + i), "brick_stairs");
+    }
+
+    // 6) Glowstone lamps: one in the deck (lights the ground floor from its
+    //    ceiling) and one hung under the roof for the upper floor.
+    this.blocks.set(World.key(cx - IN + 1, deckY, cz - IN + 1), "glowstone");
+    this.blocks.set(World.key(cx, upTop, cz), "glowstone");
+
+    // 7) The treasure chest sits up on the second-floor deck.
+    const chestCell = { x: cx - IN, y: deckY + 1, z: cz + IN };
     this.blocks.set(World.key(chestCell.x, chestCell.y, chestCell.z), "chest");
     this.fortressChests.push(chestCell);
   };

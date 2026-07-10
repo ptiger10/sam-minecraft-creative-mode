@@ -84,7 +84,7 @@
     const y = Math.floor(this.pos.y);
     for (let cx = Math.floor(x - h); cx <= Math.floor(x + h); cx++)
       for (let cz = Math.floor(z - h); cz <= Math.floor(z + h); cz++)
-        if (this.world.get(cx, y, cz) === "stairs") return true;
+        if (Game.isStairs(this.world.get(cx, y, cz))) return true;
     return false;
   };
 

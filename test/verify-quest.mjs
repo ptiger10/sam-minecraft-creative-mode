@@ -128,23 +128,29 @@ const nether = await page.evaluate(() => {
   // Build the Nether the way enterNether does and inspect it.
   const nw = new Game.World(null, S.overworld.seed, "nether");
   nw.generateNether();
-  let ore = 0, ghasts = 0, lava = 0, piglins = 0, chests = 0;
+  let ore = 0, ghasts = 0, lava = 0, piglins = 0, chests = 0, stairs = 0;
   for (const [, id] of nw.blocks) {
     if (id === "netherite_ore") ore++;
     else if (id === "lava") lava++;
     else if (id === "chest") chests++;
+    else if (id === "brick_stairs") stairs++;
   }
   for (const a of nw.animals) {
     if (a.userData.kind === "ghast") ghasts++;
     else if (a.userData.kind === "piglin") piglins++;
   }
-  return { ore, ghasts, lava, piglins, chests,
+  const fc = (nw.fortressChests || [])[0];
+  // Is the chest sitting up on the second floor (well above the ground floor)?
+  const chestUpstairs = !!fc && fc.y >= 6;
+  return { ore, ghasts, lava, piglins, chests, stairs, chestUpstairs,
     fortressChests: (nw.fortressChests || []).length,
     oreDrop: Game.BlockDefs.netherite_ore.drop, isNether: nw.isNether };
 });
 check("netherite ore is now rare in the Nether", nether.ore >= 0 && nether.ore < 30);
 check("mining netherite ore drops netherite", nether.oreDrop === "netherite");
 check("a Nether fortress holds a chest", nether.fortressChests >= 1 && nether.chests >= 1);
+check("the fortress has brick stairs", nether.stairs >= 4);
+check("the loot chest sits on the second floor", nether.chestUpstairs);
 check("piglins wander the Nether", nether.piglins >= 1);
 check("ghasts float in the Nether", nether.ghasts >= 1);
 check("the Nether has lava", nether.lava >= 1);
@@ -451,6 +457,22 @@ const tint = await page.evaluate(async () => {
 });
 check("the screen tints while withered", tint.on);
 check("the tint lifts when the wither wears off", tint.off);
+
+// --- The fortress loot chest is stocked with the good stuff ---
+const loot = await page.evaluate(() => {
+  const S = window.Game.S;
+  const nw = S.netherWorld;                 // built earlier when we entered the Nether
+  const c = nw && nw.fortressChests && nw.fortressChests[0];
+  if (!c) return { ok: false };
+  const arr = S.chests[c.x + "," + c.y + "," + c.z] || [];
+  const has = (id) => arr.some((s) => s && s.id === id);
+  const goodBlocks = ["glowstone", "obsidian", "gold_ore"].filter(has).length;
+  return { ok: true, netherite: has("netherite"), diamond: has("diamond"),
+    emerald: has("emerald"), goodBlocks };
+});
+check("the fortress chest is stocked with netherite", loot.ok && loot.netherite);
+check("...and diamonds and emeralds", loot.diamond && loot.emerald);
+check("...and good building blocks", loot.goodBlocks >= 2);
 
 // ---- Report ----
 await browser.close();
