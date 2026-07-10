@@ -772,7 +772,7 @@
     const kind = animal.userData.kind;
     if (kind === "villager") openTrade(animal);
     else if (kind === "piglin") tradePiglin(animal);
-    else if (kind === "wither_skeleton") toast("💀 A wither skeleton! Keep your distance from its skulls.");
+    else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
     else toggleRide(animal);
     S.swing = 0.18;
     return true;

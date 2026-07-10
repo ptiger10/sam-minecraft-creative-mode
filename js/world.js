@@ -1117,42 +1117,44 @@
   }
   World.makePiglin = makePiglin;
 
-  // A wither skeleton: a tall, charcoal-boned guard with a blackened skull and
-  // faint glowing eyes. It stalks the floor near the Nether fortress and flings
-  // wither skulls in random directions.
-  function makeWitherSkeleton() {
+  // The Wither: a floating charcoal-boned menace with THREE skulls and NO legs.
+  // A ribbed spine hangs beneath a wide shoulder bar that carries the three
+  // heads; it drifts above the Nether floor near the fortress and flings wither
+  // skulls in random directions. The group is centred on the shoulder bar.
+  function makeWither() {
     const group = new THREE.Group();
     const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const bone = 0x33333a, boneDark = 0x27272c, skull = 0x1b1b20, eye = 0xff6a2a;
-    // Legs
-    [-0.13, 0.13].forEach((x) => {
-      const l = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, 0.14), mat(boneDark));
-      l.position.set(x, 0.36, 0); group.add(l);
+    const bone = 0x33333a, boneDark = 0x27272c, skull = 0x1b1b20;
+    const eyeMat = () => new THREE.MeshLambertMaterial({ color: 0xff6a2a, emissive: 0xcc3a10 });
+    // Wide shoulder bar the three heads sit on.
+    const yoke = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.18, 0.22), mat(boneDark));
+    yoke.position.set(0, 0, 0); group.add(yoke);
+    // A ribbed spine tail hanging below (no legs — it floats).
+    for (let i = 0; i < 4; i++) {
+      const w = 0.3 - i * 0.05;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, w), mat(i % 2 ? bone : boneDark));
+      seg.position.set(0, -0.28 - i * 0.26, 0); group.add(seg);
+    }
+    // Three skulls: a bigger central one, two smaller flanking ones.
+    const heads = [
+      { x: 0, y: 0.5, s: 0.5 },   // centre (highest, biggest)
+      { x: -0.5, y: 0.28, s: 0.4 }, // left
+      { x: 0.5, y: 0.28, s: 0.4 }   // right
+    ];
+    heads.forEach((h) => {
+      const head = new THREE.Mesh(new THREE.BoxGeometry(h.s, h.s * 0.92, h.s * 0.92), mat(skull));
+      head.position.set(h.x, h.y, 0); group.add(head);
+      // A pair of glowing eyes on the front (+z) face of each skull.
+      [-0.11 * (h.s / 0.5), 0.11 * (h.s / 0.5)].forEach((ex) => {
+        const e = new THREE.Mesh(new THREE.BoxGeometry(0.09 * (h.s / 0.5), 0.09 * (h.s / 0.5), 0.05), eyeMat());
+        e.position.set(h.x + ex, h.y + 0.02, h.s * 0.46 + 0.01); group.add(e);
+      });
     });
-    // Spine / ribcage
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.72, 0.2), mat(bone));
-    body.position.set(0, 1.06, 0); group.add(body);
-    // Shoulders
-    const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.14, 0.18), mat(boneDark));
-    yoke.position.set(0, 1.4, 0); group.add(yoke);
-    // Arms
-    [-0.34, 0.34].forEach((x) => {
-      const a = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.68, 0.12), mat(bone));
-      a.position.set(x, 1.04, 0.02); group.add(a);
-    });
-    // Skull
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.42), mat(skull));
-    head.position.set(0, 1.66, 0); group.add(head);
-    // Glowing eyes
-    [-0.1, 0.1].forEach((x) => {
-      const e = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.05),
-        new THREE.MeshLambertMaterial({ color: eye, emissive: 0xcc3a10 }));
-      e.position.set(x, 1.68, 0.22); group.add(e);
-    });
-    group.userData.kind = "wither_skeleton";
+    group.userData.kind = "wither";
+    group.userData.heads = 3; // three skulls, and no legs
     return group;
   }
-  World.makeWitherSkeleton = makeWitherSkeleton;
+  World.makeWither = makeWither;
 
   // Fill a single column from fromY..toY (inclusive) with one block id.
   World.prototype.fillColumn = function (x, z, fromY, toY, id) {
@@ -1700,26 +1702,25 @@
       this.animals.push(pg);
     }
 
-    // Wither skeletons stand guard around the fortress, flinging wither skulls.
-    const guardSpots = [[-5, 0], [5, 1], [0, 5], [3, -4]];
-    for (let i = 0; i < 3; i++) {
-      const ws = makeWitherSkeleton();
-      const off = guardSpots[i % guardSpots.length];
-      let gx = fortX + off[0], gz = fortZ + off[1], tries = 0;
-      while (tries < 30 && (gx < 3 || gz < 3 || gx >= SZ - 3 || gz >= SZ - 3 ||
-             this.get(gx, FLOOR, gz) === "lava" || this.solidAt(gx, FLOOR + 1, gz))) {
-        gx = fortX + Math.floor((rng() - 0.5) * 12);
-        gz = fortZ + Math.floor((rng() - 0.5) * 12);
-        tries++;
-      }
-      ws.position.set(gx + 0.5, FLOOR + 1, gz + 0.5);
-      ws.userData.home = { x: gx + 0.5, z: gz + 0.5 };
-      ws.userData.roam = 4;
-      ws.userData.dir = rng() * Math.PI * 2;
-      ws.userData.timer = rng() * 2;
-      ws.userData.skullTimer = 1.5 + rng() * 2.5;
-      this.animals.push(ws);
+    // A single Wither floats guard over the fortress, flinging wither skulls.
+    const wither = makeWither();
+    let gx = fortX - 5, gz = fortZ, tries = 0;
+    while (tries < 30 && (gx < 3 || gz < 3 || gx >= SZ - 3 || gz >= SZ - 3 ||
+           this.get(gx, FLOOR, gz) === "lava")) {
+      gx = fortX + Math.floor((rng() - 0.5) * 12);
+      gz = fortZ + Math.floor((rng() - 0.5) * 12);
+      tries++;
     }
+    const wy = FLOOR + 3.5;                 // it hovers, no legs to stand on
+    wither.position.set(gx + 0.5, wy, gz + 0.5);
+    wither.userData.home = { x: gx + 0.5, z: gz + 0.5 };
+    wither.userData.baseY = wy;
+    wither.userData.roam = 5;
+    wither.userData.dir = rng() * Math.PI * 2;
+    wither.userData.timer = rng() * 2;
+    wither.userData.t = rng() * Math.PI * 2;
+    wither.userData.skullTimer = 1.5 + rng() * 2.5;
+    this.animals.push(wither);
   };
 
   // A small Nether fortress: a red-brick room on the floor, lit by glowstone,
@@ -1795,9 +1796,9 @@
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
       if (a.userData.kind === "villager") { this.updateVillager(a, dt); continue; }
-      // Ghasts, piglins and wither skeletons are driven by updateNether.
+      // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
-          a.userData.kind === "wither_skeleton") continue;
+          a.userData.kind === "wither") continue;
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -1856,7 +1857,7 @@
 
     for (const g of this.animals) {
       if (g.userData.kind === "piglin") { this.updatePiglin(g, dt); continue; }
-      if (g.userData.kind === "wither_skeleton") { this.updateWitherSkeleton(g, dt, eye); continue; }
+      if (g.userData.kind === "wither") { this.updateWither(g, dt, eye); continue; }
       if (g.userData.kind !== "ghast") continue;
       const u = g.userData;
       // Bob up and down, drift slowly, turning every so often.
@@ -1894,27 +1895,30 @@
     this.updateSkulls(dt, player);
   };
 
-  // A wither skeleton stalks the floor near its fortress home and, on a timer,
+  // The Wither floats near its fortress home, bobbing gently, and on a timer
   // flings a wither skull off in a RANDOM direction (not aimed at you) whenever
-  // the player is somewhere nearby. Wander logic mirrors the piglin's, but it's
-  // tethered to its home so the guards stay by the fortress.
-  World.prototype.updateWitherSkeleton = function (a, dt, eye) {
-    const FLOOR = 2;
+  // the player is somewhere nearby. It has no legs, so it hovers rather than
+  // walks; it stays tethered to its home so it guards the fortress.
+  World.prototype.updateWither = function (a, dt, eye) {
+    const FLOOR = 2, CEIL = 14;
     const u = a.userData;
+    u.t += dt;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
-    const speed = 0.9;
+    const speed = 1.0;
     const nx = a.position.x + Math.cos(u.dir) * speed * dt;
     const nz = a.position.z + Math.sin(u.dir) * speed * dt;
     const fx = Math.floor(nx), fz = Math.floor(nz);
     const dhx = nx - u.home.x, dhz = nz - u.home.z;
     const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
-      this.solidAt(fx, FLOOR + 1, fz) || this.get(fx, FLOOR, fz) === "lava" ||
+      this.solidAt(fx, Math.floor(a.position.y), fz) ||
       (dhx * dhx + dhz * dhz) > u.roam * u.roam;         // stay near home
     if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
     else { a.position.x = nx; a.position.z = nz; }
-    a.position.y = FLOOR + 1;
-    a.rotation.y = -u.dir + Math.PI / 2;
+    // Hover with a gentle bob, kept clear of the floor and ceiling.
+    a.position.y = u.baseY + Math.sin(u.t * 0.9) * 0.5;
+    a.position.y = Math.max(FLOOR + 2.5, Math.min(CEIL - 1.5, a.position.y));
+    a.rotation.y = Math.atan2(eye.x - a.position.x, eye.z - a.position.z); // face the player
 
     // Fling a skull in a random direction when the player is within range.
     u.skullTimer -= dt;
@@ -1925,7 +1929,9 @@
         const ang = Math.random() * Math.PI * 2;
         const dir = { x: Math.cos(ang), y: (Math.random() - 0.5) * 0.5, z: Math.sin(ang) };
         const len = Math.hypot(dir.x, dir.y, dir.z);
-        this.spawnSkull({ x: a.position.x, y: a.position.y + 1.6, z: a.position.z },
+        // A skull springs from one of the three heads (centre or a side).
+        const headX = [0, -0.5, 0.5][Math.floor(Math.random() * 3)];
+        this.spawnSkull({ x: a.position.x + headX, y: a.position.y + 0.3, z: a.position.z },
           { x: dir.x / len, y: dir.y / len, z: dir.z / len });
       }
     }

@@ -377,16 +377,18 @@ const wskel = await page.evaluate(() => {
   const nw = new Game.World(null, S.overworld.seed, "nether");
   nw.generateNether();
   const fc = nw.fortressChests[0];
-  let count = 0, nearFort = 0;
+  let count = 0, nearFort = 0, heads = 0;
   for (const a of nw.animals) {
-    if (a.userData.kind !== "wither_skeleton") continue;
+    if (a.userData.kind !== "wither") continue;
     count++;
+    heads = a.userData.heads;
     if (Math.hypot(a.position.x - fc.x, a.position.z - fc.z) < 12) nearFort++;
   }
-  return { count, nearFort, tracksSkulls: Array.isArray(nw.skulls) };
+  return { count, nearFort, heads, tracksSkulls: Array.isArray(nw.skulls) };
 });
-check("wither skeletons live in the Nether", wskel.count >= 1);
-check("...near the fortress", wskel.nearFort >= 1);
+check("exactly one Wither lives in the Nether", wskel.count === 1);
+check("the Wither has three heads", wskel.heads === 3);
+check("the Wither guards the fortress", wskel.nearFort === 1);
 check("the Nether tracks flying skulls", wskel.tracksSkulls);
 
 const fling = await page.evaluate(() => {
@@ -395,17 +397,17 @@ const fling = await page.evaluate(() => {
   nw.generateNether();
   nw.scene = { add() {}, remove() {} };
   const p = S.player;
-  const ws = nw.animals.find((a) => a.userData.kind === "wither_skeleton");
-  p.pos.set(ws.position.x, 3 - Game.CONST.EYE, ws.position.z + 1); p.syncCamera();
+  const ws = nw.animals.find((a) => a.userData.kind === "wither");
+  p.pos.set(ws.position.x, ws.position.y - Game.CONST.EYE, ws.position.z + 1); p.syncCamera();
   ws.userData.skullTimer = 0.01;
   let spawned = 0; const real = nw.spawnSkull.bind(nw);
   nw.spawnSkull = (f, d) => { spawned++; real(f, d); };
   const dirs = new Set();
-  for (let i = 0; i < 40; i++) { ws.userData.skullTimer = 0.01; nw.updateWitherSkeleton(ws, 0.05, p.eyePosition()); }
+  for (let i = 0; i < 40; i++) { ws.userData.skullTimer = 0.01; nw.updateWither(ws, 0.05, p.eyePosition()); }
   nw.skulls.forEach((sk) => dirs.add(Math.round(Math.atan2(sk.vel.z, sk.vel.x) * 4)));
   return { spawned, distinctDirs: dirs.size };
 });
-check("a wither skeleton flings skulls", fling.spawned >= 1);
+check("the Wither flings skulls", fling.spawned >= 1);
 check("...in varied (random) directions", fling.distinctDirs >= 2);
 
 // --- A skull hit inflicts the wither effect: ~2 hearts over 6s, then it lifts ---
