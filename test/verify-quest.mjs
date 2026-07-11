@@ -589,6 +589,26 @@ const equipUI = await page.evaluate(() => {
 check("tapping armour in the backpack wears it", equipUI.wornBoots);
 check("the worn slot shows it and tapping removes it", equipUI.filledShown && equipUI.tookOff);
 
+// A held/equipped shield shows up in your hand.
+const shieldHand = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const savedEq = Object.assign({}, S.equip);
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  Game._updateOffhand();
+  const emptyWhenNone = S.offhand.children.length === 0;
+  S.equip.shield = "iron_shield";
+  Game._updateOffhand();
+  const showsWhenEquipped = S.offhand.children.length > 0;
+  // Holding (selecting) a shield renders a shield in the main hand, not a cube.
+  Game._setViewmodel ? Game._setViewmodel("iron_shield") : null;
+  const heldShows = !Game._setViewmodel || S.viewmodel.children.length > 0;
+  S.equip = savedEq; Game._updateOffhand();
+  return { emptyWhenNone, showsWhenEquipped, heldShows };
+});
+check("no shield equipped -> empty hand", shieldHand.emptyWhenNone);
+check("an equipped shield appears in your hand", shieldHand.showsWhenEquipped);
+check("holding a shield renders it in your hand", shieldHand.heldShows);
+
 // --- Villager houses are mineable, except the Hall of Fame ---
 const houses = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;

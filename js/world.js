@@ -1270,7 +1270,7 @@
   function makeZombie() {
     const group = new THREE.Group();
     const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const skin = 0x5a8f4a, skinDark = 0x477038, shirt = 0x3f6a86, dark = 0x20301c;
+    const skin = 0x5a8f4a, skinDark = 0x477038, shirt = 0x3f6a86, dark = 0x050505;
     // Legs
     [-0.14, 0.14].forEach((x) => {
       const l = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.22), mat(skinDark));
