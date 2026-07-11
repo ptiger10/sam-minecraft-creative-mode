@@ -81,12 +81,15 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🌗 **Day & night.** Every **10 minutes of daylight** is followed by **2
   minutes of night**, when the sky darkens and the world dims — then day
   returns. After dark a **🏹 skeleton archer** roams the surface, loosing
-  **arrows in random directions**. Craft some armour or a shield (see below) and
-  the arrows just **bounce off**.
+  **arrows in random directions**. Craft and **wear** some armour or a shield
+  (see below) and the arrows just **bounce off**.
 - 🛡️ **Armour & shields.** At a crafting table you can make **helmets,
   chestplates, leggings, boots and shields** in three tiers — **wooden** (planks),
-  **iron** (iron ingots) and **diamond**. Keep any piece with you and a
-  skeleton's arrows can't hurt you.
+  **iron** (iron ingots) and **diamond**. Open your **backpack** and **tap a piece
+  to put it on**: it slides into its **equipment slot** at the top (tap the slot
+  again to take it off). Each piece has its own little **shaped icon** tinted by
+  its material. While you're **wearing armour or holding a shield**, a skeleton's
+  arrows just **bounce off**.
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 😴 If your health runs out, a gentle **"You needed a nap!"** screen pops up —
   then you can respawn.

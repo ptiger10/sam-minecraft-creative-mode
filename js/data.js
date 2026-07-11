@@ -292,12 +292,15 @@ window.Game = window.Game || {};
         name: m.label + " " + Game.ARMOR_PIECES[pk],
         swatch: m.swatch, swatchSide: m.side, placeable: false,
         armor: !isShield, shield: isShield,
+        equip: true, slot: pk,              // which equipment slot it goes in
         desc: isShield
-          ? "Hold onto a shield to block a skeleton's arrows."
-          : "Keep this armour with you to block a skeleton's arrows."
+          ? "Tap it in your backpack to hold the shield — it blocks a skeleton's arrows."
+          : "Tap it in your backpack to wear it — armour blocks a skeleton's arrows."
       };
     });
   });
+  // The five equipment slots, in the order they're shown.
+  Game.EQUIP_SLOTS = ["helmet", "chestplate", "leggings", "boots", "shield"];
   // Anything that counts as protection against arrows.
   Game.isShield = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].shield);
   Game.isArmor = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].armor);

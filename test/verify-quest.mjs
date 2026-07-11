@@ -516,19 +516,78 @@ check("ordinary blocks are not defense", armor.dirtDef === false);
 
 const defense = await page.evaluate(() => {
   const Game = window.Game, S = Game.S;
-  const saved = S.inv.slice();
+  const savedInv = S.inv.slice(), savedEq = Object.assign({}, S.equip);
   S.inv = new Array(36).fill(null);
-  const none = Game.hasDefense();
-  S.inv[0] = { id: "iron_chestplate", count: 1 };
-  const withArmor = Game.hasDefense();
-  S.inv[0] = { id: "wood_shield", count: 1 };
-  const withShield = Game.hasDefense();
-  S.inv = saved;
-  return { none, withArmor, withShield };
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  const carriedButNotWorn = (() => { S.inv[0] = { id: "iron_chestplate", count: 1 }; return Game.hasDefense(); })();
+  S.equip.chestplate = "iron_chestplate";
+  const wearingArmor = Game.hasDefense();
+  S.equip.chestplate = null; S.equip.shield = "wood_shield";
+  const holdingShield = Game.hasDefense();
+  S.inv = savedInv; S.equip = savedEq;
+  return { carriedButNotWorn, wearingArmor, holdingShield };
 });
-check("no armour -> not defended", defense.none === false);
-check("carrying armour -> defended", defense.withArmor === true);
-check("carrying a shield -> defended", defense.withShield === true);
+check("carrying armour but not wearing it -> NOT defended", defense.carriedButNotWorn === false);
+check("wearing armour -> defended", defense.wearingArmor === true);
+check("holding a shield -> defended", defense.holdingShield === true);
+
+// Equipping moves a piece from the backpack into its slot (and back out).
+const equipFlow = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const savedInv = S.inv.slice(), savedEq = Object.assign({}, S.equip);
+  S.inv = new Array(36).fill(null); S.inv[0] = { id: "diamond_helmet", count: 1 };
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  Game._equipItem(0);
+  const worn = S.equip.helmet, slotEmptiedInv = S.inv[0] === null;
+  Game._unequipSlot("helmet");
+  const backInBackpack = S.inv.some((s) => s && s.id === "diamond_helmet"), slotCleared = S.equip.helmet === null;
+  S.inv = savedInv; S.equip = savedEq;
+  return { worn, slotEmptiedInv, backInBackpack, slotCleared };
+});
+check("wearing a piece moves it from the backpack to its slot",
+  equipFlow.worn === "diamond_helmet" && equipFlow.slotEmptiedInv);
+check("taking a piece off returns it to the backpack",
+  equipFlow.backInBackpack && equipFlow.slotCleared);
+
+// Armour icons are shaped silhouettes (SVG), not plain coloured squares.
+const icons = await page.evaluate(() => {
+  const openInv = document.getElementById("btn-inventory");
+  const S = window.Game.S;
+  // Each piece renders a distinct shaped SVG icon tinted by its material.
+  const html = (id) => window.Game._iconHTML ? window.Game._iconHTML(id) : "";
+  return {
+    hasEquipRow: !!document.getElementById("equip-row"),
+    helmetSvg: html("iron_helmet").includes("svg") && html("iron_helmet").includes("armor-swatch"),
+    bootsSvg: html("diamond_boots").includes("svg"),
+    shieldSvg: html("wood_shield").includes("svg"),
+    // Different pieces produce different shapes.
+    distinctShapes: html("iron_helmet") !== html("iron_boots")
+  };
+});
+check("the inventory has an equipment row", icons.hasEquipRow);
+check("armour renders shaped SVG icons (not plain squares)",
+  icons.helmetSvg && icons.bootsSvg && icons.shieldSvg);
+check("each armour piece has its own shape", icons.distinctShapes);
+
+// End-to-end: tapping an armour item in the backpack UI wears it.
+const equipUI = await page.evaluate(() => {
+  const S = window.Game.S;
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  S.inv = new Array(36).fill(null); S.inv[0] = { id: "iron_boots", count: 1 };
+  document.getElementById("btn-inventory").click();          // open inventory
+  const slot0 = document.querySelector("#inv-grid .slot");
+  slot0.click();                                             // tap the boots -> wear them
+  const wornBoots = S.equip.boots === "iron_boots";
+  // The equip row now shows a filled boots slot; tap it to take them off.
+  const filled = document.querySelector("#equip-row .slot.filled");
+  const filledShown = !!filled;
+  if (filled) filled.click();
+  const tookOff = S.equip.boots === null && S.inv.some((s) => s && s.id === "iron_boots");
+  document.querySelector("#inventory-panel .close-btn").click();
+  return { wornBoots, filledShown, tookOff };
+});
+check("tapping armour in the backpack wears it", equipUI.wornBoots);
+check("the worn slot shows it and tapping removes it", equipUI.filledShown && equipUI.tookOff);
 
 // --- Villager houses are mineable, except the Hall of Fame ---
 const houses = await page.evaluate(() => {
@@ -576,24 +635,24 @@ const arrowHit = await page.evaluate(() => {
   w.scene = { add() {}, remove() {} };
   const p = S.player;
   const eye = p.eyePosition();
-  const saved = S.inv.slice();
-  // Undefended -> an arrow costs a heart.
-  S.inv = new Array(36).fill(null);
+  const savedEq = Object.assign({}, S.equip);
+  // Undefended (nothing worn) -> an arrow costs a heart.
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
   p.hp = Game.CONST.MAX_HP; p.dead = false;
   w.spawnArrow({ x: eye.x + 0.3, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
   for (let i = 0; i < 15; i++) w.updateArrows(0.03, p);
   const dmg = Game.CONST.MAX_HP - p.hp;
-  // With a shield -> the arrow is stopped.
-  S.inv = new Array(36).fill(null); S.inv[0] = { id: "iron_shield", count: 1 };
+  // Wearing/holding a shield -> the arrow is stopped.
+  S.equip.shield = "iron_shield";
   p.hp = Game.CONST.MAX_HP;
   w.spawnArrow({ x: eye.x + 0.3, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
   for (let i = 0; i < 15; i++) w.updateArrows(0.03, p);
   const dmgShielded = Game.CONST.MAX_HP - p.hp;
-  S.inv = saved;
+  S.equip = savedEq;
   return { dmg, dmgShielded };
 });
 check("a skeleton arrow costs a heart when undefended", arrowHit.dmg === 2);
-check("a shield or armour blocks the arrow", arrowHit.dmgShielded === 0);
+check("an equipped shield or armour blocks the arrow", arrowHit.dmgShielded === 0);
 
 // ---- Report ----
 await browser.close();
