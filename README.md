@@ -78,11 +78,13 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   top corner — red for health, tan for food — in keeping with the pixel look.
   Food drips down *slowly* — eat apples or watermelons so you don't starve. If
   your food runs out you start losing health.
-- 🌗 **Day & night.** Every **10 minutes of daylight** is followed by **2
+- 🌗 **Day & night.** Every **8 minutes of daylight** is followed by **2
   minutes of night**, when the sky darkens and the world dims — then day
-  returns. After dark a **🏹 skeleton archer** roams the surface, loosing
-  **arrows in random directions**. Craft and **wear** some armour or a shield
-  (see below) and the arrows just **bounce off**.
+  returns. After dark the monsters come out: a **🏹 skeleton archer** roams the
+  surface loosing **arrows in random directions**, and **🧟 three zombies**
+  shamble about at random — **bump into one and it bites you** (a heart's worth).
+  All of them **vanish again at daybreak**. Craft and **wear** some armour or a
+  shield (see below) and the skeleton's arrows just **bounce off**.
 - 🛡️ **Armour & shields.** At a crafting table you can make **helmets,
   chestplates, leggings, boots and shields** in three tiers — **wooden** (planks),
   **iron** (iron ingots) and **diamond**. Open your **backpack** and **tap a piece

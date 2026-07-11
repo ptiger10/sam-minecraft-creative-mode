@@ -50,7 +50,7 @@
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
   // Day/night: 10 minutes of daylight, then 2 minutes of night, repeating.
-  const DAY_LEN = 10 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
+  const DAY_LEN = 8 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
@@ -869,6 +869,7 @@
     else if (kind === "piglin") tradePiglin(animal);
     else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
     else if (kind === "skeleton") toast("🏹 A skeleton archer! Armour or a shield blocks its arrows.");
+    else if (kind === "zombie") toast("🧟 A zombie! Don't let it bump into you.");
     else toggleRide(animal);
     S.swing = 0.18;
     return true;
