@@ -480,10 +480,10 @@ const dayNight = await page.evaluate(async () => {
   S.inNether = false;
   const at = (t) => { S.worldClock = t; return Game.isNight(); };
   const day = at(60);         // 1 minute in -> day
-  const night = at(9 * 60);   // 9 minutes in -> night (day is 8 min, night 2 min)
-  const backToDay = at(11 * 60); // into the next cycle -> day again
+  const night = at(7 * 60);   // 7 minutes in -> night (day is 6 min, night 2 min)
+  const backToDay = at(9 * 60); // into the next cycle -> day again
   // Let the loop apply the visuals, then read how bright it is.
-  S.worldClock = 9 * 60; await new Promise((r) => setTimeout(r, 140));
+  S.worldClock = 7 * 60; await new Promise((r) => setTimeout(r, 140));
   const dn = S.scene.userData.dayNight;
   const nightBright = dn ? dn.ambient.intensity : null;
   S.worldClock = 60; await new Promise((r) => setTimeout(r, 140));
@@ -491,7 +491,7 @@ const dayNight = await page.evaluate(async () => {
   return { day, night, backToDay, nightBright, dayBright };
 });
 check("it is day early in the cycle", dayNight.day === false);
-check("day is 8 minutes, then night falls", dayNight.night === true);
+check("day is 6 minutes, then night falls", dayNight.night === true);
 check("day returns after the 2-minute night", dayNight.backToDay === false);
 check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
 

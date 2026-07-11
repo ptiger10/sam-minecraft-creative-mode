@@ -51,7 +51,7 @@
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
   // Day/night: 10 minutes of daylight, then 2 minutes of night, repeating.
-  const DAY_LEN = 8 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
+  const DAY_LEN = 6 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
