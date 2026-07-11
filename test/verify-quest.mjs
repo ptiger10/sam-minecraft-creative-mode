@@ -480,10 +480,10 @@ const dayNight = await page.evaluate(async () => {
   S.inNether = false;
   const at = (t) => { S.worldClock = t; return Game.isNight(); };
   const day = at(60);         // 1 minute in -> day
-  const night = at(11 * 60);  // 11 minutes in -> night
-  const backToDay = at(13 * 60); // into the next cycle -> day again
+  const night = at(9 * 60);   // 9 minutes in -> night (day is 8 min, night 2 min)
+  const backToDay = at(11 * 60); // into the next cycle -> day again
   // Let the loop apply the visuals, then read how bright it is.
-  S.worldClock = 11 * 60; await new Promise((r) => setTimeout(r, 140));
+  S.worldClock = 9 * 60; await new Promise((r) => setTimeout(r, 140));
   const dn = S.scene.userData.dayNight;
   const nightBright = dn ? dn.ambient.intensity : null;
   S.worldClock = 60; await new Promise((r) => setTimeout(r, 140));
@@ -491,7 +491,7 @@ const dayNight = await page.evaluate(async () => {
   return { day, night, backToDay, nightBright, dayBright };
 });
 check("it is day early in the cycle", dayNight.day === false);
-check("it turns to night 11 minutes in", dayNight.night === true);
+check("day is 8 minutes, then night falls", dayNight.night === true);
 check("day returns after the 2-minute night", dayNight.backToDay === false);
 check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
 
@@ -589,6 +589,26 @@ const equipUI = await page.evaluate(() => {
 check("tapping armour in the backpack wears it", equipUI.wornBoots);
 check("the worn slot shows it and tapping removes it", equipUI.filledShown && equipUI.tookOff);
 
+// A held/equipped shield shows up in your hand.
+const shieldHand = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const savedEq = Object.assign({}, S.equip);
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  Game._updateOffhand();
+  const emptyWhenNone = S.offhand.children.length === 0;
+  S.equip.shield = "iron_shield";
+  Game._updateOffhand();
+  const showsWhenEquipped = S.offhand.children.length > 0;
+  // Holding (selecting) a shield renders a shield in the main hand, not a cube.
+  Game._setViewmodel ? Game._setViewmodel("iron_shield") : null;
+  const heldShows = !Game._setViewmodel || S.viewmodel.children.length > 0;
+  S.equip = savedEq; Game._updateOffhand();
+  return { emptyWhenNone, showsWhenEquipped, heldShows };
+});
+check("no shield equipped -> empty hand", shieldHand.emptyWhenNone);
+check("an equipped shield appears in your hand", shieldHand.showsWhenEquipped);
+check("holding a shield renders it in your hand", shieldHand.heldShows);
+
 // --- Villager houses are mineable, except the Hall of Fame ---
 const houses = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
@@ -627,6 +647,36 @@ const archer = await page.evaluate(() => {
 });
 check("skeleton archers exist and hide by day", archer.ok && archer.hiddenByDay);
 check("skeletons come out and loose arrows at night", archer.visibleAtNight && archer.arrows >= 1);
+
+// --- Night zombies: three of them wander, hidden by day, and bite on contact ---
+const zombies = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const w = new Game.World(null, S.overworld.seed, "forest");
+  w.generate();
+  w.scene = { add() {}, remove() {} };
+  const zs = w.animals.filter((a) => a.userData.kind === "zombie");
+  const p = S.player;
+  // Day: all zombies vanish.
+  w.updateNight(0.1, p, false);
+  const hiddenByDay = zs.every((z) => z.visible === false);
+  // Night: a zombie becomes visible and wanders (its position changes).
+  const z = zs[0];
+  z.visible = false;
+  const startX = z.position.x, startZ = z.position.z;
+  for (let i = 0; i < 20; i++) w.updateZombie(z, 0.05, { pos: { x: 999, y: 0, z: 999 }, damage() {} });
+  const movedAtNight = z.visible === true && (z.position.x !== startX || z.position.z !== startZ);
+  // Bumping the player costs a heart (2 HP), on a cooldown.
+  let hp = Game.CONST.MAX_HP;
+  const fakePlayer = { pos: { x: z.position.x, y: z.position.y, z: z.position.z }, damage(n) { hp -= n; } };
+  z.userData.hitCooldown = 0;
+  for (let i = 0; i < 10; i++) w.updateZombie(z, 0.05, fakePlayer); // sits on the player
+  const bitOnce = (Game.CONST.MAX_HP - hp) === 2; // one bite thanks to the cooldown
+  return { count: zs.length, hiddenByDay, movedAtNight, bitOnce };
+});
+check("three zombies roam the world", zombies.count === 3);
+check("zombies disappear in the day", zombies.hiddenByDay);
+check("zombies wander at night", zombies.movedAtNight);
+check("a zombie bump hurts (one heart, on a cooldown)", zombies.bitOnce);
 
 const arrowHit = await page.evaluate(() => {
   const Game = window.Game, S = Game.S;

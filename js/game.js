@@ -24,6 +24,7 @@
     input: { forward: false, turnLeft: false, turnRight: false, jump: false },
     highlight: null,
     viewmodel: null,
+    offhand: null,           // left-hand viewmodel (holds an equipped shield)
     raycaster: new THREE.Raycaster(),
     running: false,
     paused: false,
@@ -50,7 +51,7 @@
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
   // Day/night: 10 minutes of daylight, then 2 minutes of night, repeating.
-  const DAY_LEN = 10 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
+  const DAY_LEN = 8 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
@@ -296,6 +297,7 @@
     toast("🛡️ Now wearing the " + Game.itemName(wearing) + "!");
     renderHotbar(); renderInventory(); updateHand();
     setViewmodel(selectedSlot() ? selectedSlot().id : null);
+    updateOffhand();                     // a newly-worn shield shows in your hand
   }
   Game._equipItem = equipItem;           // (used by the tests)
 
@@ -307,6 +309,7 @@
     S.equip[slot] = null;
     toast("Took off the " + Game.itemName(id) + ".");
     renderHotbar(); renderInventory();
+    updateOffhand();                     // taking off a shield clears your hand
   }
   Game._unequipSlot = unequipSlot;       // (used by the tests)
 
@@ -869,6 +872,7 @@
     else if (kind === "piglin") tradePiglin(animal);
     else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
     else if (kind === "skeleton") toast("🏹 A skeleton archer! Armour or a shield blocks its arrows.");
+    else if (kind === "zombie") toast("🧟 A zombie! Don't let it bump into you.");
     else toggleRide(animal);
     S.swing = 0.18;
     return true;
@@ -1357,6 +1361,34 @@
   // ===============================================================
   //  Viewmodel (the item shown in your hand)
   // ===============================================================
+  // A little shield model tinted by its material, for the hand / offhand.
+  function buildShieldMesh(id) {
+    const def = Game.itemDef(id) || {};
+    const light = def.swatch !== undefined ? def.swatch : 0x9aa0a8;
+    const dark = def.swatchSide !== undefined ? def.swatchSide : Game.mix(light, 0x000000, 0.4);
+    const g = new THREE.Group();
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.04),
+      new THREE.MeshLambertMaterial({ color: dark }));           // dark rim / back
+    back.position.z = -0.02; g.add(back);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.46, 0.06),
+      new THREE.MeshLambertMaterial({ color: light }));          // bright face
+    g.add(plate);
+    const boss = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.08),
+      new THREE.MeshLambertMaterial({ color: dark }));           // centre boss
+    boss.position.z = 0.04; g.add(boss);
+    return g;
+  }
+
+  // Show an equipped shield in your left hand (empty otherwise), so you can see
+  // when you're carrying it into a fight.
+  function updateOffhand() {
+    const oh = S.offhand;
+    if (!oh) return;
+    while (oh.children.length) oh.remove(oh.children[0]);
+    if (S.equip && S.equip.shield) oh.add(buildShieldMesh(S.equip.shield));
+  }
+  Game._updateOffhand = updateOffhand;
+
   function setViewmodel(id) {
     const vm = S.viewmodel;
     while (vm.children.length) vm.remove(vm.children[0]);
@@ -1371,6 +1403,10 @@
       const mesh = new THREE.Mesh(blockGeo(id), S.world.material);
       mesh.scale.set(0.4, 0.4, 0.4);
       vm.add(mesh);
+      return;
+    }
+    if (Game.isShield && Game.isShield(id)) {
+      vm.add(buildShieldMesh(id));
       return;
     }
     if (id === "pickaxe" || id === "stone_pickaxe") {
@@ -1395,6 +1431,7 @@
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
     vm.add(mesh);
   }
+  Game._setViewmodel = setViewmodel; // (used by the tests)
 
   // expose the world's per-type geometry through a tiny shim
   function blockGeo(id) { return Game._blockGeo(id); }
@@ -1679,12 +1716,20 @@
       S.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     }
     if (S.viewmodel && S.viewmodel.parent) S.viewmodel.parent.remove(S.viewmodel);
+    if (S.offhand && S.offhand.parent) S.offhand.parent.remove(S.offhand);
     S.scene.add(S.camera);
 
-    // viewmodel attaches to the camera
+    // viewmodel attaches to the camera (your right hand)
     S.viewmodel = new THREE.Group();
     S.viewmodel.position.set(0.55, -0.45, -0.9);
     S.camera.add(S.viewmodel);
+
+    // offhand attaches to the camera too (your left hand) — holds a shield when
+    // one is equipped so you can see you're protected.
+    S.offhand = new THREE.Group();
+    S.offhand.position.set(-0.62, -0.42, -0.9);
+    S.offhand.rotation.set(0, 0.35, 0.08);
+    S.camera.add(S.offhand);
 
     S.highlight = buildHighlight(S.scene);
     world._scene = S.scene;          // cache so we can swap back from the Nether
@@ -1732,6 +1777,7 @@
     updateHand();
     renderVitals();
     setViewmodel(selectedSlot() ? selectedSlot().id : null);
+    updateOffhand();                     // show an already-equipped shield on load
     onResize(); // make sure the canvas matches the current screen/orientation
 
     S.paused = false;

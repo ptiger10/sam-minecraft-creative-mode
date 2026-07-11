@@ -559,9 +559,10 @@
     // Fluffy clouds drifting high above everything else.
     this.scatterClouds();
 
-    // Skeleton archers that only come out at night.
+    // Night monsters: skeleton archers and shambling zombies. Hidden by day.
     this.arrows = [];
     this.spawnSkeletons(2);
+    this.spawnZombies(3);
   };
 
   // A few skeleton archers, hidden away by day. They wake and roam at night.
@@ -577,6 +578,23 @@
       sk.userData.timer = rng() * 3;
       sk.userData.shootTimer = 1 + rng() * 3;
       this.animals.push(sk);
+    }
+  };
+
+  // Three zombies that shamble around at night; hidden by day. They don't shoot
+  // — they just hurt you if they bump into you.
+  World.prototype.spawnZombies = function (count) {
+    const rng = Game.mulberry32(this.seed ^ 0x20b1e5);
+    for (let i = 0; i < count; i++) {
+      const z0 = makeZombie();
+      const x = 5 + Math.floor(rng() * (C.WORLD - 10));
+      const z = 5 + Math.floor(rng() * (C.WORLD - 10));
+      z0.position.set(x + 0.5, this.surfaceY(x, z) + 1, z + 0.5);
+      z0.visible = false;             // asleep until nightfall
+      z0.userData.dir = rng() * Math.PI * 2;
+      z0.userData.timer = rng() * 3;
+      z0.userData.hitCooldown = 0;    // brief pause between bites
+      this.animals.push(z0);
     }
   };
 
@@ -1246,6 +1264,38 @@
     return group;
   }
   World.makeSkeleton = makeSkeleton;
+
+  // A zombie: a shambling green brute with arms held out in front. It roams the
+  // surface at night and hurts you if it bumps into you.
+  function makeZombie() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const skin = 0x5a8f4a, skinDark = 0x477038, shirt = 0x3f6a86, dark = 0x050505;
+    // Legs
+    [-0.14, 0.14].forEach((x) => {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.22), mat(skinDark));
+      l.position.set(x, 0.25, 0); group.add(l);
+    });
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.6, 0.3), mat(shirt));
+    body.position.set(0, 0.8, 0); group.add(body);
+    // Arms held straight out in front (classic zombie).
+    [-0.36, 0.36].forEach((x) => {
+      const a = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.6), mat(skin));
+      a.position.set(x, 0.95, 0.35); group.add(a);
+    });
+    // Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.44), mat(skin));
+    head.position.set(0, 1.32, 0); group.add(head);
+    // Sunken dark eyes
+    [-0.11, 0.11].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.05), mat(dark));
+      e.position.set(x, 1.34, 0.22); group.add(e);
+    });
+    group.userData.kind = "zombie";
+    return group;
+  }
+  World.makeZombie = makeZombie;
 
   // Fill a single column from fromY..toY (inclusive) with one block id.
   World.prototype.fillColumn = function (x, z, fromY, toY, id) {
@@ -1933,8 +1983,8 @@
       // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
           a.userData.kind === "wither") continue;
-      // Skeletons are driven by updateNight (only awake after dark).
-      if (a.userData.kind === "skeleton") continue;
+      // Skeletons and zombies are driven by updateNight (only awake after dark).
+      if (a.userData.kind === "skeleton" || a.userData.kind === "zombie") continue;
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -1963,11 +2013,40 @@
   // main loop while you're in the overworld.
   World.prototype.updateNight = function (dt, player, isNight) {
     for (const a of this.animals) {
-      if (a.userData.kind !== "skeleton") continue;
-      if (!isNight) { a.visible = false; continue; }
-      this.updateSkeleton(a, dt, player);
+      const kind = a.userData.kind;
+      if (kind !== "skeleton" && kind !== "zombie") continue;
+      if (!isNight) { a.visible = false; continue; }  // both vanish by day
+      if (kind === "skeleton") this.updateSkeleton(a, dt, player);
+      else this.updateZombie(a, dt, player);
     }
     this.updateArrows(dt, player);
+  };
+
+  // A zombie shambles about the surface at random. If it lurches into the player
+  // it takes a bite — one heart, then a short pause before it can bite again.
+  World.prototype.updateZombie = function (a, dt, player) {
+    a.visible = true;
+    const u = a.userData;
+    u.timer -= dt;
+    if (u.timer <= 0) { u.timer = 1.2 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
+    const speed = 0.8;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
+    else u.dir += Math.PI;
+    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+    a.rotation.y = -u.dir + Math.PI / 2;
+
+    // Bump into the player? Take a bite (with a cooldown so it isn't instant death).
+    if (u.hitCooldown > 0) u.hitCooldown -= dt;
+    const dx = player.pos.x - a.position.x, dz = player.pos.z - a.position.z;
+    const dy = player.pos.y - a.position.y;
+    if (u.hitCooldown <= 0 && dx * dx + dz * dz < 0.9 * 0.9 && Math.abs(dy) < 2) {
+      player.damage(2, "were bitten by a zombie");
+      if (Game.toast) Game.toast("🧟 A zombie bit you! (-1 ❤️)");
+      u.hitCooldown = 1.2;
+    }
   };
 
   // A skeleton roams the surface and, on a timer, looses an arrow off in a
