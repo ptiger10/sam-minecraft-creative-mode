@@ -173,15 +173,26 @@ const fire = await page.evaluate(() => {
   nw.generateNether();
   nw.scene = { add() {}, remove() {} }; // headless stand-in
   const p = S.player;
+  const savedEq = Object.assign({}, S.equip);
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
   p.hp = Game.CONST.MAX_HP; p.dead = false;
   const eye = p.eyePosition();
   // Spawn a fireball right next to the player's eye, aimed at it.
   nw.spawnFireball({ x: eye.x + 0.6, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
   const before = p.hp;
   for (let i = 0; i < 30; i++) nw.updateFireballs(0.03, p);
-  return { before, after: p.hp };
+  const after = p.hp;
+  // With armour on, the same fireball does nothing.
+  S.equip.helmet = "diamond_helmet";
+  p.hp = Game.CONST.MAX_HP;
+  nw.spawnFireball({ x: eye.x + 0.6, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 30; i++) nw.updateFireballs(0.03, p);
+  const afterArmored = p.hp;
+  S.equip = savedEq;
+  return { before, after, afterArmored, max: Game.CONST.MAX_HP };
 });
 check("a ghast fireball deals two hearts of damage", fire.before - fire.after === 4);
+check("wearing armour blocks a ghast fireball", fire.afterArmored === fire.max);
 
 // --- The fourth house holds the Hall of Fame credits ---
 const credits = await page.evaluate(() => {
@@ -424,6 +435,8 @@ const wither = await page.evaluate(() => {
   nw.scene = { add() {}, remove() {} };
   const p = S.player;
   const savedWorld = p.world;
+  const savedEq = Object.assign({}, S.equip);
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
   p.world = nw;
   const sp = nw.spawn;
   p.pos.set(sp.x, sp.y, sp.z); p.vel.set(0, 0, 0); p.onGround = true;
@@ -436,12 +449,19 @@ const wither = await page.evaluate(() => {
   const startHp = p.hp;
   for (let i = 0; i < 135; i++) p.update(0.05, { forward: false }); // ~6.75s
   const res = { witheredNow, startHp, endHp: p.hp, witherEnd: p.wither };
-  p.world = savedWorld;
+  // With armour on, a skull hit inflicts no wither at all.
+  S.equip.boots = "iron_boots";
+  p.wither = 0; p.witherDmgTimer = 0;
+  nw.spawnSkull({ x: eye.x + 0.4, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 20; i++) nw.updateSkulls(0.03, p);
+  res.armourBlocksSkull = p.wither === 0;
+  p.world = savedWorld; S.equip = savedEq;
   return res;
 });
 check("a wither skull inflicts the wither effect", wither.witheredNow > 0);
 check("wither drains two hearts over its duration", wither.startHp - wither.endHp === 4);
 check("the wither effect wears off after 6s", wither.witherEnd === 0);
+check("wearing armour blocks a wither skull", wither.armourBlocksSkull === true);
 
 // --- The screen tints while withered and clears when it lifts (live DOM) ---
 const tint = await page.evaluate(async () => {
@@ -665,18 +685,29 @@ const zombies = await page.evaluate(() => {
   const startX = z.position.x, startZ = z.position.z;
   for (let i = 0; i < 20; i++) w.updateZombie(z, 0.05, { pos: { x: 999, y: 0, z: 999 }, damage() {} });
   const movedAtNight = z.visible === true && (z.position.x !== startX || z.position.z !== startZ);
-  // Bumping the player costs a heart (2 HP), on a cooldown.
+  // With nothing worn, bumping the player costs a heart (2 HP), on a cooldown.
+  const savedEq = Object.assign({}, S.equip);
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
   let hp = Game.CONST.MAX_HP;
   const fakePlayer = { pos: { x: z.position.x, y: z.position.y, z: z.position.z }, damage(n) { hp -= n; } };
   z.userData.hitCooldown = 0;
   for (let i = 0; i < 10; i++) w.updateZombie(z, 0.05, fakePlayer); // sits on the player
   const bitOnce = (Game.CONST.MAX_HP - hp) === 2; // one bite thanks to the cooldown
-  return { count: zs.length, hiddenByDay, movedAtNight, bitOnce };
+  // Now WEAR armour: the very same bump does no damage at all.
+  S.equip.chestplate = "iron_chestplate";
+  let hp2 = Game.CONST.MAX_HP;
+  const armored = { pos: { x: z.position.x, y: z.position.y, z: z.position.z }, damage(n) { hp2 -= n; } };
+  z.userData.hitCooldown = 0;
+  for (let i = 0; i < 10; i++) w.updateZombie(z, 0.05, armored);
+  const armourBlocksBite = hp2 === Game.CONST.MAX_HP;
+  S.equip = savedEq;
+  return { count: zs.length, hiddenByDay, movedAtNight, bitOnce, armourBlocksBite };
 });
 check("three zombies roam the world", zombies.count === 3);
 check("zombies disappear in the day", zombies.hiddenByDay);
 check("zombies wander at night", zombies.movedAtNight);
 check("a zombie bump hurts (one heart, on a cooldown)", zombies.bitOnce);
+check("wearing armour blocks a zombie bite", zombies.armourBlocksBite);
 
 const arrowHit = await page.evaluate(() => {
   const Game = window.Game, S = Game.S;

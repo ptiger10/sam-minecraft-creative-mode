@@ -2043,8 +2043,12 @@
     const dx = player.pos.x - a.position.x, dz = player.pos.z - a.position.z;
     const dy = player.pos.y - a.position.y;
     if (u.hitCooldown <= 0 && dx * dx + dz * dz < 0.9 * 0.9 && Math.abs(dy) < 2) {
-      player.damage(2, "were bitten by a zombie");
-      if (Game.toast) Game.toast("🧟 A zombie bit you! (-1 ❤️)");
+      if (Game.hasDefense && Game.hasDefense()) {
+        if (Game.toast) Game.toast("🛡️ Your armour shrugs off the zombie!");
+      } else {
+        player.damage(2, "were bitten by a zombie");
+        if (Game.toast) Game.toast("🧟 A zombie bit you! (-1 ❤️)");
+      }
       u.hitCooldown = 1.2;
     }
   };
@@ -2261,11 +2265,15 @@
       m.position.z += sk.vel.z * dt;
       m.rotation.x += dt * 5; m.rotation.y += dt * 4;
       sk.life -= dt;
-      // Reached the player? Inflict the wither effect.
+      // Reached the player? Inflict the wither effect — unless armour stops it.
       const dx = m.position.x - eye.x, dy = m.position.y - eye.y, dz = m.position.z - eye.z;
       if (dx * dx + dy * dy + dz * dz < 0.8 * 0.8) {
-        if (player.applyWither) player.applyWither();
-        if (Game.toast) Game.toast("💀 A wither skull hit you! You're withering… 🖤");
+        if (Game.hasDefense && Game.hasDefense()) {
+          if (Game.toast) Game.toast("🛡️ Your armour blocked the wither skull!");
+        } else {
+          if (player.applyWither) player.applyWither();
+          if (Game.toast) Game.toast("💀 A wither skull hit you! You're withering… 🖤");
+        }
         remove(sk); return false;
       }
       if (this.solidAt(Math.floor(m.position.x), Math.floor(m.position.y), Math.floor(m.position.z)) || sk.life <= 0) {
@@ -2315,11 +2323,15 @@
       m.position.z += fb.vel.z * dt;
       m.rotation.x += dt * 6; m.rotation.y += dt * 6;
       fb.life -= dt;
-      // Hit the player? Two hearts of damage.
+      // Hit the player? Two hearts of damage — unless armour shields you.
       const dx = m.position.x - eye.x, dy = m.position.y - eye.y, dz = m.position.z - eye.z;
       if (dx * dx + dy * dy + dz * dz < 0.8 * 0.8) {
-        player.damage(4, "were scorched by a ghast's fireball");
-        if (Game.toast) Game.toast("🔥 A ghast's fireball hit you! (-2 ❤️)");
+        if (Game.hasDefense && Game.hasDefense()) {
+          if (Game.toast) Game.toast("🛡️ Your armour blocked the fireball!");
+        } else {
+          player.damage(4, "were scorched by a ghast's fireball");
+          if (Game.toast) Game.toast("🔥 A ghast's fireball hit you! (-2 ❤️)");
+        }
         remove(fb); return false;
       }
       // Hit a block or fizzle out.

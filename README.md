@@ -91,7 +91,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   to put it on**: it slides into its **equipment slot** at the top (tap the slot
   again to take it off). Each piece has its own little **shaped icon** tinted by
   its material, and an **equipped shield shows in your hand**. While you're
-  **wearing armour or holding a shield**, a skeleton's arrows just **bounce off**.
+  **wearing armour or holding a shield you can't be hurt by monsters at all** —
+  skeleton arrows, zombie bites, ghast fireballs and wither skulls all just
+  **bounce off** (lava, falls and hunger can still get you, though!).
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 😴 If your health runs out, a gentle **"You needed a nap!"** screen pops up —
   then you can respawn.
