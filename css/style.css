@@ -426,6 +426,38 @@ html, body {
 .inv-grid .slot { width: 100%; height: 58px; }
 .inv-grid .slot .swatch { width: 32px; height: 32px; }
 
+/* ---------- Equipment slots ---------- */
+.equip-label { margin: 10px 0 6px; font-size: 14px; color: #333; }
+.equip-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.equip-row .slot {
+  width: 100%;
+  height: 54px;
+  background: rgba(0, 0, 0, 0.06);
+  border-style: dashed;
+}
+.equip-row .slot.filled {
+  background: rgba(80, 140, 220, 0.16);
+  border-style: solid;
+  border-color: #5a8cdc;
+}
+.equip-row .slot .swatch { width: 34px; height: 34px; }
+/* Armour icons are shaped silhouettes, so drop the "cube" styling. */
+.armor-swatch {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.armor-ghost { opacity: 0.4; }
+
 /* ---------- Crafting grid ---------- */
 .craft-label { margin: 14px 0 6px; font-size: 15px; color: #333; }
 .craft-area {

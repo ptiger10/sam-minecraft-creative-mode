@@ -19,6 +19,7 @@
     world: null,
     player: null,
     inv: new Array(36).fill(null),
+    equip: { helmet: null, chestplate: null, leggings: null, boots: null, shield: null },
     selected: 0,
     input: { forward: false, turnLeft: false, turnRight: false, jump: false },
     highlight: null,
@@ -66,9 +67,33 @@
   // A distinctive little icon for each item: emoji items render their emoji;
   // block/material items render a tiny shaded "cube" (a lit top over a darker
   // side) so each material reads differently, and ores get a speckled overlay.
+  // Little shaped silhouettes (helmet, chestplate, leggings, boots, shield) so
+  // armour reads at a glance instead of looking like a plain coloured square.
+  // Each is tinted with its material colour. viewBox is 0..24.
+  const ARMOR_SHAPES = {
+    helmet: '<path d="M5 12a7 7 0 0 1 14 0v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" fill="L" stroke="D" stroke-width="1.4"/><rect x="7.3" y="12.4" width="9.4" height="2.7" rx="0.6" fill="D"/>',
+    chestplate: '<path d="M5 8c2-2 4.5-2.5 7-2.5S17 6 19 8v3l-2 1v6.5a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V12L5 11z" fill="L" stroke="D" stroke-width="1.3" stroke-linejoin="round"/><line x1="12" y1="7" x2="12" y2="19" stroke="D" stroke-width="1"/>',
+    leggings: '<path d="M7 5h10l-.6 6-1 8h-2.6l-.8-6-.8 6H8.6l-1-8z" fill="L" stroke="D" stroke-width="1.3" stroke-linejoin="round"/>',
+    boots: '<path d="M5 4h4v7h3.5v4H5z" fill="L" stroke="D" stroke-width="1.1" stroke-linejoin="round"/><path d="M19 4h-4v7h-3.5v4H19z" fill="L" stroke="D" stroke-width="1.1" stroke-linejoin="round"/>',
+    shield: '<path d="M12 3l7 2.2V11c0 5-3 8.2-7 10-4-1.8-7-5-7-10V5.2z" fill="L" stroke="D" stroke-width="1.4" stroke-linejoin="round"/><line x1="12" y1="4" x2="12" y2="22" stroke="D" stroke-width="0.9"/>'
+  };
+  function armorSvgURI(slot, light, dark) {
+    const body = (ARMOR_SHAPES[slot] || ARMOR_SHAPES.chestplate)
+      .replace(/L/g, light).replace(/D/g, dark);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + body + "</svg>";
+    return "url('data:image/svg+xml," + encodeURIComponent(svg) + "')";
+  }
+  function armorIconHTML(def, ghost) {
+    const light = ghost ? "#808690" : hex(def.swatch);
+    const dark = ghost ? "#5a606a" : hex(def.swatchSide !== undefined ? def.swatchSide : Game.mix(def.swatch, 0x000000, 0.4));
+    const cls = "swatch armor-swatch" + (ghost ? " armor-ghost" : "");
+    return '<span class="' + cls + '" style="background-image:' + armorSvgURI(def.slot, light, dark) + '"></span>';
+  }
+
   function iconHTML(id) {
     const def = Game.itemDef(id);
     if (!def) return "";
+    if (def.equip && def.slot) return armorIconHTML(def, false);
     if (def.emoji) return '<span class="emoji">' + def.emoji + "</span>";
     if (def.swatch !== undefined) {
       const top = hex(def.swatch);
@@ -86,6 +111,7 @@
     }
     return '<span class="emoji">?</span>';
   }
+  Game._iconHTML = iconHTML; // (used by the tests)
 
   let toastTimer = null;
   function toast(msg) {
@@ -201,9 +227,12 @@
     const s = S.inv[i];
     if (s) {
       el.innerHTML = iconHTML(s.id) + (showSlotCount(s) ? '<span class="count">' + s.count + "</span>" : "");
-      el.title = Game.itemName(s.id);
+      const def = Game.itemDef(s.id);
+      el.title = Game.itemName(s.id) + (def && def.equip ? " — tap to wear" : "");
     }
-    el.addEventListener("click", () => selectSlot(i));
+    // Armour and shields are worn on tap; everything else goes to your hand.
+    const isEquip = s && Game.itemDef(s.id) && Game.itemDef(s.id).equip;
+    el.addEventListener("click", () => (isEquip ? equipItem(i) : selectSlot(i)));
     return el;
   }
 
@@ -214,11 +243,72 @@
   }
 
   function renderInventory() {
+    renderEquip();
     const grid = $("inv-grid");
     grid.innerHTML = "";
     for (let i = 0; i < S.inv.length; i++) grid.appendChild(buildSlotEl(i));
     updateInvTitle(S.inv[S.selected] ? S.inv[S.selected].id : null);
   }
+
+  function emptyEquip() {
+    return { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  }
+
+  // Draw the five equipment slots. A filled slot shows its piece (tap to take
+  // off); an empty slot shows a faint silhouette of what goes there.
+  function renderEquip() {
+    const row = $("equip-row");
+    if (!row) return;
+    row.innerHTML = "";
+    Game.EQUIP_SLOTS.forEach((slot) => {
+      const el = document.createElement("div");
+      el.className = "slot equip-slot equip-" + slot;
+      const id = S.equip[slot];
+      if (id) {
+        el.classList.add("filled");
+        el.innerHTML = iconHTML(id);
+        el.title = Game.itemName(id) + " — tap to take off";
+        el.addEventListener("click", () => unequipSlot(slot));
+      } else {
+        // A ghost silhouette hints what the slot is for.
+        el.innerHTML = armorIconHTML({ slot: slot, swatch: 0x808690 }, true);
+        el.title = slot.charAt(0).toUpperCase() + slot.slice(1) + " slot";
+        el.addEventListener("click", () => toast("Craft or find " + slot + " armour, then tap it in your backpack to wear it."));
+      }
+      row.appendChild(el);
+    });
+  }
+
+  // Wear a piece from the backpack: it moves into its slot (swapping out any
+  // piece already there). Anything that isn't armour just gets selected instead.
+  function equipItem(i) {
+    const s = S.inv[i];
+    if (!s) return;
+    const def = Game.itemDef(s.id);
+    if (!def || !def.equip || !def.slot) { selectSlot(i); return; }
+    const slot = def.slot;
+    const prev = S.equip[slot];
+    const wearing = s.id;
+    s.count -= 1;
+    if (s.count <= 0) S.inv[i] = null;
+    S.equip[slot] = wearing;
+    if (prev) addItem(prev, 1);          // the piece you were wearing goes back
+    toast("🛡️ Now wearing the " + Game.itemName(wearing) + "!");
+    renderHotbar(); renderInventory(); updateHand();
+    setViewmodel(selectedSlot() ? selectedSlot().id : null);
+  }
+  Game._equipItem = equipItem;           // (used by the tests)
+
+  // Take a piece off — it returns to the backpack if there's room.
+  function unequipSlot(slot) {
+    const id = S.equip[slot];
+    if (!id) return;
+    if (addItem(id, 1) < 1) { toast("Your backpack is full — make room first."); return; }
+    S.equip[slot] = null;
+    toast("Took off the " + Game.itemName(id) + ".");
+    renderHotbar(); renderInventory();
+  }
+  Game._unequipSlot = unequipSlot;       // (used by the tests)
 
   function updateHand() {
     const s = selectedSlot();
@@ -1450,9 +1540,10 @@
     dn.fill.intensity = dn.baseFill * (1 - 0.50 * n);
   }
 
-  // Does the player currently carry any shield or armour? (Blocks arrows.)
+  // Is the player wearing any armour or holding a shield right now? Only EQUIPPED
+  // gear counts — carrying it in the backpack isn't enough. (Blocks arrows.)
   function hasDefense() {
-    return S.inv.some((s) => s && Game.isDefense && Game.isDefense(s.id));
+    return Game.EQUIP_SLOTS.some((slot) => !!S.equip[slot]);
   }
   Game.hasDefense = hasDefense; // world.js uses this when an arrow lands
 
@@ -1611,11 +1702,13 @@
       S.selected = restore.selected || 0;
       S.chests = restore.chests || {};
       S.questKeysGiven = restore.questKeysGiven || {};
+      S.equip = Object.assign(emptyEquip(), restore.equip || {});
     } else {
       S.inv = new Array(36).fill(null);
       S.selected = 0;
       S.chests = {};
       S.questKeysGiven = {};
+      S.equip = emptyEquip();
     }
     S.riding = null;
     S.playClock = (restore && restore.playClock) || 0;
@@ -1703,6 +1796,7 @@
         hp: S.player.hp, food: S.player.food
       },
       inventory: S.inv,
+      equip: S.equip,
       selected: S.selected,
       chests: S.chests,
       questKeysGiven: S.questKeysGiven,
@@ -1745,6 +1839,7 @@
     (data.inventory || []).forEach((s, i) => { if (s && i < 36) inv[i] = s; });
     startWorld(world, { player: data.player, inventory: inv, selected: data.selected,
       chests: data.chests || {}, questKeysGiven: data.questKeysGiven || {},
+      equip: data.equip || {},
       worldClock: data.worldClock || 0, playClock: data.playClock || 0,
       breakEndsAt: data.breakEndsAt || 0 });
     return true;
