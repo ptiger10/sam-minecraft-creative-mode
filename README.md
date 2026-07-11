@@ -205,9 +205,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   (it also autosaves every 30 seconds). Press **Continue** on the title screen
   to come back to your world later.
 - ⏰ **Take-a-break reminder.** After **17 minutes** of play the game **saves
-  and pauses itself** and shows a friendly **Break Time!** screen — a bird, a
-  water bottle and a toilet — with a **3-minute countdown bar**. The reminder
-  says *get water, go to the bathroom, stick your head outside*. When the bar
+  and pauses itself** and shows a friendly **Break Time!** screen — with a
+  **"do a stretch" logo**, plus a bird, a water bottle and a toilet — and a
+  **3-minute countdown bar**. The reminder says *get water, go to the bathroom,
+  do a stretch, stick your head outside*. When the bar
   runs out a **Resume** button appears so you can jump back in. The break counts
   down against the real clock and is **saved**, so **reloading the page won't
   skip it** — the break is waiting right where you left it.

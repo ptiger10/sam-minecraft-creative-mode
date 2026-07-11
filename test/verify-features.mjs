@@ -315,6 +315,20 @@ check("Resume button is hidden during the break", lock.hiddenNow);
 check("clicking Resume early does NOT end the break", lock.stillPaused);
 check("Resume button appears once the timer ends", lock.visibleNow);
 
+// --- The break screen has a "do a stretch" logo ---
+const stretch = await page.evaluate(() => {
+  const logo = document.querySelector("#break-panel .break-logo");
+  return {
+    hasLogo: !!logo,
+    hasSvg: !!(logo && logo.querySelector("svg")),
+    recommendsStretch: !!(logo && /stretch/i.test(logo.textContent)),
+    instructionsMentionStretch: /stretch/i.test(document.querySelector("#break-panel .break-instructions").textContent)
+  };
+});
+check("the break screen shows a stretch logo", stretch.hasLogo && stretch.hasSvg);
+check("the stretch logo recommends stretching", stretch.recommendsStretch);
+check("the break instructions mention a stretch", stretch.instructionsMentionStretch);
+
 // --- Stairs: a recipe exists and you walk straight up them, no jump ---
 const stairs = await page.evaluate(() => {
   const S = window.Game.S, G = window.Game, W = S.world, p = S.player;
