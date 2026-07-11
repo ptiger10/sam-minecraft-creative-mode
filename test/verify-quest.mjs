@@ -474,6 +474,127 @@ check("the fortress chest is stocked with netherite", loot.ok && loot.netherite)
 check("...and diamonds and emeralds", loot.diamond && loot.emerald);
 check("...and good building blocks", loot.goodBlocks >= 2);
 
+// --- Day/night cycle: 10 min day, then 2 min night, and the world darkens ---
+const dayNight = await page.evaluate(async () => {
+  const Game = window.Game, S = Game.S;
+  S.inNether = false;
+  const at = (t) => { S.worldClock = t; return Game.isNight(); };
+  const day = at(60);         // 1 minute in -> day
+  const night = at(11 * 60);  // 11 minutes in -> night
+  const backToDay = at(13 * 60); // into the next cycle -> day again
+  // Let the loop apply the visuals, then read how bright it is.
+  S.worldClock = 11 * 60; await new Promise((r) => setTimeout(r, 140));
+  const dn = S.scene.userData.dayNight;
+  const nightBright = dn ? dn.ambient.intensity : null;
+  S.worldClock = 60; await new Promise((r) => setTimeout(r, 140));
+  const dayBright = dn ? dn.ambient.intensity : null;
+  return { day, night, backToDay, nightBright, dayBright };
+});
+check("it is day early in the cycle", dayNight.day === false);
+check("it turns to night 11 minutes in", dayNight.night === true);
+check("day returns after the 2-minute night", dayNight.backToDay === false);
+check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
+
+// --- Craftable armour & shields in three tiers ---
+const armor = await page.evaluate(() => {
+  const Game = window.Game;
+  const mats = ["wood", "iron", "diamond"], pieces = ["helmet", "chestplate", "leggings", "boots", "shield"];
+  let items = 0, recipes = 0;
+  mats.forEach((m) => pieces.forEach((p) => {
+    const id = m + "_" + p;
+    if (Game.ItemDefs[id]) items++;
+    if (Game.Recipes.some((r) => r.id === id && r.table)) recipes++;
+  }));
+  return { items, recipes,
+    shieldDef: Game.isDefense("iron_shield"), armorDef: Game.isDefense("diamond_helmet"),
+    dirtDef: Game.isDefense("dirt") };
+});
+check("all 15 armour & shield items exist", armor.items === 15);
+check("all 15 armour & shield recipes exist (table)", armor.recipes === 15);
+check("shields and armour count as defense", armor.shieldDef && armor.armorDef);
+check("ordinary blocks are not defense", armor.dirtDef === false);
+
+const defense = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const saved = S.inv.slice();
+  S.inv = new Array(36).fill(null);
+  const none = Game.hasDefense();
+  S.inv[0] = { id: "iron_chestplate", count: 1 };
+  const withArmor = Game.hasDefense();
+  S.inv[0] = { id: "wood_shield", count: 1 };
+  const withShield = Game.hasDefense();
+  S.inv = saved;
+  return { none, withArmor, withShield };
+});
+check("no armour -> not defended", defense.none === false);
+check("carrying armour -> defended", defense.withArmor === true);
+check("carrying a shield -> defended", defense.withShield === true);
+
+// --- Villager houses are mineable, except the Hall of Fame ---
+const houses = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world;
+  let credits = null;
+  for (const [k, id] of W.blocks) if (id === "credits_block") credits = k.split(",").map(Number);
+  let villagerWallSealed = false;
+  W.questVillagers.forEach((v) => {
+    const hx = Math.round(v.userData.home.x - 0.5), hz = Math.round(v.userData.home.z - 0.5);
+    for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
+      if (W.isProtected(hx + dx, y, hz + dz)) villagerWallSealed = true;
+  });
+  let hallSealed = false;
+  if (credits) for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
+    if (W.isProtected(credits[0] + dx, y, credits[2] + dz)) hallSealed = true;
+  return { villagerWallSealed, hallSealed, hasCredits: !!credits };
+});
+check("villager houses 1-3 can be mined into", houses.villagerWallSealed === false);
+check("the Hall of Fame house stays sealed", houses.hasCredits && houses.hallSealed);
+
+// --- Night skeleton archer: hidden by day, shoots at night ---
+const archer = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const w = new Game.World(null, S.overworld.seed, "forest");
+  w.generate();
+  w.scene = { add() {}, remove() {} };
+  const sk = w.animals.find((a) => a.userData.kind === "skeleton");
+  if (!sk) return { ok: false };
+  const p = S.player;
+  w.updateNight(0.1, p, false);          // daytime pass
+  const hiddenByDay = sk.visible === false;
+  p.pos.set(sk.position.x, p.pos.y, sk.position.z + 1);
+  let arrows = 0; const real = w.spawnArrow.bind(w);
+  w.spawnArrow = (f, d) => { arrows++; real(f, d); };
+  for (let i = 0; i < 25; i++) { sk.userData.shootTimer = 0.01; w.updateSkeleton(sk, 0.05, p); }
+  return { ok: true, hiddenByDay, visibleAtNight: sk.visible === true, arrows };
+});
+check("skeleton archers exist and hide by day", archer.ok && archer.hiddenByDay);
+check("skeletons come out and loose arrows at night", archer.visibleAtNight && archer.arrows >= 1);
+
+const arrowHit = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const w = new Game.World(null, S.overworld.seed, "forest");
+  w.generate();
+  w.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const eye = p.eyePosition();
+  const saved = S.inv.slice();
+  // Undefended -> an arrow costs a heart.
+  S.inv = new Array(36).fill(null);
+  p.hp = Game.CONST.MAX_HP; p.dead = false;
+  w.spawnArrow({ x: eye.x + 0.3, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 15; i++) w.updateArrows(0.03, p);
+  const dmg = Game.CONST.MAX_HP - p.hp;
+  // With a shield -> the arrow is stopped.
+  S.inv = new Array(36).fill(null); S.inv[0] = { id: "iron_shield", count: 1 };
+  p.hp = Game.CONST.MAX_HP;
+  w.spawnArrow({ x: eye.x + 0.3, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 });
+  for (let i = 0; i < 15; i++) w.updateArrows(0.03, p);
+  const dmgShielded = Game.CONST.MAX_HP - p.hp;
+  S.inv = saved;
+  return { dmg, dmgShielded };
+});
+check("a skeleton arrow costs a heart when undefended", arrowHit.dmg === 2);
+check("a shield or armour blocks the arrow", arrowHit.dmgShielded === 0);
+
 // ---- Report ----
 await browser.close();
 server.close();

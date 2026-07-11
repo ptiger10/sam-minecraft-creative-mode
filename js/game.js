@@ -44,8 +44,13 @@
     playClock: 0,            // seconds of *active* play since the last break
     onBreak: false,          // true while the take-a-break overlay is showing
     breakLeft: 0,            // seconds remaining on the break countdown
+    breakEndsAt: 0,          // wall-clock (ms) the break ends — survives reloads
+    worldClock: 0,           // seconds into the day/night cycle
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
+  // Day/night: 10 minutes of daylight, then 2 minutes of night, repeating.
+  const DAY_LEN = 10 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
+  const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
 
@@ -773,6 +778,7 @@
     if (kind === "villager") openTrade(animal);
     else if (kind === "piglin") tradePiglin(animal);
     else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
+    else if (kind === "skeleton") toast("🏹 A skeleton archer! Armour or a shield blocks its arrows.");
     else toggleRide(animal);
     S.swing = 0.18;
     return true;
@@ -1137,10 +1143,10 @@
     // Clouds float far out of reach and can't be broken — just a puff of air.
     if (id === "cloud") { toast("☁️ You can't mine the clouds — they're just fluffy sky!"); return; }
 
-    // The walls, roof and floor around a locked house are sealed: the only way
-    // in is the matching key, so you can't just mine through them.
+    // Only the final Hall of Fame house is sealed: its walls, roof and floor
+    // can't be mined, so the winning screen stays locked behind the last key.
     if (S.world.isProtected(hit.block.x, hit.block.y, hit.block.z)) {
-      toast("🧱 This is part of a villager's house — use the key, not a pickaxe.");
+      toast("🏆 This is the Hall of Fame — win the last key to get in, not a pickaxe.");
       return;
     }
 
@@ -1323,13 +1329,18 @@
     scene.background = new THREE.Color(sky);
     scene.fog = new THREE.Fog(sky, 22, 58);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+    const ambient = new THREE.AmbientLight(0xffffff, 0.72);
+    scene.add(ambient);
     const sun = new THREE.DirectionalLight(0xffffff, 0.85);
     sun.position.set(0.6, 1, 0.4);
     scene.add(sun);
     const fill = new THREE.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-0.5, 0.6, -0.4);
     scene.add(fill);
+    // Remember what the surface looks like by day so the day/night cycle can
+    // dim it down toward night and back.
+    scene.userData.dayNight = { ambient: ambient, sun: sun, fill: fill, daySky: sky,
+      baseAmbient: 0.72, baseSun: 0.85, baseFill: 0.25 };
     return scene;
   }
 
@@ -1407,6 +1418,44 @@
   // ===============================================================
   //  Main loop
   // ===============================================================
+  // ===============================================================
+  //  Day / night cycle
+  // ===============================================================
+  // How "night" it is right now, 0 (full day) .. 1 (full night), with a short
+  // dusk/dawn fade at each edge of the 2-minute night.
+  function nightFactor(clock) {
+    const t = ((clock % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
+    if (t < DAY_LEN - DUSK) return 0;                          // broad daylight
+    if (t < DAY_LEN) return (t - (DAY_LEN - DUSK)) / DUSK;     // dusk: 0 -> 1
+    if (t < CYCLE_LEN - DUSK) return 1;                        // deep night
+    return 1 - (t - (CYCLE_LEN - DUSK)) / DUSK;               // dawn: 1 -> 0
+  }
+  function isNightNow() { return nightFactor(S.worldClock) > 0.5; }
+  Game.isNight = isNightNow; // (used by tests / other systems)
+
+  const NIGHT_SKY = new THREE.Color(0x0a1226);
+  const _dnDay = new THREE.Color(), _dnCol = new THREE.Color();
+  function updateDayNight(dt) {
+    S.worldClock += dt;
+    if (S.inNether) return;                       // the Nether keeps its own mood
+    const dn = S.scene && S.scene.userData && S.scene.userData.dayNight;
+    if (!dn) return;
+    const n = nightFactor(S.worldClock);
+    _dnDay.setHex(dn.daySky);
+    _dnCol.copy(_dnDay).lerp(NIGHT_SKY, n);
+    if (S.scene.background && S.scene.background.copy) S.scene.background.copy(_dnCol);
+    if (S.scene.fog) S.scene.fog.color.copy(_dnCol);
+    dn.ambient.intensity = dn.baseAmbient * (1 - 0.60 * n);
+    dn.sun.intensity = dn.baseSun * (1 - 0.72 * n);
+    dn.fill.intensity = dn.baseFill * (1 - 0.50 * n);
+  }
+
+  // Does the player currently carry any shield or armour? (Blocks arrows.)
+  function hasDefense() {
+    return S.inv.some((s) => s && Game.isDefense && Game.isDefense(s.id));
+  }
+  Game.hasDefense = hasDefense; // world.js uses this when an arrow lands
+
   function loop(now) {
     if (!S.running) return;
     requestAnimationFrame(loop);
@@ -1418,7 +1467,9 @@
       if (S.riding) updateRiding(dt);
       else S.player.update(dt, S.input);
       S.world.updateAnimals(dt);
+      updateDayNight(dt);
       if (S.inNether) S.world.updateNether(dt, S.player);
+      else S.world.updateNight(dt, S.player, isNightNow()); // surface skeletons at night
       handlePortal(dt);
       updateTargeting();
       renderVitals();
@@ -1449,22 +1500,33 @@
   // ===============================================================
   //  Take-a-break reminder
   // ===============================================================
+  const nowMs = () => Date.now();
+
   function startBreak() {
     S.playClock = 0;
+    S.breakEndsAt = nowMs() + BREAK_LENGTH * 1000; // a fixed real-world end time
+    showBreakOverlay();
+    saveGame(true);                 // persist the break so a reload can't skip it
+  }
+
+  // Show (or re-show) the break panel and reset the countdown UI. Used both when
+  // a break first starts and when one is resumed after a page reload.
+  function showBreakOverlay() {
     S.onBreak = true;
-    S.breakLeft = BREAK_LENGTH;
-    saveGame(true);                 // save before we step away
+    S.breakLeft = Math.max(0, (S.breakEndsAt - nowMs()) / 1000);
     updateBreakBar();
     // Keep the Resume button hidden AND disabled until the timer truly runs
-    // out, so the break can't be skipped early.
+    // out, so the break can't be skipped early (or by reloading the page).
     $("btn-resume-break").classList.add("hidden");
     $("btn-resume-break").disabled = true;
     showPanel("break-panel");       // also sets S.paused = true
   }
 
   function tickBreak(dt) {
-    if (S.breakLeft <= 0) return;
-    S.breakLeft = Math.max(0, S.breakLeft - dt);
+    // Count down against the real clock so reloading or waiting can't shorten
+    // (or skip) the break. Fall back to dt only if no end time is set.
+    if (S.breakEndsAt) S.breakLeft = Math.max(0, (S.breakEndsAt - nowMs()) / 1000);
+    else S.breakLeft = Math.max(0, S.breakLeft - dt);
     updateBreakBar();
     if (S.breakLeft <= 0) {
       // Break's over — reveal the Resume button (we don't auto-resume so the
@@ -1489,7 +1551,9 @@
     if (S.onBreak && S.breakLeft > 0) return;
     S.onBreak = false;
     S.breakLeft = 0;
+    S.breakEndsAt = 0;              // clear it so a later reload won't re-trigger
     S.playClock = 0;
+    saveGame(true);                 // persist that the break is finished
     hideAllPanels();                // unpauses the game
     toast("Welcome back! 🎮");
   }
@@ -1554,9 +1618,13 @@
       S.questKeysGiven = {};
     }
     S.riding = null;
-    S.playClock = 0;
+    S.playClock = (restore && restore.playClock) || 0;
     S.onBreak = false;
     S.breakLeft = 0;
+    // A break in progress is remembered by its wall-clock end time, so reloading
+    // the page can't skip it.
+    S.breakEndsAt = (restore && restore.breakEndsAt) || 0;
+    S.worldClock = (restore && restore.worldClock) || 0; // start a fresh world at dawn
 
     // Dimension bookkeeping: this fresh world is the overworld; the Nether is
     // built lazily the first time you step through a portal.
@@ -1583,6 +1651,14 @@
       requestAnimationFrame(loop);
     }
     if (!restore) toast("Punch a tree to get wood! 🌳");
+
+    // Reloaded mid-break? If the break's real end time is still in the future,
+    // put the break overlay straight back up (paused) so it can't be dodged. If
+    // it already elapsed while away, the break is done — clear it and play on.
+    if (S.breakEndsAt) {
+      if (nowMs() < S.breakEndsAt) showBreakOverlay();
+      else { S.breakEndsAt = 0; if (restore) toast("Thanks for taking a break! 🎮"); }
+    }
   }
 
   // A genuinely random 32-bit number (crypto-backed when available, so the
@@ -1629,7 +1705,10 @@
       inventory: S.inv,
       selected: S.selected,
       chests: S.chests,
-      questKeysGiven: S.questKeysGiven
+      questKeysGiven: S.questKeysGiven,
+      worldClock: S.worldClock,
+      playClock: S.playClock,
+      breakEndsAt: S.breakEndsAt
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1665,7 +1744,9 @@
     const inv = new Array(36).fill(null);
     (data.inventory || []).forEach((s, i) => { if (s && i < 36) inv[i] = s; });
     startWorld(world, { player: data.player, inventory: inv, selected: data.selected,
-      chests: data.chests || {}, questKeysGiven: data.questKeysGiven || {} });
+      chests: data.chests || {}, questKeysGiven: data.questKeysGiven || {},
+      worldClock: data.worldClock || 0, playClock: data.playClock || 0,
+      breakEndsAt: data.breakEndsAt || 0 });
     return true;
   }
 

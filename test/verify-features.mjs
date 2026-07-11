@@ -356,6 +356,52 @@ const furRecipes = await page.evaluate(() => {
 check("furnace panel lists the smelting recipes", furRecipes.rows >= 5);
 check("tapping a furnace recipe loads the ingredient", furRecipes.loaded.input === "sand" && furRecipes.loaded.inputN === 3);
 
+// --- A take-a-break can't be dodged by reloading the page ---
+// Clear any leftover break state, then force a break to begin.
+await page.evaluate(() => {
+  const S = window.Game.S;
+  S.onBreak = false; S.breakEndsAt = 0; S.breakLeft = 0; S.paused = false;
+  document.querySelectorAll(".panel-overlay").forEach((p) => p.classList.add("hidden"));
+  S.playClock = 99999; // trips the break on the next frame
+});
+await page.waitForFunction(() => window.Game.S.onBreak === true, { timeout: 5000 });
+const beforeReload = await page.evaluate(() => ({
+  onBreak: window.Game.S.onBreak,
+  future: window.Game.S.breakEndsAt > Date.now()
+}));
+
+// Reload the page — the classic way to try to skip the break — then resume.
+await page.reload();
+await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
+await page.click("#btn-continue");
+await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
+const afterReload = await page.evaluate(() => {
+  const S = window.Game.S;
+  const panel = document.getElementById("break-panel");
+  const panelVisible = panel && !panel.classList.contains("hidden");
+  const btn = document.getElementById("btn-resume-break");
+  btn.click(); // try to resume early — should be refused while the timer runs
+  return { onBreak: S.onBreak, paused: S.paused, panelVisible,
+    resumeHidden: getComputedStyle(btn).display === "none", stillOnBreak: S.onBreak };
+});
+check("a break was in progress before reloading", beforeReload.onBreak && beforeReload.future);
+check("the break survives a page reload (can't be skipped)", afterReload.onBreak === true && afterReload.panelVisible);
+check("the reloaded break keeps the game paused", afterReload.paused === true);
+check("Resume stays locked after a reload", afterReload.resumeHidden && afterReload.stillOnBreak === true);
+
+// Once the real time is up, Resume unlocks and the break clears for good.
+const cleared = await page.evaluate(async () => {
+  const S = window.Game.S;
+  S.breakEndsAt = Date.now() - 1000;          // pretend the 3 minutes elapsed
+  await new Promise((r) => setTimeout(r, 150)); // let tickBreak notice
+  const btn = document.getElementById("btn-resume-break");
+  const unlocked = getComputedStyle(btn).display !== "none" && !btn.disabled;
+  btn.click();                                 // endBreak
+  return { unlocked, onBreak: S.onBreak, endsAt: S.breakEndsAt };
+});
+check("the break unlocks once its time is really up", cleared.unlocked);
+check("resuming then clears the break", cleared.onBreak === false && cleared.endsAt === 0);
+
 // --- Report ---
 await browser.close();
 server.close();
