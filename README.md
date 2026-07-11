@@ -201,7 +201,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   and pauses itself** and shows a friendly **Break Time!** screen — a bird, a
   water bottle and a toilet — with a **3-minute countdown bar**. The reminder
   says *get water, go to the bathroom, stick your head outside*. When the bar
-  runs out a **Resume** button appears so you can jump back in.
+  runs out a **Resume** button appears so you can jump back in. The break counts
+  down against the real clock and is **saved**, so **reloading the page won't
+  skip it** — the break is waiting right where you left it.
 
 ## 🗂️ How the code is laid out
 

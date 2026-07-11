@@ -44,6 +44,7 @@
     playClock: 0,            // seconds of *active* play since the last break
     onBreak: false,          // true while the take-a-break overlay is showing
     breakLeft: 0,            // seconds remaining on the break countdown
+    breakEndsAt: 0,          // wall-clock (ms) the break ends — survives reloads
     worldClock: 0,           // seconds into the day/night cycle
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
@@ -1499,22 +1500,33 @@
   // ===============================================================
   //  Take-a-break reminder
   // ===============================================================
+  const nowMs = () => Date.now();
+
   function startBreak() {
     S.playClock = 0;
+    S.breakEndsAt = nowMs() + BREAK_LENGTH * 1000; // a fixed real-world end time
+    showBreakOverlay();
+    saveGame(true);                 // persist the break so a reload can't skip it
+  }
+
+  // Show (or re-show) the break panel and reset the countdown UI. Used both when
+  // a break first starts and when one is resumed after a page reload.
+  function showBreakOverlay() {
     S.onBreak = true;
-    S.breakLeft = BREAK_LENGTH;
-    saveGame(true);                 // save before we step away
+    S.breakLeft = Math.max(0, (S.breakEndsAt - nowMs()) / 1000);
     updateBreakBar();
     // Keep the Resume button hidden AND disabled until the timer truly runs
-    // out, so the break can't be skipped early.
+    // out, so the break can't be skipped early (or by reloading the page).
     $("btn-resume-break").classList.add("hidden");
     $("btn-resume-break").disabled = true;
     showPanel("break-panel");       // also sets S.paused = true
   }
 
   function tickBreak(dt) {
-    if (S.breakLeft <= 0) return;
-    S.breakLeft = Math.max(0, S.breakLeft - dt);
+    // Count down against the real clock so reloading or waiting can't shorten
+    // (or skip) the break. Fall back to dt only if no end time is set.
+    if (S.breakEndsAt) S.breakLeft = Math.max(0, (S.breakEndsAt - nowMs()) / 1000);
+    else S.breakLeft = Math.max(0, S.breakLeft - dt);
     updateBreakBar();
     if (S.breakLeft <= 0) {
       // Break's over — reveal the Resume button (we don't auto-resume so the
@@ -1539,7 +1551,9 @@
     if (S.onBreak && S.breakLeft > 0) return;
     S.onBreak = false;
     S.breakLeft = 0;
+    S.breakEndsAt = 0;              // clear it so a later reload won't re-trigger
     S.playClock = 0;
+    saveGame(true);                 // persist that the break is finished
     hideAllPanels();                // unpauses the game
     toast("Welcome back! 🎮");
   }
@@ -1604,9 +1618,12 @@
       S.questKeysGiven = {};
     }
     S.riding = null;
-    S.playClock = 0;
+    S.playClock = (restore && restore.playClock) || 0;
     S.onBreak = false;
     S.breakLeft = 0;
+    // A break in progress is remembered by its wall-clock end time, so reloading
+    // the page can't skip it.
+    S.breakEndsAt = (restore && restore.breakEndsAt) || 0;
     S.worldClock = (restore && restore.worldClock) || 0; // start a fresh world at dawn
 
     // Dimension bookkeeping: this fresh world is the overworld; the Nether is
@@ -1634,6 +1651,14 @@
       requestAnimationFrame(loop);
     }
     if (!restore) toast("Punch a tree to get wood! 🌳");
+
+    // Reloaded mid-break? If the break's real end time is still in the future,
+    // put the break overlay straight back up (paused) so it can't be dodged. If
+    // it already elapsed while away, the break is done — clear it and play on.
+    if (S.breakEndsAt) {
+      if (nowMs() < S.breakEndsAt) showBreakOverlay();
+      else { S.breakEndsAt = 0; if (restore) toast("Thanks for taking a break! 🎮"); }
+    }
   }
 
   // A genuinely random 32-bit number (crypto-backed when available, so the
@@ -1681,7 +1706,9 @@
       selected: S.selected,
       chests: S.chests,
       questKeysGiven: S.questKeysGiven,
-      worldClock: S.worldClock
+      worldClock: S.worldClock,
+      playClock: S.playClock,
+      breakEndsAt: S.breakEndsAt
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1718,7 +1745,8 @@
     (data.inventory || []).forEach((s, i) => { if (s && i < 36) inv[i] = s; });
     startWorld(world, { player: data.player, inventory: inv, selected: data.selected,
       chests: data.chests || {}, questKeysGiven: data.questKeysGiven || {},
-      worldClock: data.worldClock || 0 });
+      worldClock: data.worldClock || 0, playClock: data.playClock || 0,
+      breakEndsAt: data.breakEndsAt || 0 });
     return true;
   }
 
