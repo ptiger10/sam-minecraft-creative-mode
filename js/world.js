@@ -558,6 +558,26 @@
 
     // Fluffy clouds drifting high above everything else.
     this.scatterClouds();
+
+    // Skeleton archers that only come out at night.
+    this.arrows = [];
+    this.spawnSkeletons(2);
+  };
+
+  // A few skeleton archers, hidden away by day. They wake and roam at night.
+  World.prototype.spawnSkeletons = function (count) {
+    const rng = Game.mulberry32(this.seed ^ 0x5ce1e7);
+    for (let i = 0; i < count; i++) {
+      const sk = makeSkeleton();
+      const x = 5 + Math.floor(rng() * (C.WORLD - 10));
+      const z = 5 + Math.floor(rng() * (C.WORLD - 10));
+      sk.position.set(x + 0.5, this.surfaceY(x, z) + 1, z + 0.5);
+      sk.visible = false;             // asleep until nightfall
+      sk.userData.dir = rng() * Math.PI * 2;
+      sk.userData.timer = rng() * 3;
+      sk.userData.shootTimer = 1 + rng() * 3;
+      this.animals.push(sk);
+    }
   };
 
   // Fluffy white clouds sit in a single layer high in the sky — puffy patches
@@ -1193,6 +1213,40 @@
   }
   World.makeWither = makeWither;
 
+  // A skeleton archer: a pale bony humanoid holding a little bow. It only comes
+  // out at night on the surface, loosing arrows in random directions.
+  function makeSkeleton() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const bone = 0xdad6cc, boneDark = 0xb7b2a5, dark = 0x2a2a2e, bowC = 0x7a5a30;
+    // Legs
+    [-0.12, 0.12].forEach((x) => {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.62, 0.13), mat(boneDark));
+      l.position.set(x, 0.31, 0); group.add(l);
+    });
+    // Ribcage / body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.18), mat(bone));
+    body.position.set(0, 0.92, 0); group.add(body);
+    // Arms (the front one holds the bow)
+    [-0.28, 0.28].forEach((x) => {
+      const a = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.56, 0.1), mat(bone));
+      a.position.set(x, 0.9, 0.06); group.add(a);
+    });
+    // Head / skull
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.38, 0.38), mat(bone));
+    head.position.set(0, 1.42, 0); group.add(head);
+    [-0.1, 0.1].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.05), mat(dark));
+      e.position.set(x, 1.44, 0.19); group.add(e);
+    });
+    // A simple bow held out in front.
+    const bow = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.06), mat(bowC));
+    bow.position.set(0.3, 0.95, 0.16); group.add(bow);
+    group.userData.kind = "skeleton";
+    return group;
+  }
+  World.makeSkeleton = makeSkeleton;
+
   // Fill a single column from fromY..toY (inclusive) with one block id.
   World.prototype.fillColumn = function (x, z, fromY, toY, id) {
     if (x < 0 || z < 0 || x >= C.WORLD || z >= C.WORLD) return;
@@ -1394,12 +1448,16 @@
     const wall = num >= 3 ? "brick" : "brown_brick";
     const roof = num >= 3 ? "red_brick" : "planks";
     const top = floorY + 3;                         // walls are 3 blocks tall
+    // Only the FINAL house — the one holding the winning "Hall of Fame" screen —
+    // is sealed so it can't be mined into. The others are ordinary buildings you
+    // can dig through if you'd rather not chase down the keys.
+    const seal = (x, y, z) => { if (num === 4) this.markProtected(x, y, z); };
 
     for (let dx = -hr; dx <= hr; dx++) {
       for (let dz = -hr; dz <= hr; dz++) {
         const x = cx + dx, z = cz + dz;
-        // Seal the whole footprint's floor so you can't tunnel up into the house.
-        this.markProtected(x, floorY, z);
+        // Seal the whole footprint's floor so you can't tunnel up into house 4.
+        seal(x, floorY, z);
         const edge = Math.max(Math.abs(dx), Math.abs(dz)) === hr;
         if (!edge) continue;
         if (dz === -hr && dx === 0) {
@@ -1407,12 +1465,12 @@
           const doorId = num === 1 ? "door" : ("locked_door_" + num);
           this.blocks.set(World.key(x, floorY + 1, z), doorId);
           this.blocks.set(World.key(x, floorY + 3, z), wall);   // lintel (foot+2 stays open)
-          this.markProtected(x, floorY + 1, z);                 // the (locked) door
-          this.markProtected(x, floorY + 3, z);                 // the lintel above it
+          seal(x, floorY + 1, z);                               // the (locked) door
+          seal(x, floorY + 3, z);                               // the lintel above it
         } else {
           this.fillColumn(x, z, floorY + 1, top, wall);
           if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) this.blocks.set(World.key(x, floorY + 2, z), "glass");
-          for (let y = floorY + 1; y <= top; y++) this.markProtected(x, y, z); // walls + windows
+          for (let y = floorY + 1; y <= top; y++) seal(x, y, z); // walls + windows
         }
       }
     }
@@ -1420,7 +1478,7 @@
     for (let dx = -hr; dx <= hr; dx++) {
       for (let dz = -hr; dz <= hr; dz++) {
         this.blocks.set(World.key(cx + dx, floorY + 4, cz + dz), roof);
-        this.markProtected(cx + dx, floorY + 4, cz + dz);
+        seal(cx + dx, floorY + 4, cz + dz);
       }
     }
     // A torch inside so it isn't pitch dark.
@@ -1875,6 +1933,8 @@
       // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
           a.userData.kind === "wither") continue;
+      // Skeletons are driven by updateNight (only awake after dark).
+      if (a.userData.kind === "skeleton") continue;
 
       // Ground animals just walk around on the surface — no hopping/floating.
       a.userData.timer -= dt;
@@ -1896,6 +1956,91 @@
       a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
       a.rotation.y = -a.userData.dir + Math.PI / 2;
     }
+  };
+
+  // Night on the surface: skeletons wake up, roam, and loose arrows in random
+  // directions. By day they vanish and any arrows fizzle out. Called from the
+  // main loop while you're in the overworld.
+  World.prototype.updateNight = function (dt, player, isNight) {
+    for (const a of this.animals) {
+      if (a.userData.kind !== "skeleton") continue;
+      if (!isNight) { a.visible = false; continue; }
+      this.updateSkeleton(a, dt, player);
+    }
+    this.updateArrows(dt, player);
+  };
+
+  // A skeleton roams the surface and, on a timer, looses an arrow off in a
+  // RANDOM direction (not aimed at you).
+  World.prototype.updateSkeleton = function (a, dt, player) {
+    a.visible = true;
+    const u = a.userData;
+    u.timer -= dt;
+    if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+    const speed = 0.9;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
+    else u.dir += Math.PI;
+    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+    a.rotation.y = -u.dir + Math.PI / 2;
+
+    // Fire an arrow off in a random direction if the player is roughly nearby.
+    u.shootTimer -= dt;
+    if (u.shootTimer <= 0) {
+      u.shootTimer = 2 + Math.random() * 3;
+      const dx = player.pos.x - a.position.x, dz = player.pos.z - a.position.z;
+      if (dx * dx + dz * dz < 26 * 26) {
+        const ang = Math.random() * Math.PI * 2;
+        const dir = { x: Math.cos(ang), y: (Math.random() - 0.5) * 0.3, z: Math.sin(ang) };
+        const len = Math.hypot(dir.x, dir.y, dir.z);
+        this.spawnArrow({ x: a.position.x, y: a.position.y + 1.3, z: a.position.z },
+          { x: dir.x / len, y: dir.y / len, z: dir.z / len });
+      }
+    }
+  };
+
+  World.prototype.spawnArrow = function (from, dir) {
+    if (!this.arrows) this.arrows = [];
+    const SPEED = 10;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.08, 0.08),
+      new THREE.MeshLambertMaterial({ color: 0x7a6a55 })
+    );
+    mesh.position.set(from.x, from.y, from.z);
+    // Point the shaft along its flight direction.
+    mesh.rotation.y = Math.atan2(dir.x, dir.z);
+    if (this.scene) this.scene.add(mesh);
+    this.arrows.push({ mesh: mesh, vel: { x: dir.x * SPEED, y: dir.y * SPEED, z: dir.z * SPEED }, life: 4 });
+  };
+
+  World.prototype.updateArrows = function (dt, player) {
+    if (!this.arrows || !this.arrows.length) return;
+    const eye = player.eyePosition();
+    const remove = (ar) => { if (this.scene) this.scene.remove(ar.mesh); if (ar.mesh.geometry) ar.mesh.geometry.dispose(); };
+    this.arrows = this.arrows.filter((ar) => {
+      const m = ar.mesh;
+      m.position.x += ar.vel.x * dt;
+      m.position.y += ar.vel.y * dt;
+      m.position.z += ar.vel.z * dt;
+      ar.life -= dt;
+      const dx = m.position.x - eye.x, dy = m.position.y - eye.y, dz = m.position.z - eye.z;
+      if (dx * dx + dy * dy + dz * dz < 0.7 * 0.7) {
+        // A shield or any armour stops the arrow cold.
+        if (Game.hasDefense && Game.hasDefense()) {
+          if (Game.toast) Game.toast("🛡️ Your armour blocked the arrow!");
+        } else {
+          player.damage(2, "were shot by a skeleton");
+          if (Game.toast) Game.toast("🏹 A skeleton's arrow hit you! (-1 ❤️)");
+        }
+        remove(ar); return false;
+      }
+      if (this.solidAt(Math.floor(m.position.x), Math.floor(m.position.y), Math.floor(m.position.z)) || ar.life <= 0) {
+        remove(ar); return false;
+      }
+      return true;
+    });
   };
 
   // Villagers mostly stand around their settlement, only occasionally taking a

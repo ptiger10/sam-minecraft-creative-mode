@@ -273,6 +273,36 @@ window.Game = window.Game || {};
   // Watermelon stays a normal placeable block, but you can also eat it.
   Game.ItemDefs.watermelon.food = 8;
 
+  // ---- Armour & shields ------------------------------------------
+  // Three tiers (wood / iron / diamond) of helmet, chestplate, leggings, boots
+  // and shield. Wearing/holding any of them protects you from a skeleton's
+  // arrows. Each is crafted at a table (recipes are added further down).
+  Game.ARMOR_MATS = {
+    wood:    { label: "Wooden",  mat: "planks",     swatch: 0xb18a4f, side: 0x8a6a34 },
+    iron:    { label: "Iron",    mat: "iron_ingot", swatch: 0xd0d3da, side: 0x9aa0a8 },
+    diamond: { label: "Diamond", mat: "diamond",    swatch: 0x4fe3d8, side: 0x2bb6ab }
+  };
+  Game.ARMOR_PIECES = { helmet: "Helmet", chestplate: "Chestplate", leggings: "Leggings", boots: "Boots", shield: "Shield" };
+  Object.keys(Game.ARMOR_MATS).forEach((mk) => {
+    const m = Game.ARMOR_MATS[mk];
+    Object.keys(Game.ARMOR_PIECES).forEach((pk) => {
+      const id = mk + "_" + pk;
+      const isShield = pk === "shield";
+      Game.ItemDefs[id] = {
+        name: m.label + " " + Game.ARMOR_PIECES[pk],
+        swatch: m.swatch, swatchSide: m.side, placeable: false,
+        armor: !isShield, shield: isShield,
+        desc: isShield
+          ? "Hold onto a shield to block a skeleton's arrows."
+          : "Keep this armour with you to block a skeleton's arrows."
+      };
+    });
+  });
+  // Anything that counts as protection against arrows.
+  Game.isShield = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].shield);
+  Game.isArmor = (id) => !!(Game.ItemDefs[id] && Game.ItemDefs[id].armor);
+  Game.isDefense = (id) => Game.isShield(id) || Game.isArmor(id);
+
   // A few descriptions for placeable blocks (shown in the inventory title).
   const DESCS = {
     furnace: "Place it and tap to smelt sand, clay, ore and iron ingots.",
@@ -370,6 +400,23 @@ window.Game = window.Game || {};
     Game.Recipes.push({
       id: "wood_" + c, gives: { id: "wood_" + c, count: 1 },
       pattern: [[W, "paint_" + c]]
+    });
+  });
+
+  // Armour & shield recipes (one per material, Minecraft-style shapes). "M" is
+  // the material (planks / iron ingot / diamond). All need a crafting table.
+  const ARMOR_SHAPES = {
+    helmet:     (M) => [[M, M, M], [M, null, M]],
+    chestplate: (M) => [[M, null, M], [M, M, M], [M, M, M]],
+    leggings:   (M) => [[M, M, M], [M, null, M], [M, null, M]],
+    boots:      (M) => [[M, null, M], [M, null, M]],
+    shield:     (M) => [[M, M, M], [M, M, M], [null, M, null]]
+  };
+  Object.keys(Game.ARMOR_MATS).forEach((mk) => {
+    const M = Game.ARMOR_MATS[mk].mat;
+    Object.keys(ARMOR_SHAPES).forEach((pk) => {
+      const id = mk + "_" + pk;
+      Game.Recipes.push({ id: id, gives: { id: id, count: 1 }, table: true, pattern: ARMOR_SHAPES[pk](M) });
     });
   });
 

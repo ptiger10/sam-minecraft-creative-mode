@@ -78,6 +78,15 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   top corner — red for health, tan for food — in keeping with the pixel look.
   Food drips down *slowly* — eat apples or watermelons so you don't starve. If
   your food runs out you start losing health.
+- 🌗 **Day & night.** Every **10 minutes of daylight** is followed by **2
+  minutes of night**, when the sky darkens and the world dims — then day
+  returns. After dark a **🏹 skeleton archer** roams the surface, loosing
+  **arrows in random directions**. Craft some armour or a shield (see below) and
+  the arrows just **bounce off**.
+- 🛡️ **Armour & shields.** At a crafting table you can make **helmets,
+  chestplates, leggings, boots and shields** in three tiers — **wooden** (planks),
+  **iron** (iron ingots) and **diamond**. Keep any piece with you and a
+  skeleton's arrows can't hurt you.
 - 🪨 **Fall damage:** jumping off something too tall hurts.
 - 😴 If your health runs out, a gentle **"You needed a nap!"** screen pops up —
   then you can respawn.
@@ -115,9 +124,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - The **third villager** wants **netherite** in exchange for the **last key**,
     which opens the **fourth house**: a **scrolling Hall of Fame** honouring
     **Sam Fort** and **Dave Fort** for inventing the game. 🏆
-  - Each villager gives you a key **only once**, and the **walls, roof and floor
-    of every locked house are sealed** — no mining through them, so the key is
-    the only way in.
+  - Each villager gives you a key **only once**. You can **mine your way into
+    the first three houses** if you'd rather not chase the keys — but the final
+    **Hall of Fame house is sealed** (walls, roof and floor), so the winning
+    screen stays locked behind that last key.
 - 💧 **Ponds and watering holes** of water with **sandy shores** dot the
   surface — every world gets a few (even the desert gets an **oasis** or two) —
   plus **clay** (grey, brown and red) to dig up near the water and underground,
