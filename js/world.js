@@ -364,9 +364,51 @@
     ]);
   }
 
+  // The End portal (in the 4th house): a dark, near-black cross flecked with a
+  // couple of pale "stars", so it reads as a doorway into the starry void.
+  function endPortalGeometry() {
+    const a = new THREE.Color(0x151538), b = new THREE.Color(0x0a0a1e), star = new THREE.Color(0x9fe8ff);
+    return mergeColoredBoxes([
+      { g: Box(0.86, 1.0, 0.2), x: 0, y: 0, z: 0, c: a },
+      { g: Box(0.2, 1.0, 0.86), x: 0, y: 0, z: 0, c: b },
+      { g: Box(0.12, 0.12, 0.24), x: 0.18, y: 0.28, z: 0, c: star },
+      { g: Box(0.12, 0.12, 0.24), x: -0.16, y: -0.22, z: 0, c: star },
+      { g: Box(0.24, 0.12, 0.12), x: 0, y: 0.06, z: 0.18, c: star }
+    ]);
+  }
+
+  // The crafted Exit Portal: a bright magenta crystal cross you step through to
+  // win — clearly different from the dark entry portal and the purple Nether one.
+  function exitPortalGeometry() {
+    const a = new THREE.Color(Game.BlockDefs.exit_portal.top);
+    const b = new THREE.Color(Game.BlockDefs.exit_portal.all);
+    return mergeColoredBoxes([
+      { g: Box(0.86, 1.0, 0.2), x: 0, y: 0, z: 0, c: a },
+      { g: Box(0.2, 1.0, 0.86), x: 0, y: 0, z: 0, c: b }
+    ]);
+  }
+
+  // An End Crystal: a glowing magenta gem — a slim box turned 45° so it reads as
+  // a crystal, with a brighter inner core and a small dark base.
+  function endCrystalGeometry() {
+    const outer = new THREE.Color(Game.BlockDefs.end_crystal.all);
+    const core = new THREE.Color(0xf3d6ff);
+    const base = new THREE.Color(0x3a2350);
+    const gem = Box(0.5, 0.86, 0.5); gem.rotateY(Math.PI / 4);
+    const spine = Box(0.22, 1.0, 0.22); spine.rotateY(Math.PI / 4);
+    return mergeColoredBoxes([
+      { g: gem, x: 0, y: 0.05, z: 0, c: outer },
+      { g: spine, x: 0, y: 0.05, z: 0, c: core },
+      { g: Box(0.66, 0.14, 0.66), x: 0, y: -0.44, z: 0, c: base }
+    ]);
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
     if (id === "nether_portal") return (geomCache[id] = netherPortalGeometry());
+    if (id === "end_portal") return (geomCache[id] = endPortalGeometry());
+    if (id === "exit_portal") return (geomCache[id] = exitPortalGeometry());
+    if (id === "end_crystal") return (geomCache[id] = endCrystalGeometry());
     if (id === "credits_block") return (geomCache[id] = creditsBlockGeometry());
     if (id === "obsidian") return (geomCache[id] = obsidianGeometry());
     if (Game.LOCKED && Game.LOCKED[id]) return (geomCache[id] = lockedDoorGeometry(Game.LOCKED[id]));
@@ -1231,6 +1273,61 @@
   }
   World.makeWither = makeWither;
 
+  // The Ender Dragon: a big, near-black winged beast with glowing PURPLE eyes. It
+  // circles high over the End island and breathes purple fire. It's built facing
+  // +z (its head and eyes on the front) so it can turn to face the player.
+  function makeEnderDragon() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const body = 0x1b1723, dark = 0x0e0b13, wing = 0x271f34;
+    // Glowing purple eyes — the dragon's signature.
+    const eyeMat = () => new THREE.MeshLambertMaterial({ color: 0xc44cff, emissive: 0x8a1fd0 });
+
+    // Torso.
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.85, 1.9), mat(body));
+    torso.position.set(0, 0, 0); group.add(torso);
+    // Neck rising toward the head at the front (+z).
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.9), mat(body));
+    neck.position.set(0, 0.32, 1.2); group.add(neck);
+    // Head.
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.95), mat(body));
+    head.position.set(0, 0.5, 1.95); group.add(head);
+    // Lower jaw / snout.
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.22, 0.6), mat(dark));
+    jaw.position.set(0, 0.2, 2.2); group.add(jaw);
+    // Two glowing purple eyes on the front of the head.
+    [-0.24, 0.24].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.1), eyeMat());
+      e.position.set(x, 0.6, 2.36); group.add(e);
+    });
+    // A pair of brow horns.
+    [-0.26, 0.26].forEach((x) => {
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.12), mat(dark));
+      h.position.set(x, 0.9, 1.9); group.add(h);
+    });
+    // Broad wings, angled up, one per side.
+    [-1, 1].forEach((s) => {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.14, 1.1), mat(wing));
+      w.position.set(s * 1.65, 0.4, -0.1); w.rotation.z = s * 0.28; group.add(w);
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.7), mat(dark));
+      tip.position.set(s * 2.9, 0.75, -0.1); tip.rotation.z = s * 0.28; group.add(tip);
+    });
+    // A tapering tail trailing behind (-z).
+    for (let i = 0; i < 5; i++) {
+      const w = 0.5 - i * 0.08;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, w, 0.55), mat(i % 2 ? body : dark));
+      seg.position.set(0, -0.05 - i * 0.04, -1.15 - i * 0.5); group.add(seg);
+    }
+    // Four stubby legs tucked under the body.
+    [[-0.4, 1], [0.4, 1], [-0.4, -1], [0.4, -1]].forEach(([x, zs]) => {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.4, 0.22), mat(dark));
+      l.position.set(x, -0.55, zs * 0.6); group.add(l);
+    });
+    group.userData.kind = "ender_dragon";
+    return group;
+  }
+  World.makeEnderDragon = makeEnderDragon;
+
   // A skeleton archer: a pale bony humanoid holding a little bow. It only comes
   // out at night on the surface, loosing arrows in random directions.
   function makeSkeleton() {
@@ -1540,9 +1637,10 @@
       this.buildPortal(cx, floorY + 1, cz + hr - 1);
       this.questPortalExit = { x: cx + 0.5, y: floorY + 1, z: cz + 0.5 };
     }
-    // House 4 mounts the "Hall of Fame" credits plaque on the back wall.
+    // House 4 hides the portal to The End at the back of its sealed shell — the
+    // grand finale of the whole adventure.
     if (num === 4) {
-      this.blocks.set(World.key(cx, floorY + 2, cz + hr), "credits_block");
+      this.buildPortal(cx, floorY + 1, cz + hr - 1, "end_portal");
     }
 
     // The villager living here (none in house 4 — that one holds the credits).
@@ -1564,16 +1662,18 @@
     }
   };
 
-  // A 1-wide, 2-tall purple portal framed in obsidian, centred on (x,z) with its
-  // base at y. Used for the overworld portal and the Nether return portal.
-  World.prototype.buildPortal = function (x, y, z) {
+  // A 1-wide, 2-tall glowing portal framed in obsidian, centred on (x,z) with its
+  // base at y. Used for the Nether portals (default) and the End portal (pass
+  // "end_portal") that lives in the fourth house.
+  World.prototype.buildPortal = function (x, y, z, portalId) {
     const O = "obsidian";
+    portalId = portalId || "nether_portal";
     this.blocks.set(World.key(x, y - 1, z), O);     // sill
     this.blocks.set(World.key(x, y + 2, z), O);     // lintel
     for (let dy = 0; dy < 2; dy++) {
       this.blocks.set(World.key(x - 1, y + dy, z), O);
       this.blocks.set(World.key(x + 1, y + dy, z), O);
-      this.blocks.set(World.key(x, y + dy, z), "nether_portal");
+      this.blocks.set(World.key(x, y + dy, z), portalId);
     }
     return { x: x, y: y, z: z };
   };
@@ -1939,6 +2039,109 @@
     this.fortressChests.push(chestCell);
   };
 
+  // ================================================================
+  //  The End: a dark starry void with a pale island, four soaring
+  //  spiral staircases crowned with End Crystals, and the Ender Dragon
+  //  circling overhead breathing purple fire. There is NO portal back
+  //  to the overworld — the only way out is the Exit Portal you craft
+  //  from four End Crystals.
+  // ================================================================
+  World.prototype.generateEnd = function () {
+    this.isEnd = true;
+    this.fireballs = [];
+    this.skulls = [];                 // (kept so shared projectile helpers are safe)
+    const SZ = C.WORLD, FLOOR = 3;
+    const cx = Math.floor(SZ / 2), cz = Math.floor(SZ / 2);
+
+    // A solid End-stone island paves the whole floor, so you never tumble into
+    // the endless void below.
+    for (let x = 0; x < SZ; x++) {
+      for (let z = 0; z < SZ; z++) {
+        for (let y = 0; y <= FLOOR; y++) this.blocks.set(World.key(x, y, z), "end_stone");
+      }
+    }
+
+    // You arrive on the island, looking toward its heart.
+    this.spawn = { x: cx + 0.5, y: FLOOR + 1, z: cz + 0.5 };
+
+    // Four VERY tall spiral staircases, each crowned with an End Crystal.
+    this.endCrystals = [];
+    const R = 8, baseY = FLOOR + 1, height = 18;
+    [[-R, -R], [R, -R], [-R, R], [R, R]].forEach(([dx, dz]) => {
+      this.buildEndSpiral(cx + dx, cz + dz, baseY, height);
+    });
+
+    // The Ender Dragon glides in a slow circle high above the island.
+    const dragon = makeEnderDragon();
+    const baseDragonY = FLOOR + 14;
+    dragon.position.set(cx + 12, baseDragonY, cz);
+    dragon.userData.baseY = baseDragonY;
+    dragon.userData.center = { x: cx + 0.5, z: cz + 0.5 };
+    dragon.userData.angle = 0;
+    dragon.userData.t = 0;
+    dragon.userData.fireTimer = 2.5;
+    this.animals.push(dragon);
+  };
+
+  // One spiral staircase: a central obsidian column with `stairs` spiralling up
+  // around it (so you can walk straight up, no jumping), crowned with an End
+  // Crystal on top. The eight cells that ring the column, taken in order, are
+  // each edge-adjacent to the next, so a step per cell makes a smooth climb.
+  World.prototype.buildEndSpiral = function (px, pz, baseY, height) {
+    const ring = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];
+    const topY = baseY + height;          // the block the crystal sits on is topY-1
+    // Central support column, grounded on the island and rising to just under
+    // the crystal.
+    for (let y = baseY - 1; y < topY; y++) this.blocks.set(World.key(px, y, pz), "obsidian");
+    // The spiralling steps.
+    for (let i = 0; i < height; i++) {
+      const [dx, dz] = ring[i % ring.length];
+      this.blocks.set(World.key(px + dx, baseY + i, pz + dz), "stairs");
+    }
+    // The End Crystal on top of the column.
+    this.blocks.set(World.key(px, topY, pz), "end_crystal");
+    this.endCrystals.push({ x: px, y: topY, z: pz });
+  };
+
+  // Drive The End: fly the dragon in its circle, let it breathe purple fire at
+  // the player, and move the fire along. Called each frame while you're in the
+  // End. Wearing armour (you're given a set on arrival) stops the fire cold.
+  World.prototype.updateEnd = function (dt, player) {
+    const eye = player.eyePosition();
+    for (const a of this.animals) {
+      if (a.userData.kind !== "ender_dragon") continue;
+      const u = a.userData;
+      u.t += dt;
+      // A slow, banking circle high over the island, with a gentle bob.
+      u.angle += dt * 0.4;
+      const R = 12;
+      a.position.x = u.center.x + Math.cos(u.angle) * R;
+      a.position.z = u.center.z + Math.sin(u.angle) * R;
+      a.position.y = u.baseY + Math.sin(u.t * 0.8) * 1.3;
+      a.rotation.y = Math.atan2(eye.x - a.position.x, eye.z - a.position.z); // face the player
+
+      // Breathe a short burst of purple fire toward the player now and then.
+      u.fireTimer -= dt;
+      if (u.fireTimer <= 0) {
+        u.fireTimer = 1.6 + Math.random() * 1.4;
+        const dx = eye.x - a.position.x, dy = eye.y - a.position.y, dz = eye.z - a.position.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 32 && dist > 2) {
+          const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+          const mouth = { x: a.position.x + nx * 1.8, y: a.position.y + 0.2 + ny * 1.8, z: a.position.z + nz * 1.8 };
+          for (let k = 0; k < 3; k++) {
+            const sx = nx + (Math.random() - 0.5) * 0.14;
+            const sy = ny + (Math.random() - 0.5) * 0.14;
+            const sz = nz + (Math.random() - 0.5) * 0.14;
+            const l = Math.hypot(sx, sy, sz) || 1;
+            this.spawnFireball(mouth, { x: sx / l, y: sy / l, z: sz / l }, { purple: true });
+          }
+        }
+      }
+    }
+    this.updateFireballs(dt, player);
+  };
+
   World.prototype.spawnAnimals = function (count) {
     const rng = Game.mulberry32(this.seed ^ 0xa11ce);
 
@@ -1983,6 +2186,8 @@
       // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
           a.userData.kind === "wither") continue;
+      // The Ender Dragon is driven by updateEnd.
+      if (a.userData.kind === "ender_dragon") continue;
       // Skeletons and zombies are driven by updateNight (only awake after dark).
       if (a.userData.kind === "skeleton" || a.userData.kind === "zombie") continue;
 
@@ -2301,15 +2506,21 @@
     a.rotation.y = -u.dir + Math.PI / 2;
   };
 
-  World.prototype.spawnFireball = function (from, dir) {
-    const SPEED = 9;
+  // A fireball. Ghasts spit orange ones; the Ender Dragon breathes purple ones
+  // (opts.purple), which is only a colour + message change — the damage is the
+  // same two hearts, and armour blocks either.
+  World.prototype.spawnFireball = function (from, dir, opts) {
+    const purple = !!(opts && opts.purple);
+    const SPEED = purple ? 8 : 9;
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.3, 0.3, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0xff7a1a, emissive: 0xff4500 })
+      new THREE.MeshLambertMaterial(purple
+        ? { color: 0xc23cff, emissive: 0x9b1fd6 }
+        : { color: 0xff7a1a, emissive: 0xff4500 })
     );
     mesh.position.set(from.x, from.y, from.z);
     if (this.scene) this.scene.add(mesh);
-    this.fireballs.push({ mesh: mesh, vel: { x: dir.x * SPEED, y: dir.y * SPEED, z: dir.z * SPEED }, life: 4 });
+    this.fireballs.push({ mesh: mesh, vel: { x: dir.x * SPEED, y: dir.y * SPEED, z: dir.z * SPEED }, life: 4, purple: purple });
   };
 
   World.prototype.updateFireballs = function (dt, player) {
@@ -2327,10 +2538,12 @@
       const dx = m.position.x - eye.x, dy = m.position.y - eye.y, dz = m.position.z - eye.z;
       if (dx * dx + dy * dy + dz * dz < 0.8 * 0.8) {
         if (Game.hasDefense && Game.hasDefense()) {
-          if (Game.toast) Game.toast("🛡️ Your armour blocked the fireball!");
+          if (Game.toast) Game.toast(fb.purple
+            ? "🛡️ Your armour shrugs off the dragon's purple fire!"
+            : "🛡️ Your armour blocked the fireball!");
         } else {
-          player.damage(4, "were scorched by a ghast's fireball");
-          if (Game.toast) Game.toast("🔥 A ghast's fireball hit you! (-2 ❤️)");
+          player.damage(4, fb.purple ? "were scorched by the Ender Dragon's fire" : "were scorched by a ghast's fireball");
+          if (Game.toast) Game.toast(fb.purple ? "🐉 The dragon's purple fire hit you! (-2 ❤️)" : "🔥 A ghast's fireball hit you! (-2 ❤️)");
         }
         remove(fb); return false;
       }

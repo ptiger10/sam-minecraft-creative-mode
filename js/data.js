@@ -135,6 +135,15 @@ window.Game = window.Game || {};
     nether_portal:{ name: "Nether Portal", all: 0x9b3fd6, top: 0xc77bf0, tool: "hand", drop: null, solid: false },
     lava:         { name: "Lava", all: 0xff6a1a, top: 0xffa83a, tool: "pickaxe", drop: null },
     glowstone:    { name: "Glowstone", all: 0xffe08a, top: 0xfff0bd, tool: "hand", drop: "glowstone" },
+    // ---- The End: a dark void dimension you reach through the 4th house ----
+    // Pale End Stone paves the floating island.
+    end_stone:    { name: "End Stone", all: 0xd9d2a0, top: 0xe8e2bb, bottom: 0xc7c08c, tool: "hand", drop: "end_stone" },
+    // A glowing crystal that crowns each spire — collect four to craft the exit.
+    end_crystal:  { name: "End Crystal", all: 0xd06bff, top: 0xe6a8ff, tool: "hand", drop: "end_crystal", harvestOnTap: true },
+    // The dark, starry portal (in the 4th house) that carries you into The End.
+    end_portal:   { name: "End Portal", all: 0x0a0a1e, top: 0x2a2a6a, tool: "hand", drop: null, solid: false },
+    // The bright crystal portal you craft to leave The End and win the game.
+    exit_portal:  { name: "Exit Portal", all: 0xe05cd0, top: 0xff9cf0, tool: "hand", drop: null, solid: false },
     // Fluffy white clouds drifting high in the sky. You can't mine them.
     cloud:        { name: "Cloud", all: 0xf4f8fb, top: 0xffffff, bottom: 0xe6edf4, tool: "hand", drop: null, solid: false },
     // A glowing plaque on the wall of the fourth house: tap it for the credits.
@@ -229,9 +238,16 @@ window.Game = window.Game || {};
 
   // World-only blocks the player never carries or places (portals, locked doors,
   // the credits plaque) are hidden from the inventory and not placeable.
-  ["nether_portal", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
+  ["nether_portal", "end_portal", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
     if (Game.ItemDefs[id]) { Game.ItemDefs[id].hidden = true; Game.ItemDefs[id].placeable = false; }
   });
+
+  // End Crystals are a material you collect and craft with, not a block you place.
+  Game.ItemDefs.end_crystal.placeable = false;
+  Game.ItemDefs.end_crystal.desc = "A glowing crystal from atop the End's spires. Craft four together into an Exit Portal.";
+  Game.ItemDefs.end_stone.desc = "The pale stone of The End. Handy for building.";
+  // The crafted Exit Portal: a placeable block you step through to win the game.
+  Game.ItemDefs.exit_portal.desc = "Made from four End Crystals. Place it and step through to finish your adventure!";
 
   // Special non-block items. NOTE: "apple" is also a world block, so this
   // MUST come after the loop above to override it.
@@ -395,7 +411,10 @@ window.Game = window.Game || {};
     { id: "flint", gives: { id: "flint", count: 1 }, pattern: [[CO]] },
     // Flint + steel -> flint & steel (lights a Nether portal).
     { id: "flint_and_steel", gives: { id: "flint_and_steel", count: 1 },
-      pattern: [["flint", "steel"]] }
+      pattern: [["flint", "steel"]] },
+    // Four End Crystals in a square -> an Exit Portal (step through it to win).
+    { id: "exit_portal", gives: { id: "exit_portal", count: 1 },
+      pattern: [["end_crystal", "end_crystal"], ["end_crystal", "end_crystal"]] }
   ];
 
   // Painting recipes: wood + a paint -> coloured wood.

@@ -40,6 +40,10 @@
     overworld: null,         // the surface world (kept while you visit the Nether)
     netherWorld: null,       // the Nether dimension (built on first entry)
     inNether: false,         // true while the player is in the Nether
+    endWorld: null,          // the End dimension (built on first entry)
+    inEnd: false,            // true while the player is in The End
+    won: false,              // true once the exit portal has been stepped through
+    creditsEnding: false,    // the credits are the winning finale (not the plaque)
     portalCooldown: 0,       // brief delay after a portal so it doesn't bounce you
     portalLinks: [],         // player-lit overworld portals <-> their Nether twins
     questPortalExit: null,   // the overworld cell you return to from the Nether
@@ -925,18 +929,49 @@
     if (countItem(keyId) > 0) {
       removeItems({ [keyId]: 1 });
       S.world.setBlock(block.x, block.y, block.z, "door_open");
-      toast("🔓 Unlocked with the " + Game.itemName(keyId) + "!");
-      if (houseNum === 4) setTimeout(showCredits, 700); // the grand finale
+      if (houseNum === 4) toast("🔓 The Gold Key opens the fourth house — a portal to The End glows within! ✨");
+      else toast("🔓 Unlocked with the " + Game.itemName(keyId) + "!");
     } else {
       toast("🔒 Locked! Trade a villager for the " + Game.itemName(keyId) + ".");
     }
   }
 
-  function showCredits() {
+  function showCredits(ending) {
+    S.creditsEnding = !!ending;
     // Restart the scroll from the bottom each time it's opened.
     const scroll = $("credits-scroll");
     if (scroll) { scroll.style.animation = "none"; void scroll.offsetWidth; scroll.style.animation = ""; }
     showPanel("credits-panel");
+    // When the winning credits finish rolling, drop back to the Home Screen —
+    // "…and then that's it." (You can also press Close to skip there sooner.)
+    // `once` auto-removes the listener so it can't linger or stack across games.
+    if (ending && scroll) {
+      scroll.addEventListener("animationend", function onEnd() {
+        if (S.creditsEnding) returnToHome();
+      }, { once: true });
+    }
+  }
+
+  // You stepped through the Exit Portal — you win! Roll the celebratory credits.
+  function winTheGame() {
+    if (S.won) return;               // guard so we only fire once
+    S.won = true;
+    S.portalCooldown = 5;
+    toast("🎉 You crafted the Exit Portal and escaped The End — you win! 🏆");
+    showCredits(true);
+  }
+  Game._winTheGame = winTheGame;     // (used by the tests)
+
+  // After the winning credits, return to the title/Home Screen. We deliberately
+  // leave S.inEnd set until a world is actually (re)started, so saving stays
+  // disabled — a stray pagehide can't write End coordinates into the overworld
+  // save. Pressing Continue reloads the overworld right where you left it (by the
+  // fourth house); startWorld() clears the End bookkeeping.
+  function returnToHome() {
+    S.creditsEnding = false;
+    hideAllPanels();
+    refreshStartPanel();
+    showPanel("start-panel");
   }
 
   // Build (once) and switch the active scene to a world, moving the camera (and
@@ -1033,6 +1068,39 @@
   function enterNether() { travelToNether(S.netherWorld ? S.netherWorld.spawn : null); }
   function exitNether() { travelToOverworld(); }
 
+  // ---- The End --------------------------------------------------------------
+  // Built once, the first time you step through the fourth house's portal. There
+  // is NO portal back to the overworld: the only way out is the Exit Portal you
+  // craft from four End Crystals — and stepping through THAT wins the game.
+  function ensureEnd() {
+    if (!S.endWorld) {
+      const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end");
+      ew.generateEnd();
+      S.endWorld = ew;
+      buildWorldScene(ew);
+    }
+    return S.endWorld;
+  }
+
+  // Slip a full suit of diamond armour onto anyone who arrives unprotected, so
+  // the dragon's purple fire really can't touch you (as promised).
+  function grantEndArmor() {
+    if (hasDefense()) return;
+    ["helmet", "chestplate", "leggings", "boots"].forEach((slot) => {
+      if (!S.equip[slot]) S.equip[slot] = "diamond_" + slot;
+    });
+    updateOffhand();
+  }
+
+  function travelToEnd() {
+    ensureEnd();
+    activateWorld(S.endWorld, S.endWorld.spawn);
+    S.inEnd = true;
+    S.portalCooldown = 2;
+    grantEndArmor();
+    toast("✨ Into The End! You're clad in armour — brave the dragon's purple fire, climb the four spires for the End Crystals.");
+  }
+
   // ---- Linked portals -------------------------------------------------------
   // Each portal a player lights in the overworld opens onto a FRESH portal at a
   // random spot in the Nether (never the pre-existing one). We remember the pair
@@ -1068,7 +1136,12 @@
     if (S.portalCooldown > 0) { S.portalCooldown -= dt; return; }
     const p = S.player.pos;
     const bx = Math.floor(p.x), by = Math.floor(p.y + 0.2), bz = Math.floor(p.z);
-    if (S.world.get(bx, by, bz) !== "nether_portal") return;
+    const pid = S.world.get(bx, by, bz);
+    // The crafted Exit Portal ends the game; the End portal carries you into The
+    // End (there's no reverse — the End has no portal home).
+    if (pid === "exit_portal") { winTheGame(); return; }
+    if (pid === "end_portal") { if (!S.inEnd) travelToEnd(); return; }
+    if (pid !== "nether_portal") return;
     const id = Game.World.portalId(S.world.portalCellsFrom(bx, by, bz));
     if (!S.inNether) {
       const link = findLinkByOw(id);
@@ -1452,6 +1525,18 @@
       scene.add(glow);
       return scene;
     }
+    // The End is a dark, starry void: near-black purple sky, cool light, and a
+    // pale island glowing softly in the gloom.
+    if (biome === "end") {
+      const sky = 0x0c0a1a;
+      scene.background = new THREE.Color(sky);
+      scene.fog = new THREE.Fog(sky, 14, 48);
+      scene.add(new THREE.AmbientLight(0xd8ccff, 0.7));
+      const glow = new THREE.DirectionalLight(0xa07adf, 0.42);
+      glow.position.set(0.2, 1, 0.3);
+      scene.add(glow);
+      return scene;
+    }
     const sky = biome === "desert" ? 0xbfe0ef : 0x87ceeb;
     scene.background = new THREE.Color(sky);
     scene.fog = new THREE.Fog(sky, 22, 58);
@@ -1564,7 +1649,7 @@
   const _dnDay = new THREE.Color(), _dnCol = new THREE.Color();
   function updateDayNight(dt) {
     S.worldClock += dt;
-    if (S.inNether) return;                       // the Nether keeps its own mood
+    if (S.inNether || S.inEnd) return;            // the Nether & End keep their own mood
     const dn = S.scene && S.scene.userData && S.scene.userData.dayNight;
     if (!dn) return;
     const n = nightFactor(S.worldClock);
@@ -1597,6 +1682,7 @@
       S.world.updateAnimals(dt);
       updateDayNight(dt);
       if (S.inNether) S.world.updateNether(dt, S.player);
+      else if (S.inEnd) S.world.updateEnd(dt, S.player); // the dragon breathes purple fire
       else S.world.updateNight(dt, S.player, isNightNow()); // surface skeletons at night
       handlePortal(dt);
       updateTargeting();
@@ -1764,11 +1850,15 @@
     S.breakEndsAt = (restore && restore.breakEndsAt) || 0;
     S.worldClock = (restore && restore.worldClock) || 0; // start a fresh world at dawn
 
-    // Dimension bookkeeping: this fresh world is the overworld; the Nether is
-    // built lazily the first time you step through a portal.
+    // Dimension bookkeeping: this fresh world is the overworld; the Nether and
+    // the End are built lazily the first time you step through their portals.
     S.overworld = world;
     S.netherWorld = null;
     S.inNether = false;
+    S.endWorld = null;
+    S.inEnd = false;
+    S.won = false;
+    S.creditsEnding = false;
     S.portalCooldown = 0;
     S.portalLinks = [];
     S.questPortalExit = world.questPortalExit || null;
@@ -1822,6 +1912,9 @@
   //  Saving / loading (localStorage)
   // ===============================================================
   function saveGame(quiet) {
+    // The End is never saved — win your way out, don't camp there. (This covers
+    // the manual Save button, the 30s autosave, the Menu button and pagehide.)
+    if (S.inEnd) { if (!quiet) toast("The End can't be saved — craft the Exit Portal to finish! ✨"); return; }
     const ow = S.overworld;
     if (!ow || !S.player) return;
     const changes = [];
@@ -1949,7 +2042,13 @@
 
     tapButton($("btn-resume-break"), endBreak);
 
-    document.querySelectorAll(".close-btn").forEach((b) => b.addEventListener("click", hideAllPanels));
+    // Every panel's Close button just hides the panels — except the credits'
+    // Close during the winning finale, which drops back to the Home Screen.
+    document.querySelectorAll(".close-btn:not(.credits-close)").forEach((b) => b.addEventListener("click", hideAllPanels));
+    const creditsClose = document.querySelector(".credits-close");
+    if (creditsClose) creditsClose.addEventListener("click", () => {
+      if (S.creditsEnding) returnToHome(); else hideAllPanels();
+    });
 
     // Start panel buttons
     tapButton($("btn-new-forest"), () => newWorld("forest"));

@@ -129,12 +129,26 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     screen darkens and you **lose a heart every few seconds for 6 seconds**
     before it wears off.
   - The **third villager** wants **netherite** in exchange for the **last key**,
-    which opens the **fourth house**: a **scrolling Hall of Fame** honouring
-    **Sam Fort** and **Dave Fort** for inventing the game. 🏆
+    which opens the **fourth house** — and inside waits a ✨ **portal to The
+    End**, the grand finale.
   - Each villager gives you a key **only once**. You can **mine your way into
     the first three houses** if you'd rather not chase the keys — but the final
-    **Hall of Fame house is sealed** (walls, roof and floor), so the winning
-    screen stays locked behind that last key.
+    **End-portal house is sealed** (walls, roof and floor), so the ending stays
+    locked behind that last key.
+- ✨ **The End — the finale.** Step through the fourth house's dark, starry
+  portal into **The End**: a pale island floating in an endless void.
+  - A 🐉 **Ender Dragon with glowing purple eyes** wheels overhead and **breathes
+    purple fire** at you — but you're handed a suit of **armour** on arrival, so
+    the fire just **bounces off**.
+  - Four **very tall spiral staircases** rise from the island, each crowned with
+    a glowing 🔮 **End Crystal**. **Climb them** (just walk up — no jumping) and
+    **tap the crystal at the top** to collect it.
+  - Gather all **four crystals** and **craft an Exit Portal** (four crystals in a
+    square). Place it, **step through**, and the **credits roll** to celebrate
+    your win before dropping you back to the **Home Screen**. 🏆
+  - There's **no portal back to the overworld** from The End — the crafted Exit
+    Portal is the only way out — and the game **never saves while you're in The
+    End**, so it's always a fresh dash to the finish.
 - 💧 **Ponds and watering holes** of water with **sandy shores** dot the
   surface — every world gets a few (even the desert gets an **oasis** or two) —
   plus **clay** (grey, brown and red) to dig up near the water and underground,
