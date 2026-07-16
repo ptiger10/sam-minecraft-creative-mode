@@ -1,6 +1,9 @@
 // Verifies the four-settlement quest: the yellow brick road, the key/locked-door
 // chain, the Nether (portal, netherite, ghasts that scorch you for two hearts),
-// and the credits plaque in the fourth house. Run alongside the other tests.
+// and the End (the fourth house's portal, the Ender Dragon with purple eyes and
+// purple fire, four spiral staircases crowned with End Crystals, the crafted
+// Exit Portal, winning back to the Home Screen, and no saving in The End).
+// Run alongside the other tests.
 import { createServer } from "http";
 import { readFile } from "fs/promises";
 import { extname, join, normalize } from "path";
@@ -194,19 +197,24 @@ const fire = await page.evaluate(() => {
 check("a ghast fireball deals two hearts of damage", fire.before - fire.after === 4);
 check("wearing armour blocks a ghast fireball", fire.afterArmored === fire.max);
 
-// --- The fourth house holds the Hall of Fame credits ---
+// --- The fourth house holds the portal to The End (not a plaque) ---
 const credits = await page.evaluate(() => {
   const W = window.Game.S.world;
-  let plaque = false;
-  for (const [, id] of W.blocks) if (id === "credits_block") plaque = true;
-  // The credits panel exists and honours the inventors.
+  let endPortals = 0, plaque = false;
+  for (const [, id] of W.blocks) {
+    if (id === "end_portal") endPortals++;
+    if (id === "credits_block") plaque = true;
+  }
+  // The credits panel still exists — it's now the winning finale — and honours
+  // the inventors.
   const panel = document.getElementById("credits-panel");
   const text = panel ? panel.textContent : "";
-  return { plaque, sam: /Sam Fort/.test(text), dave: /Dave Fort/.test(text) };
+  return { endPortals, plaque, sam: /Sam Fort/.test(text), dave: /Dave Fort/.test(text) };
 });
-check("the fourth house has a credits plaque", credits.plaque);
-check("the credits honour Sam Fort", credits.sam);
-check("the credits honour Dave Fort", credits.dave);
+check("the fourth house holds a portal to The End", credits.endPortals >= 1);
+check("the old Hall of Fame plaque is gone", credits.plaque === false);
+check("the winning credits honour Sam Fort", credits.sam);
+check("the winning credits honour Dave Fort", credits.dave);
 
 // --- Live: stepping into the portal really swaps dimensions (and renders) ---
 const stepIn = await page.evaluate(() => {
@@ -629,11 +637,11 @@ check("no shield equipped -> empty hand", shieldHand.emptyWhenNone);
 check("an equipped shield appears in your hand", shieldHand.showsWhenEquipped);
 check("holding a shield renders it in your hand", shieldHand.heldShows);
 
-// --- Villager houses are mineable, except the Hall of Fame ---
+// --- Villager houses are mineable, except the final End-portal house ---
 const houses = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
-  let credits = null;
-  for (const [k, id] of W.blocks) if (id === "credits_block") credits = k.split(",").map(Number);
+  let endPortal = null;
+  for (const [k, id] of W.blocks) if (id === "end_portal") endPortal = k.split(",").map(Number);
   let villagerWallSealed = false;
   W.questVillagers.forEach((v) => {
     const hx = Math.round(v.userData.home.x - 0.5), hz = Math.round(v.userData.home.z - 0.5);
@@ -641,12 +649,12 @@ const houses = await page.evaluate(() => {
       if (W.isProtected(hx + dx, y, hz + dz)) villagerWallSealed = true;
   });
   let hallSealed = false;
-  if (credits) for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
-    if (W.isProtected(credits[0] + dx, y, credits[2] + dz)) hallSealed = true;
-  return { villagerWallSealed, hallSealed, hasCredits: !!credits };
+  if (endPortal) for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
+    if (W.isProtected(endPortal[0] + dx, y, endPortal[2] + dz)) hallSealed = true;
+  return { villagerWallSealed, hallSealed, hasEndPortal: !!endPortal };
 });
 check("villager houses 1-3 can be mined into", houses.villagerWallSealed === false);
-check("the Hall of Fame house stays sealed", houses.hasCredits && houses.hallSealed);
+check("the final End-portal house stays sealed", houses.hasEndPortal && houses.hallSealed);
 
 // --- Night skeleton archer: hidden by day, shoots at night ---
 const archer = await page.evaluate(() => {
@@ -734,6 +742,169 @@ const arrowHit = await page.evaluate(() => {
 });
 check("a skeleton arrow costs a heart when undefended", arrowHit.dmg === 2);
 check("an equipped shield or armour blocks the arrow", arrowHit.dmgShielded === 0);
+
+// ================= The End =================
+
+// --- The End generates: island, four spiral spires, crystals, a dragon ---
+const endGen = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end");
+  ew.generateEnd();
+  let endStone = 0, stairs = 0, crystals = 0, obsidian = 0, netherP = 0, exitP = 0;
+  for (const [, id] of ew.blocks) {
+    if (id === "end_stone") endStone++;
+    else if (id === "stairs") stairs++;
+    else if (id === "end_crystal") crystals++;
+    else if (id === "obsidian") obsidian++;
+    else if (id === "nether_portal") netherP++;
+    else if (id === "exit_portal") exitP++;
+  }
+  const dragons = ew.animals.filter((a) => a.userData.kind === "ender_dragon");
+  // The dragon's eyes glow purple: a lit (emissive) material whose colour is
+  // blue-heavy with little green.
+  let purpleEyes = false;
+  if (dragons[0]) dragons[0].traverse((m) => {
+    const mat = m.material;
+    if (mat && mat.emissive && mat.emissive.getHex && mat.emissive.getHex() > 0 && mat.color) {
+      const c = mat.color;
+      if (c.b > 0.5 && c.r > 0.4 && c.g < c.b) purpleEyes = true;
+    }
+  });
+  return { endStone, stairs, crystals, obsidian, netherP, exitP,
+    dragons: dragons.length, purpleEyes, isEnd: ew.isEnd,
+    tracked: (ew.endCrystals || []).length };
+});
+check("The End is a solid island of End Stone", endGen.isEnd && endGen.endStone > 100);
+check("four very tall spiral staircases climb The End", endGen.stairs >= 4 * 15);
+check("each spire is crowned with an End Crystal", endGen.crystals === 4 && endGen.tracked === 4);
+check("the spirals wind around obsidian columns", endGen.obsidian >= 4);
+check("exactly one Ender Dragon flies in The End", endGen.dragons === 1);
+check("the Ender Dragon has glowing purple eyes", endGen.purpleEyes === true);
+check("The End has NO portal back to the overworld", endGen.netherP === 0 && endGen.exitP === 0);
+
+// --- End Crystals are a collectible material; four craft an Exit Portal ---
+const endItems = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  // Lay four crystals in the 2x2 grid and check what it makes.
+  S.inv = new Array(36).fill(null);
+  S.inv[0] = { id: "end_crystal", count: 4 };
+  Game._openCrafting(false);          // 2x2 grid, no table needed
+  S.craft.grid = ["end_crystal", "end_crystal", "end_crystal", "end_crystal"];
+  const rec = Game._currentRecipe();
+  document.querySelector("#craft-panel .close-btn").click();
+  return {
+    crystalDrop: Game.BlockDefs.end_crystal.drop,
+    crystalTap: Game.harvestOnTap("end_crystal"),
+    crystalMaterial: Game.ItemDefs.end_crystal.placeable === false,
+    exitPlaceable: Game.ItemDefs.exit_portal.placeable === true,
+    recipe: rec ? rec.gives.id : null
+  };
+});
+check("tapping an End Crystal collects it", endItems.crystalDrop === "end_crystal" && endItems.crystalTap);
+check("End Crystals are a material, not a placeable block", endItems.crystalMaterial);
+check("four End Crystals craft an Exit Portal", endItems.recipe === "exit_portal");
+check("the crafted Exit Portal can be placed", endItems.exitPlaceable);
+
+// --- The dragon breathes purple fire; armour blocks it (like the ghast's) ---
+const dragonFire = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end");
+  ew.generateEnd();
+  ew.scene = { add() {}, remove() {} };
+  const p = S.player;
+  const savedEq = Object.assign({}, S.equip);
+  const savedPos = p.pos.clone();
+  p.pos.set(20.5, 8, 20.5); p.syncCamera();   // open air above the island
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  p.hp = Game.CONST.MAX_HP; p.dead = false;
+  const eye = p.eyePosition();
+  ew.spawnFireball({ x: eye.x + 0.6, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 }, { purple: true });
+  const purple = !!(ew.fireballs[0] && ew.fireballs[0].purple);
+  for (let i = 0; i < 30; i++) ew.updateFireballs(0.03, p);
+  const dmg = Game.CONST.MAX_HP - p.hp;
+  // With armour on, the same purple fire does nothing.
+  S.equip.chestplate = "diamond_chestplate";
+  p.hp = Game.CONST.MAX_HP;
+  ew.spawnFireball({ x: eye.x + 0.6, y: eye.y, z: eye.z }, { x: -1, y: 0, z: 0 }, { purple: true });
+  for (let i = 0; i < 30; i++) ew.updateFireballs(0.03, p);
+  const afterArmored = p.hp;
+  S.equip = savedEq; p.pos.copy(savedPos); p.syncCamera();
+  return { purple, dmg, afterArmored, max: Game.CONST.MAX_HP };
+});
+check("the Ender Dragon breathes purple fire", dragonFire.purple === true);
+check("the dragon's purple fire costs two hearts undefended", dragonFire.dmg === 4);
+check("armour blocks the dragon's purple fire", dragonFire.afterArmored === dragonFire.max);
+
+// --- Live: stepping into the fourth house's portal enters The End ---
+const enterEnd = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world;
+  let best = null;
+  for (const [k, id] of W.blocks) {
+    if (id !== "end_portal") continue;
+    const p = k.split(",").map(Number);
+    if (!best || p[1] < best[1]) best = p;
+  }
+  if (!best) return { ok: false };
+  // Strip armour so we can prove The End hands you a set on arrival.
+  S.equip = { helmet: null, chestplate: null, leggings: null, boots: null, shield: null };
+  S.player.pos.set(best[0] + 0.5, best[1], best[2] + 0.5);
+  S.player.syncCamera();
+  S.portalCooldown = 0;
+  return { ok: true };
+});
+await page.waitForTimeout(400);
+const inEnd = await page.evaluate(() => {
+  const S = window.Game.S;
+  return { inEnd: S.inEnd, biome: S.world.biome, defended: window.Game.hasDefense(),
+    crystals: (S.world.endCrystals || []).length };
+});
+check("stepping into the fourth house's portal enters The End", enterEnd.ok && inEnd.inEnd === true && inEnd.biome === "end");
+check("The End hands you armour so the dragon's fire can't hurt you", inEnd.defended === true);
+check("the live End has its four crystal spires", inEnd.crystals === 4);
+
+// --- Live: crafting/using the Exit Portal wins and rolls the credits ---
+const win = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world;
+  if (!S.inEnd) return { ok: false };
+  const px = Math.floor(S.player.pos.x), pz = Math.floor(S.player.pos.z);
+  const fy = 4;                                  // FLOOR + 1
+  W.setBlock(px, fy, pz, "exit_portal");
+  S.player.pos.set(px + 0.5, fy, pz + 0.5);
+  S.player.syncCamera();
+  S.portalCooldown = 0;
+  return { ok: true };
+});
+await page.waitForTimeout(350);
+const won = await page.evaluate(() => {
+  const S = window.Game.S;
+  const panel = document.getElementById("credits-panel");
+  return { won: S.won, ending: S.creditsEnding,
+    creditsShown: !!panel && !panel.classList.contains("hidden") };
+});
+check("stepping through the Exit Portal wins the game", win.ok && won.won === true);
+check("winning rolls the celebratory credits as the finale", won.creditsShown && won.ending);
+
+// Closing the winning credits drops you back to the Home Screen.
+const home = await page.evaluate(() => {
+  const btn = document.querySelector(".credits-close");
+  if (btn) btn.click();
+  const start = document.getElementById("start-panel");
+  const credits = document.getElementById("credits-panel");
+  return { startShown: !!start && !start.classList.contains("hidden"),
+    creditsHidden: !!credits && credits.classList.contains("hidden") };
+});
+check("closing the winning credits returns to the Home Screen", home.startShown && home.creditsHidden);
+
+// --- The game never saves while in The End ---
+const noSave = await page.evaluate(() => {
+  const S = window.Game.S;
+  const KEY = "blocky-world-save-v1";
+  localStorage.setItem(KEY, "SENTINEL");
+  S.inEnd = true;                                // pretend we're back in The End
+  document.getElementById("btn-save").click();   // manual save must no-op there
+  return { unchanged: localStorage.getItem(KEY) === "SENTINEL" };
+});
+check("the game never saves while in The End", noSave.unchanged);
 
 // ---- Report ----
 await browser.close();
