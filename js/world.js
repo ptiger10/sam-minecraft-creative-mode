@@ -1273,6 +1273,49 @@
   }
   World.makeWither = makeWither;
 
+  // An Enderman: a very tall, slender, pitch-black creature with long thin limbs
+  // and glowing PURPLE eyes. It wanders the End island harmlessly — UNTIL you
+  // look it in the face for too long, at which point it flies into a screaming
+  // rage and charges you. Built facing +z (eyes on the front), and it keeps its
+  // head turned toward the player, so meeting its gaze is meeting its face.
+  function makeEnderman() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const black = 0x0a0a12, dark = 0x050509;
+    // Two long, spindly legs.
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.15, 0.16), mat(dark));
+    legL.position.set(-0.13, 0.575, 0); group.add(legL);
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.15, 0.16), mat(dark));
+    legR.position.set(0.13, 0.575, 0); group.add(legR);
+    // A narrow torso.
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), mat(black));
+    body.position.set(0, 1.55, 0); group.add(body);
+    // Long thin arms hanging at the sides (kept so we can raise them in a rage).
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.05, 0.14), mat(black));
+    armL.position.set(-0.34, 1.45, 0); group.add(armL);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.05, 0.14), mat(black));
+    armR.position.set(0.34, 1.45, 0); group.add(armR);
+    // A tall head, held high — the face you must not stare into.
+    const head = new THREE.Group();
+    head.position.set(0, 2.35, 0); group.add(head);
+    const skull = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.44), mat(black));
+    head.add(skull);
+    // A dark jaw that drops open when it screams.
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.4), mat(dark));
+    jaw.position.set(0, -0.28, 0.01); head.add(jaw);
+    // Two glowing magenta eyes on the front (+z) of the head.
+    const eyeMat = () => new THREE.MeshLambertMaterial({ color: 0xd06bff, emissive: 0x9b2fe0 });
+    const eyes = [];
+    [-0.11, 0.11].forEach((x) => {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.09, 0.06), eyeMat());
+      e.position.set(x, 0.02, 0.23); head.add(e); eyes.push(e);
+    });
+    group.userData.kind = "enderman";
+    group.userData.parts = { head, jaw, armL, armR, eyes };
+    return group;
+  }
+  World.makeEnderman = makeEnderman;
+
   // The Ender Dragon: a big, near-black winged beast with glowing PURPLE eyes. It
   // circles high over the End island and breathes purple fire. It's built facing
   // +z (its head and eyes on the front) so it can turn to face the player.
@@ -2081,6 +2124,35 @@
     dragon.userData.t = 0;
     dragon.userData.fireTimer = 2.5;
     this.animals.push(dragon);
+
+    // A handful of Endermen stalk the island. They wander calmly — until you
+    // hold their gaze too long, when they screech and rush you.
+    this.spawnEndermen(4, cx, cz, FLOOR + 1);
+  };
+
+  // Scatter Endermen across the End island, kept clear of the arrival spot so you
+  // aren't face-to-face with one the instant you land.
+  World.prototype.spawnEndermen = function (count, cx, cz, standY) {
+    const rng = Game.mulberry32(this.seed ^ 0xe4de1a);
+    let made = 0, tries = 0;
+    while (made < count && tries < 200) {
+      tries++;
+      const x = 4 + Math.floor(rng() * (C.WORLD - 8));
+      const z = 4 + Math.floor(rng() * (C.WORLD - 8));
+      if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) < 6) continue; // not on the spawn pad
+      if (!this.canStand(x + 0.5, z + 0.5, standY)) continue;         // clear of the spires
+      const e = makeEnderman();
+      e.position.set(x + 0.5, standY, z + 0.5);
+      e.userData.dir = rng() * Math.PI * 2;
+      e.userData.timer = rng() * 3;
+      e.userData.stare = 0;          // seconds you've held its gaze
+      e.userData.furious = false;    // has it snapped and turned on you?
+      e.userData.rage = 0;           // rage left before it calms (while furious)
+      e.userData.hitCooldown = 0;    // brief pause between blows
+      e.userData.anim = 0;           // drives the screaming/flailing animation
+      this.animals.push(e);
+      made++;
+    }
   };
 
   // One spiral staircase: a central obsidian column with `stairs` spiralling up
@@ -2109,6 +2181,7 @@
   World.prototype.updateEnd = function (dt, player) {
     const eye = player.eyePosition();
     for (const a of this.animals) {
+      if (a.userData.kind === "enderman") { this.updateEnderman(a, dt, player); continue; }
       if (a.userData.kind !== "ender_dragon") continue;
       const u = a.userData;
       u.t += dt;
@@ -2140,6 +2213,122 @@
       }
     }
     this.updateFireballs(dt, player);
+  };
+
+  // The height (in blocks, above its feet) of an Enderman's head — the spot you
+  // have to hold in your crosshair to meet its gaze.
+  const ENDERMAN_HEAD_Y = 2.35;
+
+  // One Enderman, updated each frame while you're in The End.
+  //
+  //  • Calm: it shambles about the island and keeps its head turned toward you,
+  //    so its face is always there to be met.
+  //  • Provoked: if your crosshair rests on its FACE (its head, within line of
+  //    sight) for more than a second, it screeches, throws its arms up and
+  //    charges — striking you on contact. It stays furious until you've kept
+  //    your distance for a few seconds, then settles back down.
+  World.prototype.updateEnderman = function (a, dt, player) {
+    a.visible = true;
+    const u = a.userData;
+    const parts = u.parts || {};
+    const eye = player.eyePosition();
+
+    // --- Are you looking it in the face? (crosshair on its head, in view) ---
+    const head = { x: a.position.x, y: a.position.y + ENDERMAN_HEAD_Y, z: a.position.z };
+    const dx = head.x - eye.x, dy = head.y - eye.y, dz = head.z - eye.z;
+    const dist = Math.hypot(dx, dy, dz) || 1;
+    const look = player.lookDir();
+    const aim = (dx * look.x + dy * look.y + dz * look.z) / dist; // 1 = dead-on
+    const meetingGaze = dist > 1.2 && dist < 24 && aim > 0.985 &&
+      this._endermanLineOfSight(eye, head, dist);
+
+    if (!u.furious) {
+      // Hold its gaze and the stare-meter fills; look away and it drains off.
+      u.stare = Math.max(0, u.stare + (meetingGaze ? dt : -dt * 1.5));
+      if (u.stare >= 1) {                 // a full second of eye contact — it snaps
+        u.furious = true;
+        u.rage = 6;
+        u.hitCooldown = 0.4;
+        if (Game.toast) Game.toast("👾 The enderman SCREECHES and lunges at you!");
+      }
+    }
+
+    // Face the player: calm, it just watches you; furious, it barrels straight in.
+    const toPlayer = Math.atan2(player.pos.x - a.position.x, player.pos.z - a.position.z);
+    const flat = Math.hypot(player.pos.x - a.position.x, player.pos.z - a.position.z);
+
+    if (u.furious) {
+      a.rotation.y = toPlayer;            // square up and stare you down
+      if (parts.head) parts.head.rotation.y *= 0.8; // face-on, no more sidelong glance
+      u.anim += dt * 16;                  // fast, jittery flailing
+      u.rage -= dt;
+      if (flat < 20) u.rage = Math.max(u.rage, 2); // keeps raging while you're near
+      if (u.rage <= 0) {                  // you got away — it calms down
+        u.furious = false; u.stare = 0; u.anim = 0;
+        if (parts.jaw) parts.jaw.position.y = -0.28;
+        if (parts.armL) parts.armL.rotation.x = 0;
+        if (parts.armR) parts.armR.rotation.x = 0;
+      } else {
+        // Charge the player fast; a solid block (a spire) turns it aside.
+        const sp = 3.4;
+        const nx = a.position.x + Math.sin(toPlayer) * sp * dt;
+        const nz = a.position.z + Math.cos(toPlayer) * sp * dt;
+        if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
+        // Throw its arms up and gnash its jaw as it screams.
+        const swing = Math.sin(u.anim) * 0.9;
+        if (parts.armL) parts.armL.rotation.x = -2.2 + swing;
+        if (parts.armR) parts.armR.rotation.x = -2.2 - swing;
+        if (parts.jaw) parts.jaw.position.y = -0.34 - Math.abs(Math.sin(u.anim * 0.5)) * 0.1;
+        if (parts.head) parts.head.rotation.z = Math.sin(u.anim * 1.3) * 0.12; // furious head-shake
+
+        // Reached you? Strike — unless your armour turns the blow.
+        if (u.hitCooldown > 0) u.hitCooldown -= dt;
+        const pdx = player.pos.x - a.position.x, pdz = player.pos.z - a.position.z;
+        const pdy = player.pos.y - a.position.y;
+        if (u.hitCooldown <= 0 && pdx * pdx + pdz * pdz < 1.1 * 1.1 && Math.abs(pdy) < 2.6) {
+          if (Game.hasDefense && Game.hasDefense()) {
+            if (Game.toast) Game.toast("🛡️ Your armour holds off the enderman's blows!");
+          } else {
+            player.damage(2, "were attacked by an enderman");
+            if (Game.toast) Game.toast("👾 The furious enderman hits you! (-1 ❤️)");
+          }
+          u.hitCooldown = 1.0;
+        }
+      }
+      // Eyes flare brighter with rage.
+      if (parts.eyes) parts.eyes.forEach((e) => e.material.emissive.setHex(0xff3df0));
+      return;
+    }
+
+    // --- Calm: a slow, aimless shamble, head kept turned toward you. ---
+    if (parts.eyes) parts.eyes.forEach((e) => e.material.emissive.setHex(0x9b2fe0));
+    if (parts.head) {
+      // Turn just the head to keep watching you (relative to the body's facing).
+      parts.head.rotation.y = ((toPlayer - a.rotation.y + Math.PI) % (Math.PI * 2)) - Math.PI;
+      parts.head.rotation.z *= 0.8;
+    }
+    u.timer -= dt;
+    if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+    const speed = 0.9;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
+    else u.dir += Math.PI;
+    a.rotation.y = -u.dir + Math.PI / 2;
+  };
+
+  // Is the straight line from your eye to the Enderman's head clear of blocks?
+  // (So you can't provoke one by "staring" at it through a spire.)
+  World.prototype._endermanLineOfSight = function (eye, head, dist) {
+    const steps = Math.max(2, Math.ceil(dist * 2));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const x = Math.floor(eye.x + (head.x - eye.x) * t);
+      const y = Math.floor(eye.y + (head.y - eye.y) * t);
+      const z = Math.floor(eye.z + (head.z - eye.z) * t);
+      if (this.solidAt(x, y, z)) return false;
+    }
+    return true;
   };
 
   World.prototype.spawnAnimals = function (count) {
@@ -2186,8 +2375,8 @@
       // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
           a.userData.kind === "wither") continue;
-      // The Ender Dragon is driven by updateEnd.
-      if (a.userData.kind === "ender_dragon") continue;
+      // The Ender Dragon and Endermen are driven by updateEnd.
+      if (a.userData.kind === "ender_dragon" || a.userData.kind === "enderman") continue;
       // Skeletons and zombies are driven by updateNight (only awake after dark).
       if (a.userData.kind === "skeleton" || a.userData.kind === "zombie") continue;
 
