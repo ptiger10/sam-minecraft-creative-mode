@@ -140,13 +140,6 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - A 🐉 **Ender Dragon with glowing purple eyes** wheels overhead and **breathes
     purple fire** at you — but you're handed a suit of **armour** on arrival, so
     the fire just **bounces off**.
-  - 👾 **Endermen** — very tall, pitch-black creatures with **glowing purple
-    eyes** — **stalk the island**. They're harmless as they wander… but **hold
-    their gaze — look one in the face for more than a second — and it flies into
-    a screaming rage**, throwing its arms up and **charging straight at you to
-    hit you**. It calms back down once you've kept your distance for a few
-    seconds. (Your End armour softens its blows, just like the dragon's fire, so
-    keep your suit on — and try not to stare!)
   - Four **very tall spiral staircases** rise from the island, each crowned with
     a glowing 🔮 **End Crystal**. **Climb them** (just walk up — no jumping) and
     **tap the crystal at the top** to collect it.
