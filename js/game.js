@@ -875,7 +875,6 @@
     if (kind === "villager") openTrade(animal);
     else if (kind === "piglin") tradePiglin(animal);
     else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
-    else if (kind === "enderman") toast("👾 An enderman! Whatever you do, don't stare into its eyes…");
     else if (kind === "skeleton") toast("🏹 A skeleton archer! Armour or a shield blocks its arrows.");
     else if (kind === "zombie") toast("🧟 A zombie! Don't let it bump into you.");
     else toggleRide(animal);
