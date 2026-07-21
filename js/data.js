@@ -255,7 +255,7 @@ window.Game = window.Game || {};
   Game.ItemDefs.pickaxe = { name: "Wooden Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true, desc: "Mines stone and ores." };
   Game.ItemDefs.stone_pickaxe = { name: "Stone Pickaxe", emoji: "⛏️", placeable: false, tool: true, pick: true, desc: "A sturdier pickaxe." };
   Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6, desc: "Eat it to fill your food bar." };
-  Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 8, desc: "Burns in a furnace. Makes torches too." };
+  Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 10, desc: "Burns in a furnace — smelts 10 items. Makes torches too." };
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
   // Netherite: a rare metal you mine in the Nether and trade for the gold key.
@@ -264,7 +264,7 @@ window.Game = window.Game || {};
   Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door of the second house." };
   Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
   Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the locked door of the fourth house." };
-  Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft buckets and more." };
+  Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft armour, steel and more." };
   Game.ItemDefs.gold_ingot = { name: "Gold Ingot", swatch: 0xe6c34a, swatchSide: 0xc9a52f, placeable: false, desc: "Smelted from gold ore. Shiny!" };
   Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore." };
   Game.ItemDefs.diamond = { name: "Diamond", emoji: "💎", placeable: false, desc: "Smelted from diamond ore. Super shiny!" };
@@ -399,9 +399,9 @@ window.Game = window.Game || {};
     // Glass over wood -> a door with a window.
     { id: "door_window", gives: { id: "door_window", count: 1 }, table: true,
       pattern: [[G, G], [W, W], [W, W]] },
-    // Three iron ingots in a V -> a bucket (for scooping up water).
+    // Three stone in a V -> a bucket (for scooping up water).
     { id: "bucket", gives: { id: "bucket", count: 1 }, table: true,
-      pattern: [["iron_ingot", null, "iron_ingot"], [null, "iron_ingot", null]] },
+      pattern: [[T, null, T], [null, T, null]] },
     // Three sugar canes in a row -> 3 paper.
     { id: "paper", gives: { id: "paper", count: 3 }, table: true,
       pattern: [["sugarcane", "sugarcane", "sugarcane"]] },
