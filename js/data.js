@@ -114,9 +114,9 @@ window.Game = window.Game || {};
     clay:         { name: "Clay",       all: 0xa9a39a, tool: "hand", drop: "clay" },
     brown_clay:   { name: "Brown Clay", all: 0x8a6a4a, tool: "hand", drop: "brown_clay" },
     red_clay:     { name: "Red Clay",   all: 0xb45a3c, tool: "hand", drop: "red_clay" },
-    brick:        { name: "Brick",       all: 0xa5503c, tool: "pickaxe", drop: "brick" },
-    brown_brick:  { name: "Brown Brick", all: 0x6b4a32, tool: "pickaxe", drop: "brown_brick" },
-    red_brick:    { name: "Red Brick",   all: 0xb33a2c, tool: "pickaxe", drop: "red_brick" },
+    bricks:       { name: "Bricks",       all: 0xa5503c, tool: "pickaxe", drop: "bricks" },
+    brown_bricks: { name: "Brown Bricks", all: 0x6b4a32, tool: "pickaxe", drop: "brown_bricks" },
+    red_bricks:   { name: "Red Bricks",   all: 0xb33a2c, tool: "pickaxe", drop: "red_bricks" },
     // Pitch-black obsidian flecked with little purple squares (see obsidianGeometry).
     obsidian:     { name: "Obsidian",    all: 0x0b0b12, top: 0x0b0b12, speckle: 0x7a3fd6, tool: "pickaxe", drop: "obsidian" },
     coal_ore:     { name: "Coal Ore",    all: 0x4a4a4d, base: 0x8a8a8d, tool: "pickaxe", drop: "coal" },
@@ -195,7 +195,7 @@ window.Game = window.Game || {};
   // Blocks you can walk straight up without jumping (auto-step).
   Game.isStairs = (id) => id === "stairs" || id === "brick_stairs";
   // Masonry bricks that render with a running-bond brick pattern.
-  Game.BRICK_BLOCKS = ["brick", "red_brick", "brown_brick"];
+  Game.BRICK_BLOCKS = ["bricks", "red_bricks", "brown_bricks"];
   Game.isBrickBlock = (id) => Game.BRICK_BLOCKS.indexOf(id) !== -1;
   // "Natural" blocks (trees, leaves, cactus, apples) that a tap always
   // grabs/punches — even when you're holding a block. Intent is read from what
@@ -268,6 +268,11 @@ window.Game = window.Game || {};
   Game.ItemDefs.gold_ingot = { name: "Gold Ingot", swatch: 0xe6c34a, swatchSide: 0xc9a52f, placeable: false, desc: "Smelted from gold ore. Shiny!" };
   Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore." };
   Game.ItemDefs.diamond = { name: "Diamond", emoji: "💎", placeable: false, desc: "Smelted from diamond ore. Super shiny!" };
+  // Single fired-clay bricks. Smelt clay to get one brick; craft four into a
+  // Bricks block you can build with.
+  Game.ItemDefs.brick       = { name: "Brick",       emoji: "🧱", placeable: false, desc: "A single fired-clay brick. Craft four into a Bricks block to build with." };
+  Game.ItemDefs.brown_brick = { name: "Brown Brick", swatch: 0x6b4a32, placeable: false, desc: "A single brown brick. Craft four into a Brown Bricks block." };
+  Game.ItemDefs.red_brick   = { name: "Red Brick",   swatch: 0xb33a2c, placeable: false, desc: "A single red brick. Craft four into a Red Bricks block." };
   Game.ItemDefs.paper = { name: "Paper", emoji: "📄", placeable: false, desc: "Made from sugar cane at a crafting table. Craft it with wood into a book." };
   Game.ItemDefs.book = { name: "Book", emoji: "📖", placeable: false, desc: "Crafted from paper and wood at a crafting table." };
   Game.ItemDefs.steel = { name: "Steel", swatch: 0xc7ccd4, swatchSide: 0x9aa0a8, placeable: false, desc: "Smelt an iron ingot to get steel. Craft it with flint into flint & steel." };
@@ -363,6 +368,13 @@ window.Game = window.Game || {};
     { id: "crafting_table", gives: { id: "crafting_table", count: 1 }, pattern: [[W, W], [W, W]] },
     // 4 stone in a square -> a furnace.
     { id: "furnace", gives: { id: "furnace", count: 1 }, pattern: [[T, T], [T, T]] },
+    // 4 single bricks in a square -> a Bricks block to build with (one per colour).
+    { id: "bricks", gives: { id: "bricks", count: 1 },
+      pattern: [["brick", "brick"], ["brick", "brick"]] },
+    { id: "brown_bricks", gives: { id: "brown_bricks", count: 1 },
+      pattern: [["brown_brick", "brown_brick"], ["brown_brick", "brown_brick"]] },
+    { id: "red_bricks", gives: { id: "red_bricks", count: 1 },
+      pattern: [["red_brick", "red_brick"], ["red_brick", "red_brick"]] },
     // Coal on top of a stick -> 4 torches.
     { id: "torch", gives: { id: "torch", count: 4 }, pattern: [[CO], [S]] },
     // 3 wood across the top + 2 sticks down the middle -> wooden pickaxe.

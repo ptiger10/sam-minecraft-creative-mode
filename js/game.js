@@ -1926,6 +1926,7 @@
     // return to, so loading never drops you into the (regenerated) Nether.
     const pos = S.inNether ? (S.questPortalExit || ow.spawn) : S.player.pos;
     const data = {
+      version: 2,        // v2: single "brick" items + plural "bricks" blocks
       seed: ow.seed,
       biome: ow.biome,
       changes: changes,
@@ -1966,10 +1967,24 @@
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ invertLook: S.invertLook })); } catch (e) {}
   }
 
+  // Pre-v2 saves used "brick"/"brown_brick"/"red_brick" for the masonry *block*.
+  // Those ids are now single-brick *items*; the blocks are the plural "bricks".
+  // Remap any placed blocks and stored stacks so old brick builds survive intact.
+  const BRICK_BLOCK_MIGRATION = { brick: "bricks", brown_brick: "brown_bricks", red_brick: "red_bricks" };
+  function migrateBrickBlocks(data) {
+    const remap = (id) => BRICK_BLOCK_MIGRATION[id] || id;
+    (data.changes || []).forEach((c) => { if (c) c.id = remap(c.id); });
+    (data.inventory || []).forEach((s) => { if (s) s.id = remap(s.id); });
+    Object.keys(data.chests || {}).forEach((k) => {
+      (data.chests[k] || []).forEach((s) => { if (s) s.id = remap(s.id); });
+    });
+  }
+
   function loadGame() {
     let data;
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
     if (!data) return false;
+    if (!data.version) migrateBrickBlocks(data);   // upgrade legacy brick ids
     const world = new Game.World(null, data.seed, data.biome);
     world.generate();
     if (data.changes) world.applyChanges(data.changes);

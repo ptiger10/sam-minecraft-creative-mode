@@ -180,10 +180,12 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 - 🔥 **Furnaces.** Craft one from **4 stone** (it has a distinctive glowing
   firebox so it's easy to spot), place it and tap it. Load a **fuel** (coal, or
   a long-lasting **battery**) and something to **smelt**: sand → **glass**, clay
-  → **brick**, **iron ore → iron ingot**, **iron ingot → 🔩 steel**, emerald ore
-  → **emerald**, **gold ore → gold ingot**, **redstone ore → redstone**, and
-  **diamond ore → 💎 diamond**. The smelting recipes are listed **right in the
-  furnace** — tap one to load it.
+  → a single **🧱 brick**, **iron ore → iron ingot**, **iron ingot → 🔩 steel**,
+  emerald ore → **emerald**, **gold ore → gold ingot**, **redstone ore →
+  redstone**, and **diamond ore → 💎 diamond**. The smelting recipes are listed
+  **right in the furnace** — tap one to load it. **Craft four bricks in a square
+  → a Bricks block** you can build with (brown clay and red clay make brown and
+  red bricks the same way).
 - ⬛ **Make obsidian from lava and water.** Dig down to an underground **lava
   pool**, then **pour a bucket of water onto the lava** and it cools into
   **obsidian** right where they meet. Mine the obsidian with a pickaxe to build
@@ -204,6 +206,7 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   to auto-arrange it), then tap the result square to make it:
   - **Planks** (×4) = 1 wood · **Stick** = 2 wood stacked
   - **Crafting Table** = 4 wood in a square · **Furnace** = 4 stone in a square
+  - **Bricks** block = 4 🧱 bricks in a square (smelt clay for the bricks)
   - **Torch** (×4) = coal on top of a stick
   - **Wooden / Stone Pickaxe**, **Ladder**, **Stairs**, **Fence**, **Battery**,
     **Bed**, **Chest**, **Window**, **Door** and a **Door with a window**
