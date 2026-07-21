@@ -1428,7 +1428,7 @@
         const x = cx + dx, z = cz + dz;
         if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
         if (dz === R && Math.abs(dx) <= 1) continue;             // open doorway
-        this.fillColumn(x, z, floorY + 1, wallTop, "brown_brick");
+        this.fillColumn(x, z, floorY + 1, wallTop, "brown_bricks");
         // a glass window every other block along the wall
         if ((Math.abs(dx) + Math.abs(dz)) % 2 === 0) {
           this.blocks.set(World.key(x, floorY + 2, z), "glass");
@@ -1442,13 +1442,13 @@
     corners.forEach(([dx, dz]) => {
       const x = cx + dx, z = cz + dz;
       if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) return;
-      this.fillColumn(x, z, floorY + 1, spireTop - 1, "brick");
+      this.fillColumn(x, z, floorY + 1, spireTop - 1, "bricks");
       this.blocks.set(World.key(x, spireTop, z), "wood_red"); // bright crown
       if (spireTop + 1 <= C.MAX_Y) this.blocks.set(World.key(x, spireTop + 1, z), "torch");
     });
 
     // 4) The central beacon mast — the very tallest point of the settlement.
-    this.fillColumn(cx, cz, floorY + 1, Math.min(C.MAX_Y, mastTop - 1), "brick");
+    this.fillColumn(cx, cz, floorY + 1, Math.min(C.MAX_Y, mastTop - 1), "bricks");
     if (mastTop - 2 >= floorY + 1) this.blocks.set(World.key(cx, mastTop - 2, cz), "wood_yellow");
     const beaconY = Math.min(C.MAX_Y, mastTop);
     this.blocks.set(World.key(cx, beaconY, cz), "torch");
@@ -1543,7 +1543,7 @@
     const floorY = this.surfaceY(cx, cz);
     const wallTop = floorY + 2 + level;            // taller walls for later towns
     const spireTop = C.MAX_Y - 1;                  // spires nearly touch the sky
-    const wallMat = ["brown_brick", "brown_brick", "brick", "red_brick"][level - 1] || "brick";
+    const wallMat = ["brown_bricks", "brown_bricks", "bricks", "red_bricks"][level - 1] || "bricks";
     const crown = ["wood_red", "wood_blue", "wood_green", "wood_yellow"][level - 1] || "wood_red";
 
     // 1) Flatten + pave the plaza (fancier paving in the later settlements).
@@ -1553,7 +1553,7 @@
         if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
         for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
         this.fillColumn(x, z, Math.max(0, floorY - 1), floorY - 1, "dirt");
-        const floorMat = level >= 3 ? (((dx + dz) & 1) ? "red_brick" : "brick") : "planks";
+        const floorMat = level >= 3 ? (((dx + dz) & 1) ? "red_bricks" : "bricks") : "planks";
         this.blocks.set(World.key(x, floorY, z), floorMat);
       }
     }
@@ -1578,7 +1578,7 @@
     [[-R, -R], [R, -R], [-R, R], [R, R]].forEach(([dx, dz]) => {
       const x = cx + dx, z = cz + dz;
       if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) return;
-      this.fillColumn(x, z, floorY + 1, spireTop - 1, "brick");
+      this.fillColumn(x, z, floorY + 1, spireTop - 1, "bricks");
       this.blocks.set(World.key(x, spireTop, z), crown);
       if (spireTop + 1 <= C.MAX_Y) this.blocks.set(World.key(x, spireTop + 1, z), "torch");
     });
@@ -1592,8 +1592,8 @@
   // portal; house 4 holds the credits plaque.
   World.prototype.buildQuestHouse = function (cx, cz, floorY, level, num) {
     const hr = level >= 3 ? 3 : 2;                  // bigger houses later on
-    const wall = num >= 3 ? "brick" : "brown_brick";
-    const roof = num >= 3 ? "red_brick" : "planks";
+    const wall = num >= 3 ? "bricks" : "brown_bricks";
+    const roof = num >= 3 ? "red_bricks" : "planks";
     const top = floorY + 3;                         // walls are 3 blocks tall
     // Only the FINAL house — the one holding the winning "Hall of Fame" screen —
     // is sealed so it can't be mined into. The others are ordinary buildings you
@@ -1979,7 +1979,7 @@
     const deckY = base + 4;      // 7  — second-floor deck blocks (walk on top at 8)
     const upTop = deckY + 3;     // 10 — top of the upper walls
     const roofY = upTop + 1;     // 11 — roof
-    const wall = "red_brick", floorMat = "brown_brick", deckMat = "brown_brick";
+    const wall = "red_bricks", floorMat = "brown_bricks", deckMat = "brown_bricks";
     const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
 
     // 1) Clear the whole volume and lay a solid ground floor.
