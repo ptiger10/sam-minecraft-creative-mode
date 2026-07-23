@@ -2542,6 +2542,65 @@
     }
   };
 
+  // ---- Anti-twitch helpers ---------------------------------------
+  // Ease a critter's body toward the way it's walking instead of snapping.
+  // Combined with the turn pause below, a blocked animal calmly looks around
+  // for a new way out rather than spinning like a top.
+  function faceYaw(a, target, dt) {
+    let d = target - a.rotation.y;
+    d = ((d % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; // shortest way round
+    a.rotation.y += d * Math.min(1, dt * 6);
+  }
+
+  // A blocked wanderer turns around (with a little randomness) — but only a
+  // few times a second. Re-picking a direction EVERY frame while stuck was
+  // what caused the hyperactive twitching.
+  function turnWhenBlocked(u) {
+    if (u.turnPause > 0) return;
+    u.dir += Math.PI * (0.75 + Math.random() * 0.5);
+    u.turnPause = 0.35 + Math.random() * 0.3;
+  }
+
+  // An animal whose own cell has become un-standable (a wall or house was
+  // built right on top of its meadow) pops free to the nearest open spot.
+  // Animals penned in by fences never trigger this — their own cell is fine.
+  World.prototype.unstickAnimal = function (a) {
+    const ax = Math.floor(a.position.x), az = Math.floor(a.position.z);
+    for (let r = 1; r <= 6; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = ax + dx + 0.5, z = az + dz + 0.5;
+          const y = this.surfaceY(ax + dx, az + dz) + 1;
+          if (!this.canStand(x, z, y)) continue;
+          a.position.set(x, y, z);
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Shared walking step for every ground wanderer: advance if the way is
+  // clear, otherwise turn (paced), and pop free if genuinely stuck.
+  World.prototype.wanderStep = function (a, dt, speed) {
+    const u = a.userData;
+    if (u.turnPause > 0) u.turnPause -= dt;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    if (this.canStand(nx, nz, a.position.y)) {
+      a.position.x = nx; a.position.z = nz;
+      u.stuckFor = 0;
+    } else {
+      turnWhenBlocked(u);
+      u.stuckFor = (u.stuckFor || 0) + dt;
+      if (u.stuckFor > 3) { this.unstickAnimal(a); u.stuckFor = 0; }
+    }
+    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+    faceYaw(a, -u.dir + Math.PI / 2, dt);
+  };
+
   World.prototype.updateAnimals = function (dt) {
     for (const a of this.animals) {
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
@@ -2563,17 +2622,8 @@
       }
       let speed = 0.7;
       if (a.userData.hop > 0) { a.userData.hop -= dt; speed = 1.9; } // spooked: trot off
-      const nx = a.position.x + Math.cos(a.userData.dir) * speed * dt;
-      const nz = a.position.z + Math.sin(a.userData.dir) * speed * dt;
-      // stay inside the world — and inside any fence (a solid block stops them).
-      if (this.canStand(nx, nz, a.position.y)) {
-        a.position.x = nx; a.position.z = nz;
-      } else {
-        a.userData.dir += Math.PI; // turn around at the border / fence
-      }
-      const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-      a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-      a.rotation.y = -a.userData.dir + Math.PI / 2;
+      // Walk on if the way is clear; turn calmly at borders and fences.
+      this.wanderStep(a, dt, speed);
     }
   };
 
@@ -2598,14 +2648,7 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.2 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
-    const speed = 0.8;
-    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
-    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
-    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
-    else u.dir += Math.PI;
-    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-    a.rotation.y = -u.dir + Math.PI / 2;
+    this.wanderStep(a, dt, 0.8);
 
     // Bump into the player? Take a bite (with a cooldown so it isn't instant death).
     if (u.hitCooldown > 0) u.hitCooldown -= dt;
@@ -2629,14 +2672,7 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
-    const speed = 0.9;
-    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
-    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
-    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
-    else u.dir += Math.PI;
-    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-    a.rotation.y = -u.dir + Math.PI / 2;
+    this.wanderStep(a, dt, 0.9);
 
     // Fire an arrow off in a random direction if the player is roughly nearby.
     u.shootTimer -= dt;
@@ -2778,6 +2814,7 @@
     u.t += dt;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
+    if (u.turnPause > 0) u.turnPause -= dt;
     const speed = 1.0;
     const nx = a.position.x + Math.cos(u.dir) * speed * dt;
     const nz = a.position.z + Math.sin(u.dir) * speed * dt;
@@ -2786,7 +2823,7 @@
     const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
       this.solidAt(fx, Math.floor(a.position.y), fz) ||
       (dhx * dhx + dhz * dhz) > u.roam * u.roam;         // stay near home
-    if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
+    if (blocked) { turnWhenBlocked(u); }
     else { a.position.x = nx; a.position.z = nz; }
     // Hover with a gentle bob, kept clear of the floor and ceiling.
     a.position.y = u.baseY + Math.sin(u.t * 0.9) * 0.5;
@@ -2858,16 +2895,17 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+    if (u.turnPause > 0) u.turnPause -= dt;
     const speed = 0.8;
     const nx = a.position.x + Math.cos(u.dir) * speed * dt;
     const nz = a.position.z + Math.sin(u.dir) * speed * dt;
     const fx = Math.floor(nx), fz = Math.floor(nz);
     const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
       this.solidAt(fx, FLOOR + 1, fz) || this.get(fx, FLOOR, fz) === "lava";
-    if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
+    if (blocked) { turnWhenBlocked(u); }
     else { a.position.x = nx; a.position.z = nz; }
     a.position.y = FLOOR + 1;
-    a.rotation.y = -u.dir + Math.PI / 2;
+    faceYaw(a, -u.dir + Math.PI / 2, dt);
   };
 
   // A fireball. Ghasts spit orange ones; the Ender Dragon breathes purple ones
