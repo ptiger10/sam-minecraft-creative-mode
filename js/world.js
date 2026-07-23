@@ -612,10 +612,14 @@
       }
     }
 
-    // Sandy shore: any land block right beside the water becomes sand.
+    // Sandy shore: any land block right beside the water becomes sand — but
+    // only in the sunny biomes. Snowy ponds stay ringed in snow and the roofed
+    // forest keeps its dark floor; neither grows sugar cane.
     for (let x = 0; x < C.WORLD; x++) {
       for (let z = 0; z < C.WORLD; z++) {
         if (isWater(x, z)) continue;
+        const b = this.biomeAt(x, z);
+        if (b === "snow" || b === "roofed") continue;
         const h = H[x][z];
         if (h < WATER - 1 || h > WATER + 1) continue;
         if (isWater(x + 1, z) || isWater(x - 1, z) || isWater(x, z + 1) || isWater(x, z - 1)) {
@@ -953,9 +957,12 @@
     const r = Game.hash(this.seed ^ 0x55aa, x, 0, z);
 
     if (biome === "desert") {
+      // Deserts grow cacti and melons — no trees. (The original 40-block
+      // worlds had a rare oasis apple tree; legacy keeps it so they
+      // regenerate exactly as they were.)
       if (r < 0.05) this.placeCactus(x, h + 1, z);
       else if (r < 0.065) this.blocks.set(World.key(x, h + 1, z), "watermelon"); // melons in the sand
-      else if (r > 0.985) this.placeTree(x, h + 1, z, true); // rare oasis apple tree
+      else if (this.legacy && r > 0.985) this.placeTree(x, h + 1, z, true);
       return;
     }
 
@@ -966,11 +973,9 @@
       return;
     }
 
-    // Snowy hills: scattered frosted trees, nothing growing on the ground.
-    if (biome === "snow") {
-      if (r < 0.045) this.placeTree(x, h + 1, z, false, true);
-      return;
-    }
+    // Snowy hills: a bare, windswept snowfield — nothing grows up here. The
+    // frozen ponds are the landmark, not trees.
+    if (biome === "snow") return;
 
     // Forest: lots of trees, ~1/3 of them bearing apples, plus melons on the ground.
     if (r < 0.12) {
@@ -986,7 +991,7 @@
     for (let i = 0; i < tall; i++) this.blocks.set(World.key(x, y + i, z), "cactus");
   };
 
-  World.prototype.placeTree = function (x, y, z, apple, snowy) {
+  World.prototype.placeTree = function (x, y, z, apple) {
     const trunk = 4 + Math.floor(Game.hash(this.seed, x, 9, z) * 2);
     for (let i = 0; i < trunk; i++) this.blocks.set(World.key(x, y + i, z), "wood");
     const top = y + trunk;
@@ -1022,21 +1027,6 @@
         if (this.occupied(ax, hangY, az)) continue;
         if (Game.hash(this.seed ^ 0x5a17, ax, hangY, az) < 0.55) {
           this.blocks.set(World.key(ax, hangY, az), "apple");
-        }
-      }
-    }
-
-    // Snowy-hills trees wear a dusting of snow on top of the canopy.
-    if (snowy) {
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          if (Math.abs(dx) + Math.abs(dz) > 2) continue;
-          const sx = x + dx, sz = z + dz;
-          const capY = this.occupied(sx, top + 1, sz) ? top + 2 : top + 1;
-          if (this.occupied(sx, capY, sz) || !this.occupied(sx, capY - 1, sz)) continue;
-          if (Game.hash(this.seed ^ 0x510e, sx, capY, sz) < 0.6) {
-            this.blocks.set(World.key(sx, capY, sz), "snow");
-          }
         }
       }
     }
