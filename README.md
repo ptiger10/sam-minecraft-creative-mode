@@ -11,8 +11,11 @@ to win — it's a side adventure with a legendary reward. Punch trees, dig up
 ores, craft tools and build whatever you like. 🌳🏜️❄️🏰
 
 The title-screen choice (Forest / Desert) picks the biome you *start* in —
-wander far enough and you'll cross into all the others. Worlds saved before
-the big-world update still load exactly as they were.
+wander far enough and you'll cross into all the others. Prefer the cosy
+original? **New World — Classic map** starts a fresh world on the old 40×40
+layout, with one biome, the soaring settlement spires and the original
+three-key quest. Worlds saved before the big-world update still load exactly
+as they were.
 
 It's a single web page built with plain HTML/CSS/JavaScript and
 [Three.js](https://threejs.org/) for the 3D graphics. No build step, no

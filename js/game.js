@@ -2038,6 +2038,18 @@
     startWorld(world, null);
   }
 
+  // The Classic map: a brand-new world on the original cosy 40x40 layout —
+  // one biome throughout, sky-high settlement spires on the centre axes, and
+  // the original key quest (the gold key opens the fourth house's lit portal).
+  function newLegacyWorld() {
+    const biome = (randomSeed() & 1) ? "forest" : "desert";
+    const seed = randomSeed();
+    Game.CONST.WORLD = 40;
+    const world = new Game.World(null, seed, biome, true);
+    world.generate();
+    startWorld(world, null);
+  }
+
   // ===============================================================
   //  Saving / loading (localStorage) — three slots
   // ===============================================================
@@ -2251,6 +2263,7 @@
     tapButton($("btn-new-forest"), () => newWorld("forest"));
     tapButton($("btn-new-desert"), () => newWorld("desert"));
     tapButton($("btn-new-random"), () => newWorld("random"));
+    tapButton($("btn-new-legacy"), () => newLegacyWorld());
     // Three continue buttons on the title screen, one per save slot.
     [1, 2, 3].forEach((n) => {
       tapButton($("btn-load-" + n), () => { if (!loadGame(n)) toast("That slot is empty."); });
