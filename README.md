@@ -4,8 +4,11 @@ A kid-friendly open-world sandbox game in the browser, inspired by Minecraft's
 creative mode. Everything is blocky — the world, the trees, the animals and
 you. Each world is a big patchwork of biomes: sunny forests, sandy deserts,
 snowy hills with frozen ponds you can walk across, and a dark **roofed forest**
-hiding a two-storey **woodland mansion** stuffed with treasure. Punch trees,
-dig up ores, craft tools and build whatever you like. 🌳🏜️❄️🏰
+hiding a two-storey **woodland mansion** stuffed with treasure — including the
+🗿 **Totem of Undying**, a one-of-a-kind charm that brings you back to life
+once if you would die while carrying it. Finding the mansion is never required
+to win — it's a side adventure with a legendary reward. Punch trees, dig up
+ores, craft tools and build whatever you like. 🌳🏜️❄️🏰
 
 The title-screen choice (Forest / Desert) picks the biome you *start* in —
 wander far enough and you'll cross into all the others. Worlds saved before
@@ -114,14 +117,15 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   ground animal to climb on and ride it** — then **steer it with the normal
   controls** (drag to look, ⬆ to walk, 🤸 to jump); tap again to hop off. Build a
   **fence** around a field and the animals stay penned inside it.
-- 🧑‍🌾 **Villagers** live in **tall walled settlements** with soaring,
-  torch-topped corner spires — easy to spot poking up above the treetops from
-  anywhere in the world. **Tap one to trade** — they take 💚 **emeralds** (smelt
-  emerald ore in a furnace) and sell you paints and other goodies to decorate
-  your house.
+- 🧑‍🌾 **Villagers** live in **walled settlements** with torch-topped corner
+  towers, scattered far and wide across the world — follow the **yellow brick
+  road** to find them all. **Tap one to trade** — they take 💚 **emeralds**
+  (smelt emerald ore in a furnace) and sell you paints and other goodies to
+  decorate your house.
 - 🟨 **A four-settlement adventure on a yellow brick road.** A bright **yellow
-  brick road** starts near where you spawn and winds out to **four settlements**,
-  each grander than the last:
+  brick road** starts near where you spawn and winds from settlement to
+  settlement — one tucked into each corner of the world, each grander than the
+  last:
   - The **first villager** trades you a 🗝️ **key** to the **locked house** where
     the **second villager** lives.
   - The second villager hands you the **key to the third house** — also locked.
@@ -130,23 +134,25 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     **two hearts**, and each ghast only fires **once per visit** (it goes quiet
     until you leave and come back). Down there a **🐷 piglin** snuffles around
     the floor: **trade it a gold ingot** and it hands back a random **💎 diamond,
-    💚 emerald, or 🖤 netherite**. **Netherite** is now **pitch black** and very
-    **rare** to mine — the surest supply is the **loot chest in the brick Nether
-    fortress**, or the piglin. That fortress is a **two-storey keep**: climb the
-    **brick stairs** to the **second floor**, where the chest holds **netherite,
+    💚 emerald, or 🖤 netherite**. The brick **Nether fortress** is a
+    **two-storey keep**: climb the **brick stairs** to the **second floor**,
+    where the loot chest holds the **🧿 8 Eyes of Ender**, plus **netherite,
     diamonds, emeralds and good building blocks** (glowstone, obsidian, gold).
     But it's **guarded by 💀 the Wither**
     — a floating, three-headed, legless menace that **flings wither skulls in
     random directions**. If a skull hits you, you get the **wither effect**: the
     screen darkens and you **lose a heart every few seconds for 6 seconds**
     before it wears off.
-  - The **third villager** wants **netherite** in exchange for the **last key**,
-    which opens the **fourth house** — and inside waits a ✨ **portal to The
-    End**, the grand finale.
-  - Each villager gives you a key **only once**. You can **mine your way into
-    the first three houses** if you'd rather not chase the keys — but the final
-    **End-portal house is sealed** (walls, roof and floor), so the ending stays
-    locked behind that last key.
+  - The **fourth house isn't locked at all** — its door swings open. Inside
+    stands a **dormant End Portal**: an arch of 8 frame blocks, each with an
+    **empty eye socket**. **Tap a socket while carrying an 🧿 Eye of Ender** to
+    set it in — when the **8th eye clicks into place, the portal lights up**.
+    Tap any eye to **pop it back out** (the portal fades dark again), but the
+    frame itself is ancient magic — **it can never be mined**.
+  - Villagers give their key **only once**. You can **mine your way into
+    the first three houses** if you'd rather not chase the keys — but the
+    **End-portal house is sealed** (walls, roof and floor), so the portal room
+    always stands.
 - ✨ **The End — the finale.** Step through the fourth house's dark, starry
   portal into **The End**: a pale island floating in an endless void.
   - A 🐉 **Ender Dragon with glowing purple eyes** wheels overhead and **breathes
@@ -230,8 +236,11 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - **Paint wood** any colour = wood + a paint (bought from a villager)
   - Place ladders up a wall, then **face one and hold forward (or jump)** to
     climb; let go to slide back down. Ladders never cause fall damage.
-- 💾 **Save your progress** to the browser's local storage with the Save button
-  (it also autosaves every 30 seconds). Press **Continue** on the title screen
+- 💾 **Three save slots.** Nothing saves until you press **Save** and pick a
+  slot — from then on that slot **autosaves every 30 seconds** (and when you
+  open the menu or close the page). Each slot holds its own world, so up to
+  three adventures can live side by side. Press a **slot's Continue button** on
+  the title screen
   to come back to your world later.
 - ⏰ **Take-a-break reminder.** After **17 minutes** of play the game **saves
   and pauses itself** and shows a friendly **Break Time!** screen — with a

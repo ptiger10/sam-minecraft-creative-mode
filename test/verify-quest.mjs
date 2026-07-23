@@ -63,17 +63,19 @@ check("three quest villagers exist", layout.villagers === 3);
 check("a yellow brick road was laid", layout.brick > 20);
 check("the road starts near the spawn point", layout.brickNearSpawn);
 
-// --- Each villager offers exactly one key; the third one wants netherite ---
+// --- Villagers 1-2 offer keys; the fourth house needs no key at all now, so
+//     villager 3 is an ordinary emerald trader ---
 const trades = await page.evaluate(() => {
   const W = window.Game.S.world;
   return W.questVillagers
     .sort((a, b) => a.userData.house - b.userData.house)
-    .map((v) => ({ house: v.userData.house, gives: v.userData.quest.gives, cost: v.userData.quest.cost || null }));
+    .map((v) => ({ house: v.userData.house,
+      gives: v.userData.quest ? v.userData.quest.gives : null,
+      cost: v.userData.quest ? (v.userData.quest.cost || null) : null }));
 });
 check("villager 1 gives the bronze key", trades[0] && trades[0].gives === "key2" && !trades[0].cost);
 check("villager 2 gives the silver key", trades[1] && trades[1].gives === "key3" && !trades[1].cost);
-check("villager 3 gives the gold key for netherite",
-  trades[2] && trades[2].gives === "key4" && trades[2].cost && trades[2].cost.id === "netherite");
+check("villager 3 has no key quest (the fourth house is open)", trades[2] && trades[2].gives === null);
 
 // --- Houses 2-4 are locked; a key unlocks the matching door ---
 const locks = await page.evaluate(() => {
@@ -100,7 +102,7 @@ const locks = await page.evaluate(() => {
 });
 check("the second house has a locked door", locks.found[2]);
 check("the third house has a locked door", locks.found[3]);
-check("the fourth house has a locked door", locks.found[4]);
+check("the fourth house is NOT locked (its door opens freely)", locks.found[4] === false);
 
 // Drive a real unlock through the world API (key consumed -> door opens).
 const unlock = await page.evaluate(() => {
@@ -198,24 +200,60 @@ const fire = await page.evaluate(() => {
 check("a ghast fireball deals two hearts of damage", fire.before - fire.after === 4);
 check("wearing armour blocks a ghast fireball", fire.afterArmored === fire.max);
 
-// --- The fourth house holds the portal to The End (not a plaque) ---
-const credits = await page.evaluate(() => {
-  const W = window.Game.S.world;
-  let endPortals = 0, plaque = false;
+// --- The fourth house holds a DORMANT End Portal frame: 8 empty eye sockets,
+//     no portal until every Eye of Ender is set in place ---
+const gate = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, G = window.Game;
+  let endPortals = 0, frames = 0, plaque = false;
   for (const [, id] of W.blocks) {
     if (id === "end_portal") endPortals++;
+    if (id === "end_frame") frames++;
     if (id === "credits_block") plaque = true;
   }
-  // The credits panel still exists — it's now the winning finale — and honours
-  // the inventors.
+  const dormant = { endPortals, frames };
+  // The fortress chest holds the 8 Eyes of Ender (build + stock the real
+  // Nether the same way stepping through a portal would).
+  const nw = G._ensureNether();
+  const fc = (nw.fortressChests || [])[0];
+  const chest = S.chests[fc.x + "," + fc.y + "," + fc.z] || [];
+  const eyesInChest = chest.reduce((n, s) => n + (s && s.id === "eye_of_ender" ? s.count : 0), 0);
+  // Place all 8 eyes through the real interaction path.
+  S.inv[0] = { id: "eye_of_ender", count: 8 };
+  const sockets = W.endGate.sockets;
+  let litAtSeven = false;
+  sockets.forEach((c, i) => {
+    if (i === 7) litAtSeven = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal";
+    G._insertEnderEye(c);
+  });
+  const litAtEight = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal" &&
+                     W.get(W.endGate.x, W.endGate.y + 1, W.endGate.z) === "end_portal";
+  // Pop one back out: the portal must fade and the eye returns to the player.
+  G._removeEnderEye(sockets[3]);
+  const darkAfterRemove = !W.get(W.endGate.x, W.endGate.y, W.endGate.z);
+  const eyeBack = S.inv.reduce((n, s) => n + (s && s.id === "eye_of_ender" ? s.count : 0), 0);
+  // The frame itself can never be mined away, even where the protection map is
+  // consulted by the mining path.
+  const frameProtected = sockets.every((c) => W.isProtected(c.x, c.y, c.z));
+  // Put it back so the later End-entry checks find a lit portal.
+  G._insertEnderEye(sockets[3]);
+  const relit = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal";
   const panel = document.getElementById("credits-panel");
   const text = panel ? panel.textContent : "";
-  return { endPortals, plaque, sam: /Sam Fort/.test(text), dave: /Dave Fort/.test(text) };
+  return { dormant, eyesInChest, litAtSeven, litAtEight, darkAfterRemove, eyeBack,
+    frameProtected, relit, plaque, sam: /Sam Fort/.test(text), dave: /Dave Fort/.test(text) };
 });
-check("the fourth house holds a portal to The End", credits.endPortals >= 1);
-check("the old Hall of Fame plaque is gone", credits.plaque === false);
-check("the winning credits honour Sam Fort", credits.sam);
-check("the winning credits honour Dave Fort", credits.dave);
+check("the portal starts dormant (no portal blocks)", gate.dormant.endPortals === 0);
+check("the frame has 8 empty eye sockets", gate.dormant.frames === 8);
+check("the Nether fortress chest holds the 8 Eyes of Ender", gate.eyesInChest === 8);
+check("7 eyes are not enough to light the portal", gate.litAtSeven === false);
+check("all 8 eyes light the End Portal", gate.litAtEight);
+check("removing any eye darkens the portal again", gate.darkAfterRemove);
+check("the removed eye goes back to the player", gate.eyeBack === 1);
+check("the portal frame can never be mined", gate.frameProtected);
+check("re-placing the eye lights the portal again", gate.relit);
+check("the old Hall of Fame plaque is gone", gate.plaque === false);
+check("the winning credits honour Sam Fort", gate.sam);
+check("the winning credits honour Dave Fort", gate.dave);
 
 // --- Live: stepping into the portal really swaps dimensions (and renders) ---
 const stepIn = await page.evaluate(() => {
@@ -899,9 +937,10 @@ check("closing the winning credits returns to the Home Screen", home.startShown 
 // --- The game never saves while in The End ---
 const noSave = await page.evaluate(() => {
   const S = window.Game.S;
-  const KEY = "blocky-world-save-v1";
+  const KEY = "blocky-world-save-slot1";
   localStorage.setItem(KEY, "SENTINEL");
-  S.inEnd = true;                                // pretend we're back in The End
+  S.saveSlot = 1;                                // a slot is bound, so it WOULD save…
+  S.inEnd = true;                                // …but we're (pretending to be) in The End
   document.getElementById("btn-save").click();   // manual save must no-op there
   return { unchanged: localStorage.getItem(KEY) === "SENTINEL" };
 });

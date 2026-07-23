@@ -202,14 +202,20 @@ const eatMelon = await page.evaluate(async () => {
 check("eating a watermelon restored food", eatMelon.food > 8);
 check("a watermelon was consumed", eatMelon.melonLeft === 1);
 
-// --- Saving ---
+// --- Saving (first save opens the slot picker; choosing a slot binds it) ---
 const save = await page.evaluate(async () => {
-  const S = window.Game.S;
-  document.getElementById("btn-save").click();
+  document.getElementById("btn-save").click();       // no slot yet -> picker
   await new Promise((r) => setTimeout(r, 50));
-  return { saved: !!localStorage.getItem("blocky-world-save-v1") };
+  const pickerShown = !document.getElementById("slot-panel").classList.contains("hidden");
+  document.getElementById("btn-slot-1").click();     // choose slot 1
+  await new Promise((r) => setTimeout(r, 50));
+  return { pickerShown,
+    saved: !!localStorage.getItem("blocky-world-save-slot1"),
+    bound: window.Game.S.saveSlot === 1 };
 });
-check("game saved to localStorage", save.saved);
+check("first save asks which slot to use", save.pickerShown);
+check("game saved to slot 1", save.saved);
+check("slot 1 is now the automatic save slot", save.bound);
 await page.screenshot({ path: new URL("./screenshot.png", import.meta.url).pathname });
 
 // --- Pickaxe crafting: a Crafting Table opens the full 3x3 grid ---
@@ -256,9 +262,9 @@ check("7 sticks in an H -> ladder", shapes.ladder === "ladder");
 
 // --- Save + load round-trip (forest world is restored) ---
 const cBefore = await page.evaluate(() => window.Game.S.world.changes.size);
-await page.click("#btn-menu");            // saves the forest world + opens the title
+await page.click("#btn-menu");            // autosaves to the bound slot + opens the title
 await page.waitForTimeout(150);
-await page.click("#btn-continue");        // loads it back
+await page.click("#btn-load-1");          // loads slot 1 back
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world.biome === "forest", { timeout: 8000 });
 await page.waitForTimeout(200);
 const loaded = await page.evaluate(() => {

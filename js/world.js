@@ -378,6 +378,36 @@
     ]);
   }
 
+  // An End Portal frame block: pale-green-capped dark stone with an eye socket
+  // showing on its faces. Empty = a dark recessed socket; filled = a glowing
+  // Eye of Ender bulging from the top and both broad faces of the arch.
+  function endFrameGeometry(withEye) {
+    const def = Game.BlockDefs.end_frame;
+    const body = new THREE.Color(def.side);
+    const cap = new THREE.Color(def.top);
+    const socket = new THREE.Color(0x10231c);          // dark empty recess
+    const eyeC = new THREE.Color(0xbfffe8);            // pale glowing eye
+    const pupil = new THREE.Color(0x1d4a3a);
+    const parts = [
+      { g: Box(1, 1, 1), x: 0, y: 0, z: 0, c: body },
+      { g: Box(1.02, 0.18, 1.02), x: 0, y: 0.44, z: 0, c: cap },
+      // The socket shows on the top and on both faces of the portal plane (±z).
+      { g: Box(0.4, 0.06, 0.4), x: 0, y: 0.51, z: 0, c: socket },
+      { g: Box(0.4, 0.4, 0.06), x: 0, y: 0.05, z: 0.5, c: socket },
+      { g: Box(0.4, 0.4, 0.06), x: 0, y: 0.05, z: -0.5, c: socket }
+    ];
+    if (withEye) {
+      parts.push(
+        { g: Box(0.3, 0.14, 0.3), x: 0, y: 0.55, z: 0, c: eyeC },
+        { g: Box(0.3, 0.3, 0.12), x: 0, y: 0.05, z: 0.53, c: eyeC },
+        { g: Box(0.3, 0.3, 0.12), x: 0, y: 0.05, z: -0.53, c: eyeC },
+        { g: Box(0.12, 0.12, 0.06), x: 0, y: 0.05, z: 0.61, c: pupil },
+        { g: Box(0.12, 0.12, 0.06), x: 0, y: 0.05, z: -0.61, c: pupil }
+      );
+    }
+    return mergeColoredBoxes(parts);
+  }
+
   // The crafted Exit Portal: a bright magenta crystal cross you step through to
   // win — clearly different from the dark entry portal and the purple Nether one.
   function exitPortalGeometry() {
@@ -410,6 +440,8 @@
     if (id === "end_portal") return (geomCache[id] = endPortalGeometry());
     if (id === "exit_portal") return (geomCache[id] = exitPortalGeometry());
     if (id === "end_crystal") return (geomCache[id] = endCrystalGeometry());
+    if (id === "end_frame") return (geomCache[id] = endFrameGeometry(false));
+    if (id === "end_frame_eye") return (geomCache[id] = endFrameGeometry(true));
     if (id === "credits_block") return (geomCache[id] = creditsBlockGeometry());
     if (id === "obsidian") return (geomCache[id] = obsidianGeometry());
     if (Game.LOCKED && Game.LOCKED[id]) return (geomCache[id] = lockedDoorGeometry(Game.LOCKED[id]));
@@ -519,6 +551,7 @@
   World.prototype.generate = function () {
     const height = this.legacy ? Game.makeHeight(this.seed) : Game.makeOpenHeight(this.seed);
     this.setupBiomes();
+    this.planQuestSites();
     const WATER = C.WATER_LEVEL;
     const cx = Math.floor(C.WORLD / 2), cz = Math.floor(C.WORLD / 2);
     const nearSpawn = (x, z) => Math.abs(x - cx) <= 3 && Math.abs(z - cz) <= 3;
@@ -656,13 +689,67 @@
       }
     }
 
-    // One roofed-forest grove is guaranteed, tucked into a quadrant of the map
-    // well away from the spawn, the road and the four settlements — the
-    // woodland mansion is built at its heart.
-    const q = Math.floor(C.WORLD / 4);
-    const centres = [[q, q], [C.WORLD - q, q], [q, C.WORLD - q], [C.WORLD - q, C.WORLD - q]];
-    const pick = centres[Math.floor(Game.hash(this.seed ^ 0x9a05e, 1, 2, 3) * 4)];
-    this._grove = { x: pick[0], z: pick[1], r: 15 };
+    // One roofed-forest grove is guaranteed — the woodland mansion's home. It
+    // takes one of the eight ring anchor spots (see ringSlots); the settlements
+    // later take four spots at least two ring-steps away, so nothing collides.
+    const slots = this.ringSlots();
+    const gi = Math.floor(Game.hash(this.seed ^ 0x9a05e, 1, 2, 3) * 8);
+    this._grove = { x: slots[gi].x, z: slots[gi].z, r: 15, slot: gi };
+  };
+
+  // Eight evenly spaced anchor spots on a ring around the spawn — the scaffold
+  // the grove and the four settlements are scattered onto.
+  World.prototype.ringSlots = function () {
+    const sc = Math.floor(C.WORLD / 2), R = Math.round(C.WORLD * 0.28);
+    const out = [];
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      out.push({ x: sc + Math.round(R * Math.cos(a)), z: sc + Math.round(R * Math.sin(a)) });
+    }
+    return out;
+  };
+
+  // Decide where the four settlements go, before terrain features are carved
+  // (ponds and lava lakes keep clear of them). Legacy worlds keep their exact
+  // old spots on the centre axes; new worlds scatter one settlement into each
+  // quadrant of the map, so the yellow brick road becomes a proper journey.
+  World.prototype.planQuestSites = function () {
+    const sc = Math.floor(C.WORLD / 2);
+    if (this.legacy) {
+      this._sitePlan = [
+        { cx: 9, cz: sc, level: 1 },
+        { cx: sc, cz: 9, level: 2 },
+        { cx: C.WORLD - 9, cz: sc, level: 3 },
+        { cx: sc, cz: C.WORLD - 9, level: 4 }
+      ];
+      return;
+    }
+    const rng = Game.mulberry32(this.seed ^ 0x517e5);
+    const cheb = (ax, az, bx, bz) => Math.max(Math.abs(ax - bx), Math.abs(az - bz));
+    const clamp = (v) => Math.max(9, Math.min(C.WORLD - 10, v));
+    // The grove owns one ring slot; the settlements take four of the five
+    // slots that sit at least two ring-steps away — so the mansion always has
+    // breathing room. One slot is skipped at random and the walk direction
+    // flips at random, so every world's journey arcs differently.
+    const slots = this.ringSlots();
+    const gi = this._grove.slot;
+    const avail = [2, 3, 4, 5, 6].map((o) => (gi + o) % 8);
+    avail.splice(Math.floor(rng() * avail.length), 1);
+    if (rng() < 0.5) avail.reverse();
+    const plan = [];
+    avail.forEach((si, i) => {
+      const s = slots[si];
+      let cx = clamp(s.x), cz = clamp(s.z);
+      for (let t = 0; t < 20; t++) {                 // jitter, but stay spread out
+        const tx = clamp(s.x + Math.floor(rng() * 7) - 3);
+        const tz = clamp(s.z + Math.floor(rng() * 7) - 3);
+        if (plan.some((p) => cheb(tx, tz, p.cx, p.cz) < 17)) continue;
+        cx = tx; cz = tz;
+        break;
+      }
+      plan.push({ cx: cx, cz: cz, level: i + 1 });
+    });
+    this._sitePlan = plan;
   };
 
   // Which biome does this column belong to?
@@ -745,7 +832,7 @@
   // pour a bucket of water on it to make obsidian.
   World.prototype.scatterSurfaceLava = function () {
     const sc = Math.floor(C.WORLD / 2);
-    const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
+    const siteCenters = this._sitePlan.map((s) => [s.cx, s.cz]);
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x1a0ace);
     const want = this.legacy ? 2 : 5;   // more lakes to stumble on in a big world
@@ -806,7 +893,7 @@
   // it in. Holes are kept off the spawn plaza and clear of the settlements.
   World.prototype.stampWateringHoles = function (H, WATER) {
     const sc = Math.floor(C.WORLD / 2);
-    const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
+    const siteCenters = this._sitePlan.map((s) => [s.cx, s.cz]);
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x0a51de);
     const want = this.legacy ? 4 : 10;  // more ponds spread across the big map
@@ -1615,13 +1702,9 @@
   // ================================================================
   World.prototype.buildQuestWorld = function () {
     const sc = Math.floor(C.WORLD / 2); // spawn / world centre
-    // Four settlement centres around the spawn, each more elaborate than the last.
-    const sites = [
-      { cx: 9,  cz: sc, level: 1 },
-      { cx: sc, cz: 9,  level: 2 },
-      { cx: C.WORLD - 9, cz: sc, level: 3 },
-      { cx: sc, cz: C.WORLD - 9, level: 4 }
-    ];
+    // Four settlement centres spread around the map (see planQuestSites), each
+    // more elaborate than the last.
+    const sites = this._sitePlan;
     this.questSites = sites;
 
     // The yellow brick road starts at the spawn and links the settlements in
@@ -1659,13 +1742,15 @@
     });
   };
 
-  // One settlement: a paved, walled keep with tall torch-topped corner spires
-  // (so it's visible for miles) and a house in the middle holding the villager.
+  // One settlement: a paved, walled keep with torch-topped corner towers and a
+  // house in the middle holding the villager. Legacy worlds keep their original
+  // sky-scraping spires; new worlds sit naturally in the landscape — the yellow
+  // brick road is how you find them, not a beacon over the treetops.
   World.prototype.buildQuestSettlement = function (cx, cz, level, num) {
     const R = 5;
     const floorY = this.surfaceY(cx, cz);
     const wallTop = floorY + 2 + level;            // taller walls for later towns
-    const spireTop = C.MAX_Y - 1;                  // spires nearly touch the sky
+    const spireTop = this.legacy ? C.MAX_Y - 1 : wallTop + 2; // modest corner towers
     const wallMat = ["brown_bricks", "brown_bricks", "bricks", "red_bricks"][level - 1] || "bricks";
     const crown = ["wood_red", "wood_blue", "wood_green", "wood_yellow"][level - 1] || "wood_red";
 
@@ -1731,8 +1816,11 @@
         const edge = Math.max(Math.abs(dx), Math.abs(dz)) === hr;
         if (!edge) continue;
         if (dz === -hr && dx === 0) {
-          // The doorway: a door at foot height, clear space above, a lintel up top.
-          const doorId = num === 1 ? "door" : ("locked_door_" + num);
+          // The doorway: a door at foot height, clear space above, a lintel up
+          // top. In new worlds the FOURTH house isn't locked at all — the real
+          // challenge waits inside: an End Portal missing its 8 Eyes of Ender.
+          const open = num === 1 || (num === 4 && !this.legacy);
+          const doorId = open ? "door" : ("locked_door_" + num);
           this.blocks.set(World.key(x, floorY + 1, z), doorId);
           this.blocks.set(World.key(x, floorY + 3, z), wall);   // lintel (foot+2 stays open)
           seal(x, floorY + 1, z);                               // the (locked) door
@@ -1760,10 +1848,12 @@
       this.buildPortal(cx, floorY + 1, cz + hr - 1);
       this.questPortalExit = { x: cx + 0.5, y: floorY + 1, z: cz + 0.5 };
     }
-    // House 4 hides the portal to The End at the back of its sealed shell — the
-    // grand finale of the whole adventure.
+    // House 4 holds the way into The End — the grand finale of the adventure.
+    // Legacy worlds keep their ready-lit portal behind the gold-key door; new
+    // worlds hold a dormant End Portal frame with 8 empty eye sockets instead.
     if (num === 4) {
-      this.buildPortal(cx, floorY + 1, cz + hr - 1, "end_portal");
+      if (this.legacy) this.buildPortal(cx, floorY + 1, cz + hr - 1, "end_portal");
+      else this.buildEndGate(cx, floorY + 1, cz + hr - 1);
     }
 
     // The villager living here (none in house 4 — that one holds the credits).
@@ -1776,10 +1866,12 @@
       v.userData.timer = 1 + num;
       v.userData.moving = false;
       v.userData.house = num;
-      // The trade that advances the quest (a key; the third costs netherite).
+      // The trade that advances the quest. In legacy worlds the third villager
+      // sells the gold key for netherite; in new worlds the fourth house is
+      // open, so the third villager is an ordinary (emerald-loving) trader.
       if (num === 1) v.userData.quest = { gives: "key2" };
       else if (num === 2) v.userData.quest = { gives: "key3" };
-      else if (num === 3) v.userData.quest = { gives: "key4", cost: { id: "netherite", count: 1 } };
+      else if (num === 3 && this.legacy) v.userData.quest = { gives: "key4", cost: { id: "netherite", count: 1 } };
       this.questVillagers.push(v);
       this.animals.push(v);
     }
@@ -1799,6 +1891,47 @@
       this.blocks.set(World.key(x, y + dy, z), portalId);
     }
     return { x: x, y: y, z: z };
+  };
+
+  // ================================================================
+  //  The End Gate: a dormant End Portal in the fourth house. Its arch
+  //  is made of 8 frame blocks, each with an empty eye socket — place
+  //  all 8 Eyes of Ender (from the Nether fortress chest) to light the
+  //  portal. Pop any eye back out and it falls dark again.
+  // ================================================================
+  // The 8 sockets form an arch around the 1-wide, 2-tall doorway at (x, y..y+1):
+  // a sill in the floor, two side columns, and a three-block lintel row.
+  World.prototype.buildEndGate = function (x, y, z) {
+    const sockets = [
+      { x: x, y: y - 1, z: z },                        // sill (flush with the floor)
+      { x: x - 1, y: y, z: z }, { x: x + 1, y: y, z: z },
+      { x: x - 1, y: y + 1, z: z }, { x: x + 1, y: y + 1, z: z },
+      { x: x - 1, y: y + 2, z: z }, { x: x, y: y + 2, z: z }, { x: x + 1, y: y + 2, z: z }
+    ];
+    sockets.forEach((c) => {
+      this.blocks.set(World.key(c.x, c.y, c.z), "end_frame");
+      this.markProtected(c.x, c.y, c.z);               // eyes go in and out; no mining
+    });
+    this.markProtected(x, y, z);                       // the portal cells themselves
+    this.markProtected(x, y + 1, z);
+    this.endGate = { x: x, y: y, z: z, sockets: sockets };
+  };
+
+  // How many of the gate's sockets currently hold an Eye of Ender?
+  World.prototype.endGateEyes = function () {
+    if (!this.endGate) return 0;
+    let n = 0;
+    this.endGate.sockets.forEach((c) => { if (this.get(c.x, c.y, c.z) === "end_frame_eye") n++; });
+    return n;
+  };
+
+  // Light (or darken) the portal inside the frame. Recorded as normal edits, so
+  // a saved game reloads with the portal exactly as the player left it.
+  World.prototype.setEndGateActive = function (on) {
+    const g = this.endGate;
+    if (!g) return;
+    this.setBlock(g.x, g.y, g.z, on ? "end_portal" : null);
+    this.setBlock(g.x, g.y + 1, g.z, on ? "end_portal" : null);
   };
 
   // ================================================================
