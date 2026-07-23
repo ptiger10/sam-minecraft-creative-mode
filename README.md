@@ -31,6 +31,12 @@ npx serve
 Everything (Three.js included) is bundled in this folder, so it works
 completely offline.
 
+**Playing offline:** the game caches itself the first time you open it from a
+web server (localhost or a hosted copy). After that one visit you can turn off
+Wi-Fi entirely — reload the page, or launch the Home-Screen icon on an
+iPhone/iPad, and it plays exactly the same with no internet. When you're back
+online it quietly picks up any updates on the next visit.
+
 **On an iPhone/iPad:** play in **portrait or landscape** — the controls and
 hotbar rearrange to fit either way. For a true full-screen game with **no Safari
 address bar or bottom toolbar**, open the page in Safari, tap **Share → Add to

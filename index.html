@@ -329,5 +329,18 @@
   <script src="js/world.js"></script>
   <script src="js/player.js"></script>
   <script src="js/game.js"></script>
+
+  <!-- Cache the whole game for offline play. Service workers only exist on
+       http(s) pages (a localhost server, GitHub Pages, …) — when the game is
+       opened straight from a file:// double-click this simply does nothing. -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {
+          /* Offline caching is a bonus — the game still runs without it. */
+        });
+      });
+    }
+  </script>
 </body>
 </html>
