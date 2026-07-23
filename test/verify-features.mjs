@@ -235,7 +235,8 @@ const leaves = await page.evaluate(() => {
 check("leaves drop is defined", leaves.dropDef === "leaves");
 check("mining leaves put leaves in the backpack", leaves.leaves >= 1);
 
-// --- The settlement towers rise well above the treetops ---
+// --- Settlements sit naturally in the landscape (no sky spires) — you find
+//     them by following the yellow brick road, not by scanning the horizon ---
 const village = await page.evaluate(() => {
   const S = window.Game.S, G = window.Game, W = S.world;
   const C = G.CONST;
@@ -257,8 +258,7 @@ const village = await page.evaluate(() => {
   return { hasVillager: true, tallest, treetop, beacon };
 });
 check("a villager settlement exists", village.hasVillager);
-check("the settlement towers rise above the treetops", village.tallest > village.treetop);
-check("the settlement is very tall (near the sky)", village.tallest >= 20);
+check("the settlement has no sky-scraping spires", village.tallest < 22);
 check("the settlement has a glowing beacon", village.beacon);
 
 // --- Riding uses the normal controls: walk forward and jump ---
@@ -376,6 +376,7 @@ await page.evaluate(() => {
   const S = window.Game.S;
   S.onBreak = false; S.breakEndsAt = 0; S.breakLeft = 0; S.paused = false;
   document.querySelectorAll(".panel-overlay").forEach((p) => p.classList.add("hidden"));
+  S.saveSlot = 1;      // bind a save slot so the break state persists the reload
   S.playClock = 99999; // trips the break on the next frame
 });
 await page.waitForFunction(() => window.Game.S.onBreak === true, { timeout: 5000 });
@@ -387,7 +388,7 @@ const beforeReload = await page.evaluate(() => ({
 // Reload the page — the classic way to try to skip the break — then resume.
 await page.reload();
 await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
-await page.click("#btn-continue");
+await page.click("#btn-load-1");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 const afterReload = await page.evaluate(() => {
   const S = window.Game.S;

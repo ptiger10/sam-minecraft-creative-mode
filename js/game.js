@@ -8,7 +8,9 @@
   "use strict";
 
   const C = Game.CONST;
-  const SAVE_KEY = "blocky-world-save-v1";
+  // Three save slots. The pre-slots save key is migrated into slot 1 on boot.
+  const OLD_SAVE_KEY = "blocky-world-save-v1";
+  const SLOT_KEYS = ["blocky-world-save-slot1", "blocky-world-save-slot2", "blocky-world-save-slot3"];
   const SETTINGS_KEY = "blocky-world-settings-v1";
 
   // Whole-game state.
@@ -35,6 +37,7 @@
     riding: null,            // the animal you're currently riding (or null)
     chests: {},              // "x,y,z" -> array of stored item stacks
     openChestKey: null,      // which chest the chest panel is showing
+    saveSlot: null,          // 1..3 once the player picks a slot; null = no autosave yet
     tradingWith: null,       // the villager whose trade panel is open
     questKeysGiven: {},      // keyN -> true once a villager has handed it over (one-time)
     overworld: null,         // the surface world (kept while you visit the Nether)
@@ -59,6 +62,9 @@
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
+  // Full-size worlds are this wide; loading an old 40-block save shrinks
+  // Game.CONST.WORLD for that session (see loadGame), so remember the default.
+  const DEFAULT_WORLD_SIZE = Game.CONST.WORLD;
 
   // Take a healthy break: after 17 minutes of actual play, save + pause the
   // game and run a 3-minute countdown before letting the player resume.
@@ -906,7 +912,9 @@
     if (id === "furnace") { openFurnace(); return true; }
     if (id === "chest") { openChest(hit.block); return true; }
     if (id === "credits_block") { showCredits(); return true; }
-    if (id === "nether_portal") { return true; } // step in to travel; tap does nothing
+    if (id === "nether_portal" || id === "end_portal") { return true; } // step in to travel
+    if (id === "end_frame") { insertEnderEye(hit.block); return true; }
+    if (id === "end_frame_eye") { removeEnderEye(hit.block); return true; }
     if (Game.LOCKED[id]) { tryUnlock(hit.block); return true; }
     if (Game.OPENABLE[id]) {
       S.world.setBlock(hit.block.x, hit.block.y, hit.block.z, Game.OPENABLE[id]);
@@ -915,6 +923,47 @@
     }
     return false;
   }
+
+  // ===============================================================
+  //  The End Gate: 8 Eyes of Ender light the portal in the 4th house
+  // ===============================================================
+  // Tap an empty frame socket while carrying an Eye of Ender to set it in.
+  // When the 8th eye clicks into place, the portal blazes to life.
+  function insertEnderEye(block) {
+    S.swing = 0.18;
+    if (countItem("eye_of_ender") < 1) {
+      toast("🧿 An empty eye socket… an Eye of Ender would fit. They say a Nether fortress chest holds eight of them.");
+      return;
+    }
+    removeItems({ eye_of_ender: 1 });
+    S.world.setBlock(block.x, block.y, block.z, "end_frame_eye");
+    const n = S.world.endGateEyes();
+    if (n >= 8) {
+      S.world.setEndGateActive(true);
+      toast("✨ The 8th Eye clicks into place — the End Portal roars to life! Step through when you're ready…");
+    } else {
+      toast("🧿 Eye of Ender placed — " + n + " of 8.");
+    }
+    renderHotbar(); updateHand();
+  }
+
+  // Tap a filled socket to pop its eye back out — and darken the portal.
+  function removeEnderEye(block) {
+    S.swing = 0.18;
+    const wasLit = S.world.endGateEyes() >= 8;
+    S.world.setBlock(block.x, block.y, block.z, "end_frame");
+    addItem("eye_of_ender", 1);
+    if (wasLit) {
+      S.world.setEndGateActive(false);
+      toast("🧿 The Eye pops out and the portal fades dark — " + S.world.endGateEyes() + " of 8.");
+    } else {
+      toast("🧿 Took the Eye of Ender back — " + S.world.endGateEyes() + " of 8.");
+    }
+    renderHotbar(); updateHand();
+  }
+
+  Game._insertEnderEye = insertEnderEye;   // (used by the tests)
+  Game._removeEnderEye = removeEnderEye;
 
   // ===============================================================
   //  Locked doors, the credits plaque, and the Nether portal
@@ -1007,7 +1056,7 @@
   // later (e.g. a linked portal) can re-mesh even before you first step through.
   function ensureNether() {
     if (!S.netherWorld) {
-      const nw = new Game.World(null, S.overworld.seed, "nether");
+      const nw = new Game.World(null, S.overworld.seed, "nether", S.overworld.legacy);
       nw.generateNether();
       S.netherWorld = nw;
       buildWorldScene(nw);       // give it a scene so edits re-mesh safely
@@ -1015,6 +1064,7 @@
     }
     return S.netherWorld;
   }
+  Game._ensureNether = ensureNether;   // (used by the tests)
 
   // Stock each Nether fortress chest with treasure — but only if the player
   // hasn't already opened it (a saved chest key means "leave it as they left it").
@@ -1022,8 +1072,11 @@
     (nw.fortressChests || []).forEach((c) => {
       const key = c.x + "," + c.y + "," + c.z;
       if (key in S.chests) return;
-      // Loot: netherite, gems, and a spread of good blocks to build with.
-      const loot = [
+      // Loot: netherite, gems, and a spread of good blocks to build with — and
+      // in the open worlds, the 8 Eyes of Ender that light the End Portal.
+      const loot = [];
+      if (!S.overworld.legacy) loot.push({ id: "eye_of_ender", count: 8 });
+      loot.push(
         { id: "netherite", count: 3 },
         { id: "diamond", count: 5 },
         { id: "emerald", count: 5 },
@@ -1031,9 +1084,38 @@
         { id: "obsidian", count: 8 },     // good sturdy block
         { id: "gold_ore", count: 6 },     // good shiny block
         { id: "gold_ingot", count: 4 }    // some gold to trade with the piglin
-      ];
+      );
       const arr = new Array(CHEST_SIZE).fill(null);
       loot.forEach((it, i) => { arr[i] = it; });
+      S.chests[key] = arr;
+    });
+  }
+
+  // Stock the woodland mansion's two chests with treasure — but only if the
+  // player hasn't already opened them (a saved key means "leave it as found").
+  function prefillMansionChests(world) {
+    (world.mansionChests || []).forEach((c, i) => {
+      const key = c.x + "," + c.y + "," + c.z;
+      if (key in S.chests) return;
+      // Ground floor: useful supplies. Upstairs: the real treasure.
+      const loot = i === 0
+        ? [
+            { id: "emerald", count: 6 },
+            { id: "torch", count: 8 },
+            { id: "apple", count: 4 },
+            { id: "bricks", count: 12 },
+            { id: "book", count: 1 }
+          ]
+        : [
+            { id: "totem", count: 1 },           // the mansion's unique treasure
+            { id: "diamond", count: 4 },
+            { id: "diamond_chestplate", count: 1 },
+            { id: "gold_ingot", count: 3 },
+            { id: "glowstone", count: 6 },
+            { id: "battery", count: 1 }
+          ];
+      const arr = new Array(CHEST_SIZE).fill(null);
+      loot.forEach((it, j) => { arr[j] = it; });
       S.chests[key] = arr;
     });
   }
@@ -1074,7 +1156,7 @@
   // craft from four End Crystals — and stepping through THAT wins the game.
   function ensureEnd() {
     if (!S.endWorld) {
-      const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end");
+      const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end", S.overworld.legacy);
       ew.generateEnd();
       S.endWorld = ew;
       buildWorldScene(ew);
@@ -1307,13 +1389,23 @@
     if (Game.LOCKED[id]) { tryUnlock(hit.block); return; }
     if (id === "credits_block") { showCredits(); return; }
     if (id === "nether_portal") return; // travel by walking into it
+    // The End Gate: a mining swing pops an eye out, but the frame and the
+    // portal itself can never be broken.
+    if (id === "end_frame_eye") { removeEnderEye(hit.block); return; }
+    if (id === "end_frame" || id === "end_portal") {
+      toast("🧿 The End Portal frame is ancient magic — only Eyes of Ender go in and out.");
+      return;
+    }
     // Clouds float far out of reach and can't be broken — just a puff of air.
     if (id === "cloud") { toast("☁️ You can't mine the clouds — they're just fluffy sky!"); return; }
 
-    // Only the final Hall of Fame house is sealed: its walls, roof and floor
-    // can't be mined, so the winning screen stays locked behind the last key.
+    // Only the final house is sealed: its walls, roof and floor can't be mined.
+    // (In legacy worlds that keeps the winning screen behind the last key; in
+    // new worlds it keeps the End Portal's room standing.)
     if (S.world.isProtected(hit.block.x, hit.block.y, hit.block.z)) {
-      toast("🏆 This is the Hall of Fame — win the last key to get in, not a pickaxe.");
+      toast(S.world.legacy
+        ? "🏆 This is the Hall of Fame — win the last key to get in, not a pickaxe."
+        : "🏆 The fourth house is ancient magic — its walls can't be mined.");
       return;
     }
 
@@ -1773,6 +1865,21 @@
   }
 
   function onDeath() {
+    // The Totem of Undying — the woodland mansion's special treasure. If you'd
+    // die while carrying it, it blazes up, brings you back on the spot with
+    // full health, and crumbles to dust. One life per totem.
+    if (countItem("totem") > 0) {
+      removeItems({ totem: 1 });
+      S.player.dead = false;
+      S.player.hp = C.MAX_HP;
+      S.player.food = Math.max(S.player.food, 10);
+      S.player.wither = 0;
+      S.player.fallPeak = S.player.pos.y;   // no follow-up fall damage
+      updateWitherTint();
+      renderHotbar(); updateHand();
+      toast("🗿 The Totem of Undying blazes golden — it saves your life and crumbles to dust!");
+      return;
+    }
     S.riding = null;
     S.paused = true;
     S.player.wither = 0;            // clear any lingering wither so the tint lifts
@@ -1841,6 +1948,14 @@
       S.questKeysGiven = {};
       S.equip = emptyEquip();
     }
+    // The mansion's chests come stocked with treasure (skipped for any chest
+    // the player already opened — their contents live in the save).
+    prefillMansionChests(world);
+
+    // A fresh world starts with NO save slot — nothing saves until the player
+    // presses Save and picks one. (loadGame re-binds the slot right after.)
+    S.saveSlot = null;
+
     S.riding = null;
     S.playClock = (restore && restore.playClock) || 0;
     S.onBreak = false;
@@ -1903,18 +2018,25 @@
     // "Surprise me" rolls a fresh biome AND a fresh seed every single time.
     if (biome === "random") biome = (randomSeed() & 1) ? "forest" : "desert";
     const seed = randomSeed();
+    // Fresh worlds are always full-size (a legacy save may have shrunk C.WORLD).
+    Game.CONST.WORLD = DEFAULT_WORLD_SIZE;
     const world = new Game.World(null, seed, biome);
     world.generate();
     startWorld(world, null);
   }
 
   // ===============================================================
-  //  Saving / loading (localStorage)
+  //  Saving / loading (localStorage) — three slots
   // ===============================================================
+  // Nothing saves (not even the autosave) until the player presses Save and
+  // picks a slot. From then on that slot is "theirs": the 30-second autosave,
+  // the Menu button and pagehide all quietly keep it up to date.
   function saveGame(quiet) {
     // The End is never saved — win your way out, don't camp there. (This covers
     // the manual Save button, the 30s autosave, the Menu button and pagehide.)
     if (S.inEnd) { if (!quiet) toast("The End can't be saved — craft the Exit Portal to finish! ✨"); return; }
+    // No slot chosen yet: a manual save asks for one; automatic saves wait.
+    if (!S.saveSlot) { if (!quiet) openSlotPicker(); return; }
     const ow = S.overworld;
     if (!ow || !S.player) return;
     const changes = [];
@@ -1926,7 +2048,9 @@
     // return to, so loading never drops you into the (regenerated) Nether.
     const pos = S.inNether ? (S.questPortalExit || ow.spawn) : S.player.pos;
     const data = {
-      version: 2,        // v2: single "brick" items + plural "bricks" blocks
+      version: 3,        // v3: big multi-biome worlds (v2: the brick-item split)
+      worldSize: Game.CONST.WORLD,
+      legacy: !!ow.legacy, // an old 40-block world stays its old self forever
       seed: ow.seed,
       biome: ow.biome,
       changes: changes,
@@ -1945,15 +2069,53 @@
       breakEndsAt: S.breakEndsAt
     };
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-      if (!quiet) toast("Game saved! 💾");
+      localStorage.setItem(SLOT_KEYS[S.saveSlot - 1], JSON.stringify(data));
+      if (!quiet) toast("Game saved to slot " + S.saveSlot + "! 💾");
     } catch (e) {
       if (!quiet) toast("Could not save (storage full?)");
     }
   }
 
-  function hasSave() {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+  function hasSave(slot) {
+    try { return !!localStorage.getItem(SLOT_KEYS[slot - 1]); } catch (e) { return false; }
+  }
+
+  // A quick peek at what a slot holds, for labelling its buttons.
+  function slotMeta(slot) {
+    let data;
+    try { data = JSON.parse(localStorage.getItem(SLOT_KEYS[slot - 1])); } catch (e) { return null; }
+    if (!data) return null;
+    return { biome: data.biome, legacy: (data.version || 0) < 3 || !!data.legacy };
+  }
+
+  function slotLabel(slot) {
+    const m = slotMeta(slot);
+    if (!m) return "Slot " + slot + " — empty";
+    const b = m.biome === "desert" ? "🏜️ Desert" : "🌳 Forest";
+    return "Slot " + slot + " — " + b + (m.legacy ? " (classic 40×40)" : "");
+  }
+
+  // The in-game picker shown the first time Save is pressed (or via the Save
+  // button before a slot is bound). Choosing a slot saves there right away and
+  // makes it the automatic slot from then on.
+  function openSlotPicker() {
+    for (let n = 1; n <= 3; n++) $("btn-slot-" + n).textContent = "💾 " + slotLabel(n);
+    showPanel("slot-panel");
+  }
+
+  function pickSaveSlot(n) {
+    S.saveSlot = n;
+    hideAllPanels();
+    saveGame(false);
+  }
+
+  // The old single-save key becomes slot 1, once, so nobody loses a world.
+  function migrateOldSave() {
+    try {
+      const old = localStorage.getItem(OLD_SAVE_KEY);
+      if (old && !localStorage.getItem(SLOT_KEYS[0])) localStorage.setItem(SLOT_KEYS[0], old);
+      if (old) localStorage.removeItem(OLD_SAVE_KEY);
+    } catch (e) {}
   }
 
   // ---- Settings (a small, separate, global preference store) ------
@@ -1980,12 +2142,17 @@
     });
   }
 
-  function loadGame() {
+  function loadGame(slot) {
     let data;
-    try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
+    try { data = JSON.parse(localStorage.getItem(SLOT_KEYS[slot - 1])); } catch (e) { return false; }
     if (!data) return false;
     if (!data.version) migrateBrickBlocks(data);   // upgrade legacy brick ids
-    const world = new Game.World(null, data.seed, data.biome);
+    // Worlds saved before the multi-biome update were 40 blocks wide with one
+    // biome throughout. They regenerate exactly as they were: same size, same
+    // generator — so nothing the player built or explored moves.
+    const legacy = (data.version || 0) < 3 || !!data.legacy;
+    Game.CONST.WORLD = data.worldSize || (legacy ? 40 : DEFAULT_WORLD_SIZE);
+    const world = new Game.World(null, data.seed, data.biome, legacy);
     world.generate();
     if (data.changes) world.applyChanges(data.changes);
     // make sure the inventory array is the right length
@@ -1996,6 +2163,8 @@
       equip: data.equip || {},
       worldClock: data.worldClock || 0, playClock: data.playClock || 0,
       breakEndsAt: data.breakEndsAt || 0 });
+    // Continuing a slot binds it: autosaves keep flowing into the same slot.
+    S.saveSlot = slot;
     return true;
   }
 
@@ -2069,7 +2238,12 @@
     tapButton($("btn-new-forest"), () => newWorld("forest"));
     tapButton($("btn-new-desert"), () => newWorld("desert"));
     tapButton($("btn-new-random"), () => newWorld("random"));
-    tapButton($("btn-continue"), () => { if (!loadGame()) toast("No saved world found."); });
+    // Three continue buttons on the title screen, one per save slot.
+    [1, 2, 3].forEach((n) => {
+      tapButton($("btn-load-" + n), () => { if (!loadGame(n)) toast("That slot is empty."); });
+      tapButton($("btn-slot-" + n), () => pickSaveSlot(n));
+    });
+    tapButton($("btn-slot-cancel"), () => hideAllPanels());
     tapButton($("btn-invert-look"), () => {
       S.invertLook = !S.invertLook;
       saveSettings();
@@ -2163,7 +2337,11 @@
   }
 
   function refreshStartPanel() {
-    $("btn-continue").style.display = hasSave() ? "block" : "none";
+    for (let n = 1; n <= 3; n++) {
+      const btn = $("btn-load-" + n);
+      btn.style.display = hasSave(n) ? "block" : "none";
+      btn.textContent = "▶️ " + slotLabel(n);
+    }
   }
 
   // Reflect the current settings in the menu (the look-control toggle).
@@ -2184,6 +2362,7 @@
     S.renderer.setSize(window.innerWidth, window.innerHeight);
     $("game").appendChild(S.renderer.domElement);
 
+    migrateOldSave();  // the pre-slots save becomes slot 1
     loadSettings();
     wireControls();
     renderHotbar();

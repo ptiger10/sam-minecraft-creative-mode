@@ -205,16 +205,32 @@
     <button class="big-btn close-btn credits-close">Close</button>
   </div>
 
+  <!-- ============ Save-slot picker ============
+       Shown the first time Save is pressed in a world. Picking a slot saves
+       there immediately and makes it the automatic slot from then on. -->
+  <div class="panel-overlay hidden" id="slot-panel">
+    <div class="panel">
+      <h2>💾 Save to which slot?</h2>
+      <button class="big-btn" id="btn-slot-1">💾 Slot 1</button>
+      <button class="big-btn" id="btn-slot-2">💾 Slot 2</button>
+      <button class="big-btn" id="btn-slot-3">💾 Slot 3</button>
+      <button class="big-btn close-btn" id="btn-slot-cancel">Cancel</button>
+    </div>
+  </div>
+
   <!-- ============ Start / Menu screen ============ -->
   <div class="panel-overlay" id="start-panel">
     <div class="panel start-panel">
       <h1>⛏️ Blocky World</h1>
-      <p class="subtitle">A tiny creative-mode sandbox</p>
+      <p class="subtitle">An open-world creative sandbox</p>
       <div class="start-buttons">
         <button class="big-btn" id="btn-new-forest">🌳 New World — Forest</button>
         <button class="big-btn" id="btn-new-desert">🏜️ New World — Desert</button>
         <button class="big-btn" id="btn-new-random">🎲 New World — Surprise me</button>
-        <button class="big-btn" id="btn-continue">▶️ Continue saved world</button>
+        <!-- One continue button per save slot; hidden while the slot is empty. -->
+        <button class="big-btn" id="btn-load-1" style="display:none">▶️ Slot 1</button>
+        <button class="big-btn" id="btn-load-2" style="display:none">▶️ Slot 2</button>
+        <button class="big-btn" id="btn-load-3" style="display:none">▶️ Slot 3</button>
       </div>
 
       <!-- Settings: small toggles that persist across worlds. -->

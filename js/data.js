@@ -12,7 +12,7 @@ window.Game = window.Game || {};
 
   // ---- World / player constants ----------------------------------
   Game.CONST = {
-    WORLD: 40,        // world is WORLD x WORLD blocks wide/deep
+    WORLD: 96,        // world is WORLD x WORLD blocks wide/deep (old saves stay 40)
     MAX_Y: 24,        // top of the buildable column
     BASE: 6,          // average surface height
     AMP: 3,           // how bumpy the terrain is
@@ -58,11 +58,11 @@ window.Game = window.Game || {};
     return (h >>> 0) / 4294967296;
   };
 
-  // Smooth value-noise heightmap (deterministic from the seed).
-  Game.makeHeight = function (seed) {
-    const corner = (ix, iz) => Game.hash(seed, ix, 777, iz);
+  // Smooth value-noise field in 0..1 (deterministic from the seed). The salt
+  // keeps independent fields (height, temperature, moisture) from lining up.
+  Game.makeNoise = function (seed, scale, salt) {
+    const corner = (ix, iz) => Game.hash(seed, ix, salt, iz);
     const fade = (t) => t * t * (3 - 2 * t);
-    const scale = 7; // size of the hills
     return function (x, z) {
       const sx = x / scale, sz = z / scale;
       const x0 = Math.floor(sx), z0 = Math.floor(sz);
@@ -71,9 +71,23 @@ window.Game = window.Game || {};
       const c01 = corner(x0, z0 + 1), c11 = corner(x0 + 1, z0 + 1);
       const top = c00 + (c10 - c00) * tx;
       const bot = c01 + (c11 - c01) * tx;
-      const n = top + (bot - top) * tz; // 0..1
-      return Game.CONST.BASE + Math.round((n - 0.5) * 2 * Game.CONST.AMP);
+      return top + (bot - top) * tz; // 0..1
     };
+  };
+
+  // The heightmap used by the ORIGINAL 40-block worlds. Old saves regenerate
+  // through this exact function, so don't change its maths.
+  Game.makeHeight = function (seed) {
+    const n = Game.makeNoise(seed, 7, 777); // scale 7 = size of the hills
+    return (x, z) => Game.CONST.BASE + Math.round((n(x, z) - 0.5) * 2 * Game.CONST.AMP);
+  };
+
+  // The heightmap for the big open worlds: the same small hills, plus a slow
+  // second swell so long walks roll through real valleys and high ground.
+  Game.makeOpenHeight = function (seed) {
+    const small = Game.makeHeight(seed);
+    const big = Game.makeNoise(seed ^ 0xb165ca1e, 27, 555);
+    return (x, z) => small(x, z) + Math.round((big(x, z) - 0.5) * 2 * 3);
   };
 
   // ---- Block definitions -----------------------------------------
@@ -94,6 +108,13 @@ window.Game = window.Game || {};
     wood_green:   { name: "Green Wood",  all: 0x4a9a4a, tool: "hand", drop: "wood_green" },
     wood_yellow:  { name: "Yellow Wood", all: 0xd8c24a, tool: "hand", drop: "wood_yellow" },
     leaves:       { name: "Leaves",      all: 0x3f9a3a, tool: "hand", drop: "leaves", harvestOnTap: true },
+    // ---- Roofed-forest & snowy-hills blocks (the open-world biomes) ----
+    dark_wood:    { name: "Dark Wood",   top: 0x5f4426, side: 0x3f2d18, bottom: 0x5f4426, tool: "hand", drop: "dark_wood", harvestOnTap: true },
+    dark_planks:  { name: "Dark Planks", all: 0x6b4c2a, tool: "hand", drop: "dark_planks" },
+    dark_leaves:  { name: "Dark Leaves", all: 0x1f5c22, tool: "hand", drop: "dark_leaves", harvestOnTap: true },
+    dark_grass:   { name: "Dark Grass Block", top: 0x3d7030, side: 0x594c31, bottom: 0x73553a, tool: "hand", drop: "dark_grass" },
+    snow:         { name: "Snow Block",  all: 0xf2f6fa, top: 0xffffff, bottom: 0xdfe7ee, tool: "hand", drop: "snow" },
+    ice:          { name: "Ice",         all: 0x9fd4ef, top: 0xc4e8f8, tool: "hand", drop: "ice" },
     cactus:       { name: "Cactus",      all: 0x2f8b46, tool: "hand", drop: "cactus", harvestOnTap: true },
     apple:        { name: "Apple",       all: 0xd23b32, tool: "hand", drop: "apple", harvestOnTap: true },
     watermelon:   { name: "Watermelon", top: 0x7fbf3f, side: 0x8fd14a, bottom: 0x6fae35, tool: "hand", drop: "watermelon", harvestOnTap: true },
@@ -142,6 +163,10 @@ window.Game = window.Game || {};
     end_crystal:  { name: "End Crystal", all: 0xd06bff, top: 0xe6a8ff, tool: "hand", drop: "end_crystal", harvestOnTap: true },
     // The dark, starry portal (in the 4th house) that carries you into The End.
     end_portal:   { name: "End Portal", all: 0x0a0a1e, top: 0x2a2a6a, tool: "hand", drop: null, solid: false },
+    // The dormant portal's arch: 8 frame blocks, each with an eye socket. Place
+    // all 8 Eyes of Ender to light the portal; the frame itself can't be mined.
+    end_frame:     { name: "End Portal Frame", top: 0xcede9a, side: 0x3a5b46, bottom: 0x2c4636, tool: "hand", drop: null },
+    end_frame_eye: { name: "End Portal Frame (with eye)", top: 0xcede9a, side: 0x3a5b46, bottom: 0x2c4636, tool: "hand", drop: null },
     // The bright crystal portal you craft to leave The End and win the game.
     exit_portal:  { name: "Exit Portal", all: 0xe05cd0, top: 0xff9cf0, tool: "hand", drop: null, solid: false },
     // Fluffy white clouds drifting high in the sky. You can't mine them.
@@ -238,7 +263,7 @@ window.Game = window.Game || {};
 
   // World-only blocks the player never carries or places (portals, locked doors,
   // the credits plaque) are hidden from the inventory and not placeable.
-  ["nether_portal", "end_portal", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
+  ["nether_portal", "end_portal", "end_frame", "end_frame_eye", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
     if (Game.ItemDefs[id]) { Game.ItemDefs[id].hidden = true; Game.ItemDefs[id].placeable = false; }
   });
 
@@ -260,6 +285,14 @@ window.Game = window.Game || {};
   Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
   // Netherite: a rare metal you mine in the Nether and trade for the gold key.
   Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x0a0a0c, swatchSide: 0x050506, placeable: false, desc: "A rare, pitch-black metal. Found in a Nether fortress chest, traded from a piglin, or (rarely) mined. The third villager prizes it." };
+  // The Totem of Undying: the woodland mansion's one-of-a-kind treasure. Not
+  // needed to win — just wonderfully good to have in your backpack.
+  Game.ItemDefs.totem = { name: "Totem of Undying", emoji: "🗿", placeable: false,
+    desc: "The mansion's ancient treasure. If you would die while carrying it, it brings you back with full health — then crumbles. One life per totem." };
+  // The Eye of Ender: 8 wait in the Nether fortress chest. Tap them into the
+  // End Portal frame's sockets in the fourth settlement to light the portal.
+  Game.ItemDefs.eye_of_ender = { name: "Eye of Ender", emoji: "🧿", placeable: false,
+    desc: "Tap an empty End Portal Frame socket to set it in. All 8 light the portal to The End; tap one to take it back out." };
   // The three keys, each opening one locked house door.
   Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door of the second house." };
   Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
@@ -345,7 +378,13 @@ window.Game = window.Game || {};
     gold_ore: "Smelt it in a furnace to get a gold ingot.",
     redstone_ore: "Smelt it in a furnace to get redstone.",
     diamond_ore: "Smelt it in a furnace to get a diamond.",
-    sugarcane: "Craft three into paper at a crafting table."
+    sugarcane: "Craft three into paper at a crafting table.",
+    dark_wood: "Shadowy wood from the roofed forest. Craft it into dark planks.",
+    dark_planks: "Dark planks — what the woodland mansion is built from.",
+    dark_leaves: "The thick canopy of the roofed forest.",
+    dark_grass: "The shady forest floor beneath the roofed forest.",
+    snow: "A soft white block from the snowy hills.",
+    ice: "Frozen pond water. Sturdy enough to walk on!"
   };
   Object.keys(DESCS).forEach((id) => { if (Game.ItemDefs[id]) Game.ItemDefs[id].desc = DESCS[id]; });
 
@@ -362,6 +401,8 @@ window.Game = window.Game || {};
   Game.Recipes = [
     // 1 wood -> 4 planks.
     { id: "planks", gives: { id: "planks", count: 4 }, pattern: [[W]] },
+    // 1 dark wood (from the roofed forest) -> 4 dark planks.
+    { id: "dark_planks", gives: { id: "dark_planks", count: 4 }, pattern: [["dark_wood"]] },
     // 2 wood stacked vertically -> 1 stick.
     { id: "stick", gives: { id: "stick", count: 1 }, pattern: [[W], [W]] },
     // 4 wood in a square -> a crafting table.
