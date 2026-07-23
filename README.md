@@ -61,7 +61,7 @@ buttons **or** the keyboard.
 | Action | On-screen | Keyboard |
 | --- | --- | --- |
 | Walk forward | ⬆ | `W` / `↑` |
-| Jump (swim up in water) | 🤸 **Jump** (right next to ⬆) | `Space` |
+| Jump | 🤸 **Jump** (right next to ⬆) | `Space` |
 | Climb a ladder | face it &amp; hold ⬆ (or **Jump**) | `W` / `Space` |
 | Look around / turn | drag the screen | `A` `D` / `←` `→` |
 | Walk up/down stairs | just walk into them (no jump) | `W` / `↑` |

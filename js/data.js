@@ -27,9 +27,6 @@ window.Game = window.Game || {};
     RIDE_SPEED: 5.2,  // speed while riding an animal (blocks / s)
     CLIMB_SPEED: 3.4, // up/down speed while on a ladder (blocks / s)
     STEP_HEIGHT: 1.0, // how high you auto-step (only onto stairs) without jumping
-    SWIM_UP: 4.8,     // how fast jump lifts you toward the surface in water
-    SWIM_SINK: 2.0,   // how fast you slowly sink in water
-    MAX_AIR: 10,      // seconds of breath before you start drowning
     TURN_SPEED: 1.9,  // turn speed (radians / s)
     FALL_SAFE: 3,     // falls shorter than this do no damage
     MAX_HP: 20,

@@ -541,16 +541,16 @@ check("the fortress chest is stocked with netherite", loot.ok && loot.netherite)
 check("...and diamonds and emeralds", loot.diamond && loot.emerald);
 check("...and good building blocks", loot.goodBlocks >= 2);
 
-// --- Day/night cycle: 10 min day, then 2 min night, and the world darkens ---
+// --- Day/night cycle: 3.5 min day + 1.5 min night — night every 5 minutes ---
 const dayNight = await page.evaluate(async () => {
   const Game = window.Game, S = Game.S;
   S.inNether = false;
   const at = (t) => { S.worldClock = t; return Game.isNight(); };
-  const day = at(60);         // 1 minute in -> day
-  const night = at(7 * 60);   // 7 minutes in -> night (day is 6 min, night 2 min)
-  const backToDay = at(9 * 60); // into the next cycle -> day again
+  const day = at(60);            // 1 minute in -> day
+  const night = at(4 * 60);      // 4 minutes in -> night (day is 3.5 min, night 1.5)
+  const backToDay = at(5.5 * 60); // into the next cycle -> day again
   // Let the loop apply the visuals, then read how bright it is.
-  S.worldClock = 7 * 60; await new Promise((r) => setTimeout(r, 140));
+  S.worldClock = 4 * 60; await new Promise((r) => setTimeout(r, 140));
   const dn = S.scene.userData.dayNight;
   const nightBright = dn ? dn.ambient.intensity : null;
   S.worldClock = 60; await new Promise((r) => setTimeout(r, 140));
@@ -558,8 +558,8 @@ const dayNight = await page.evaluate(async () => {
   return { day, night, backToDay, nightBright, dayBright };
 });
 check("it is day early in the cycle", dayNight.day === false);
-check("day is 6 minutes, then night falls", dayNight.night === true);
-check("day returns after the 2-minute night", dayNight.backToDay === false);
+check("day is 3.5 minutes, then night falls", dayNight.night === true);
+check("day returns after the 1.5-minute night", dayNight.backToDay === false);
 check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
 
 // --- Craftable armour & shields in three tiers ---

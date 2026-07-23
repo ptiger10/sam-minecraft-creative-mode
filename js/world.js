@@ -568,6 +568,7 @@
     // gets some surface water (an oasis or two even in the dry desert).
     this._holes = new Set();
     this.stampWateringHoles(H, WATER);
+    this._H = H; // pure terrain heights — surfaceY would count trees and builds
 
     // A column floods if it dips below the water line (kept away from spawn so
     // you never start in a puddle). Natural low-terrain ponds skip the desert,
@@ -821,9 +822,13 @@
     for (let x = 4; x < C.WORLD - 4; x++) {
       for (let z = 4; z < C.WORLD - 4; z++) {
         if (Math.abs(x - cx) <= 4 && Math.abs(z - cz) <= 4) continue; // not under spawn
-        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.014) continue; // scattered centres
+        // Lava lives mostly UNDERGROUND — twice as many buried pools as the
+        // old worlds, waiting to be dug into.
+        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.028) continue; // scattered centres
         let py = 2 + Math.floor(Game.hash(this.seed ^ 0x1a0b, x, 0, z) * 5); // depth 2..6
-        const surf = this.surfaceY(x, z);
+        // Depth measured from the TERRAIN, not surfaceY — a tree on this
+        // column used to hoist the "underground" pool up into its canopy.
+        const surf = (this._H && this._H[x]) ? this._H[x][z] : this.surfaceY(x, z);
         if (py > surf - 3) py = surf - 3;   // always keep it well underground
         if (py < 1) continue;
         this.carveLavaPool(x, py, z);
@@ -839,10 +844,9 @@
     const siteCenters = this._sitePlan.map((s) => [s.cx, s.cz]);
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x1a0ace);
-    const want = this.legacy ? 2 : 5;   // more lakes to stumble on in a big world
-    const cap = this.legacy ? 80 : 300; // legacy keeps its exact old try budget
+    const want = 2;    // just a couple visible up top — the rest hides below ground
     let made = 0, tries = 0;
-    while (made < want && tries < cap) {
+    while (made < want && tries < 300) {
       tries++;
       const r = 1 + Math.floor(rng() * 2);              // radius 1..2 (small lakes)
       const x = 5 + Math.floor(rng() * (C.WORLD - 10));
@@ -857,7 +861,9 @@
   };
 
   World.prototype.carveSurfaceLavaLake = function (cx, cz, r) {
-    const baseY = this.surfaceY(cx, cz);
+    // Use the pure TERRAIN height — surfaceY counts trees, which used to perch
+    // whole lava lakes absurdly on top of a leaf canopy.
+    const baseY = (this._H && this._H[cx]) ? this._H[cx][cz] : this.surfaceY(cx, cz);
     for (let dx = -r; dx <= r; dx++) {
       for (let dz = -r; dz <= r; dz++) {
         if (Math.abs(dx) + Math.abs(dz) > r) continue;  // rounded blob
@@ -865,7 +871,12 @@
         if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
         for (let y = baseY; y <= C.MAX_Y; y++) this.blocks.delete(World.key(x, y, z)); // clear plants/soil above
         this.blocks.set(World.key(x, baseY, z), "lava");
-        if (!this.occupied(x, baseY - 1, z)) this.blocks.set(World.key(x, baseY - 1, z), "stone"); // support
+        // Solid stone underneath — never a tree canopy or thin air.
+        const below = this.blocks.get(World.key(x, baseY - 1, z));
+        if (!below || below === "wood" || below === "leaves" || below === "dark_wood" ||
+            below === "dark_leaves" || below === "cactus" || below === "apple") {
+          this.blocks.set(World.key(x, baseY - 1, z), "stone");
+        }
       }
     }
   };
@@ -934,14 +945,16 @@
     if (rc < 0.026) return "red_clay";
     const r = Game.hash(this.seed, x, y, z);
     const deep = y < 6; // closer to bedrock — richer in diamond & emerald
-    if (r < 0.010) return "coal_ore";
-    if (r < 0.018) return "iron_ore";
-    if (r < 0.024) return "gold_ore";
-    if (r < 0.030) return "redstone_ore";
+    // Coal and iron are the workhorse ores, so they're common finds — more
+    // than double their old rates. The precious ores keep their old rarity.
+    if (r < 0.022) return "coal_ore";
+    if (r < 0.040) return "iron_ore";
+    if (r < 0.046) return "gold_ore";
+    if (r < 0.052) return "redstone_ore";
     // Diamonds & emeralds are rare everywhere (so you can find some by digging
     // almost anywhere) and a bit richer down deep. Mine them with a pickaxe.
-    if (r < (deep ? 0.040 : 0.033)) return "diamond_ore";
-    if (r < (deep ? 0.045 : 0.036)) return "emerald_ore";
+    if (r < (deep ? 0.062 : 0.055)) return "diamond_ore";
+    if (r < (deep ? 0.067 : 0.058)) return "emerald_ore";
     return "stone";
   };
 
@@ -1783,6 +1796,40 @@
 
     // 4) The house in the middle, with the door / contents for this stage.
     this.buildQuestHouse(cx, cz, floorY, level, num);
+
+    // 5) The FIRST settlement is a proper starter town, not just a house.
+    if (num === 1) this.furnishStarterTown(cx, cz, floorY);
+  };
+
+  // Dress the first settlement up as a welcoming starter town: a crafting
+  // corner (table + furnace + a stocked chest), a ripe melon patch, and a
+  // little fenced pen in the corner with two farm animals.
+  World.prototype.furnishStarterTown = function (cx, cz, floorY) {
+    const y1 = floorY + 1;
+    // Crafting corner along the east wall, lit by a torch.
+    this.blocks.set(World.key(cx + 4, y1, cz - 1), "crafting_table");
+    this.blocks.set(World.key(cx + 4, y1, cz), "furnace");
+    this.blocks.set(World.key(cx + 4, y1, cz + 1), "chest");
+    this.blocks.set(World.key(cx + 4, y1, cz - 2), "torch");
+    this.starterChest = { x: cx + 4, y: y1, z: cz + 1 };
+    // A ripe melon patch along the west wall.
+    [[-4, -1], [-4, 0], [-4, 1], [-3, 0]].forEach(([dx, dz]) => {
+      this.blocks.set(World.key(cx + dx, y1, cz + dz), "watermelon");
+    });
+    // A fenced pen sharing the settlement's corner walls, home to two animals.
+    for (let d = 2; d <= 4; d++) {
+      this.blocks.set(World.key(cx + 2, y1, cz + d), "fence");
+      this.blocks.set(World.key(cx + d, y1, cz + 2), "fence");
+    }
+    const kinds = ["pig", "sheep"];
+    kinds.forEach((kind, i) => {
+      const pet = makeAnimal(kind);
+      pet.position.set(cx + 3.3 + i * 0.9, y1, cz + 3.3 + i * 0.7);
+      pet.userData.dir = i * 2.1;
+      pet.userData.timer = 1 + i;
+      pet.userData.hop = 0;
+      this.animals.push(pet);
+    });
   };
 
   // A little house in the centre of a settlement. House 1 has a plain door;
@@ -2624,11 +2671,32 @@
     for (const a of this.animals) {
       const kind = a.userData.kind;
       if (kind !== "skeleton" && kind !== "zombie") continue;
-      if (!isNight) { a.visible = false; continue; }  // both vanish by day
+      if (!isNight) { a.visible = false; a.userData.nightPlaced = false; continue; } // both vanish by day
+      // Each nightfall the monsters creep in out of the dark to prowl NEAR the
+      // player. (They used to wake wherever they happened to be on the big
+      // map — most nights you'd never even see one.)
+      if (!a.userData.nightPlaced) { a.userData.nightPlaced = true; this.stalkPlayer(a, player); }
       if (kind === "skeleton") this.updateSkeleton(a, dt, player);
       else this.updateZombie(a, dt, player);
     }
     this.updateArrows(dt, player);
+  };
+
+  // Drop a night monster somewhere standable 10-22 blocks from the player —
+  // close enough to run into, far enough that it isn't right on top of them.
+  World.prototype.stalkPlayer = function (a, player) {
+    for (let t = 0; t < 24; t++) {
+      const ang = Math.random() * Math.PI * 2;
+      const d = 10 + Math.random() * 12;
+      const x = Math.floor(player.pos.x + Math.cos(ang) * d);
+      const z = Math.floor(player.pos.z + Math.sin(ang) * d);
+      if (x < 3 || z < 3 || x >= C.WORLD - 3 || z >= C.WORLD - 3) continue;
+      const y = this.surfaceY(x, z) + 1;
+      if (!this.canStand(x + 0.5, z + 0.5, y)) continue;
+      a.position.set(x + 0.5, y, z + 0.5);
+      return;
+    }
+    // No luck (odd terrain everywhere) — it just wakes wherever it slept.
   };
 
   // A zombie shambles about the surface at random. If it lurches into the player
