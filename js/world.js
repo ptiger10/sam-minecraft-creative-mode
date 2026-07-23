@@ -568,6 +568,7 @@
     // gets some surface water (an oasis or two even in the dry desert).
     this._holes = new Set();
     this.stampWateringHoles(H, WATER);
+    this._H = H; // pure terrain heights — surfaceY would count trees and builds
 
     // A column floods if it dips below the water line (kept away from spawn so
     // you never start in a puddle). Natural low-terrain ponds skip the desert,
@@ -612,10 +613,14 @@
       }
     }
 
-    // Sandy shore: any land block right beside the water becomes sand.
+    // Sandy shore: any land block right beside the water becomes sand — but
+    // only in the sunny biomes. Snowy ponds stay ringed in snow and the roofed
+    // forest keeps its dark floor; neither grows sugar cane.
     for (let x = 0; x < C.WORLD; x++) {
       for (let z = 0; z < C.WORLD; z++) {
         if (isWater(x, z)) continue;
+        const b = this.biomeAt(x, z);
+        if (b === "snow" || b === "roofed") continue;
         const h = H[x][z];
         if (h < WATER - 1 || h > WATER + 1) continue;
         if (isWater(x + 1, z) || isWater(x - 1, z) || isWater(x, z + 1) || isWater(x, z - 1)) {
@@ -817,9 +822,13 @@
     for (let x = 4; x < C.WORLD - 4; x++) {
       for (let z = 4; z < C.WORLD - 4; z++) {
         if (Math.abs(x - cx) <= 4 && Math.abs(z - cz) <= 4) continue; // not under spawn
-        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.014) continue; // scattered centres
+        // Lava lives mostly UNDERGROUND — twice as many buried pools as the
+        // old worlds, waiting to be dug into.
+        if (Game.hash(this.seed ^ 0x1a0a, x, 0, z) > 0.028) continue; // scattered centres
         let py = 2 + Math.floor(Game.hash(this.seed ^ 0x1a0b, x, 0, z) * 5); // depth 2..6
-        const surf = this.surfaceY(x, z);
+        // Depth measured from the TERRAIN, not surfaceY — a tree on this
+        // column used to hoist the "underground" pool up into its canopy.
+        const surf = (this._H && this._H[x]) ? this._H[x][z] : this.surfaceY(x, z);
         if (py > surf - 3) py = surf - 3;   // always keep it well underground
         if (py < 1) continue;
         this.carveLavaPool(x, py, z);
@@ -835,10 +844,9 @@
     const siteCenters = this._sitePlan.map((s) => [s.cx, s.cz]);
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x1a0ace);
-    const want = this.legacy ? 2 : 5;   // more lakes to stumble on in a big world
-    const cap = this.legacy ? 80 : 300; // legacy keeps its exact old try budget
+    const want = 2;    // just a couple visible up top — the rest hides below ground
     let made = 0, tries = 0;
-    while (made < want && tries < cap) {
+    while (made < want && tries < 300) {
       tries++;
       const r = 1 + Math.floor(rng() * 2);              // radius 1..2 (small lakes)
       const x = 5 + Math.floor(rng() * (C.WORLD - 10));
@@ -853,7 +861,9 @@
   };
 
   World.prototype.carveSurfaceLavaLake = function (cx, cz, r) {
-    const baseY = this.surfaceY(cx, cz);
+    // Use the pure TERRAIN height — surfaceY counts trees, which used to perch
+    // whole lava lakes absurdly on top of a leaf canopy.
+    const baseY = (this._H && this._H[cx]) ? this._H[cx][cz] : this.surfaceY(cx, cz);
     for (let dx = -r; dx <= r; dx++) {
       for (let dz = -r; dz <= r; dz++) {
         if (Math.abs(dx) + Math.abs(dz) > r) continue;  // rounded blob
@@ -861,7 +871,12 @@
         if (x < 1 || z < 1 || x >= C.WORLD - 1 || z >= C.WORLD - 1) continue;
         for (let y = baseY; y <= C.MAX_Y; y++) this.blocks.delete(World.key(x, y, z)); // clear plants/soil above
         this.blocks.set(World.key(x, baseY, z), "lava");
-        if (!this.occupied(x, baseY - 1, z)) this.blocks.set(World.key(x, baseY - 1, z), "stone"); // support
+        // Solid stone underneath — never a tree canopy or thin air.
+        const below = this.blocks.get(World.key(x, baseY - 1, z));
+        if (!below || below === "wood" || below === "leaves" || below === "dark_wood" ||
+            below === "dark_leaves" || below === "cactus" || below === "apple") {
+          this.blocks.set(World.key(x, baseY - 1, z), "stone");
+        }
       }
     }
   };
@@ -930,14 +945,16 @@
     if (rc < 0.026) return "red_clay";
     const r = Game.hash(this.seed, x, y, z);
     const deep = y < 6; // closer to bedrock — richer in diamond & emerald
-    if (r < 0.010) return "coal_ore";
-    if (r < 0.018) return "iron_ore";
-    if (r < 0.024) return "gold_ore";
-    if (r < 0.030) return "redstone_ore";
+    // Coal and iron are the workhorse ores, so they're common finds — more
+    // than double their old rates. The precious ores keep their old rarity.
+    if (r < 0.022) return "coal_ore";
+    if (r < 0.040) return "iron_ore";
+    if (r < 0.046) return "gold_ore";
+    if (r < 0.052) return "redstone_ore";
     // Diamonds & emeralds are rare everywhere (so you can find some by digging
     // almost anywhere) and a bit richer down deep. Mine them with a pickaxe.
-    if (r < (deep ? 0.040 : 0.033)) return "diamond_ore";
-    if (r < (deep ? 0.045 : 0.036)) return "emerald_ore";
+    if (r < (deep ? 0.062 : 0.055)) return "diamond_ore";
+    if (r < (deep ? 0.067 : 0.058)) return "emerald_ore";
     return "stone";
   };
 
@@ -953,9 +970,12 @@
     const r = Game.hash(this.seed ^ 0x55aa, x, 0, z);
 
     if (biome === "desert") {
+      // Deserts grow cacti and melons — no trees. (The original 40-block
+      // worlds had a rare oasis apple tree; legacy keeps it so they
+      // regenerate exactly as they were.)
       if (r < 0.05) this.placeCactus(x, h + 1, z);
       else if (r < 0.065) this.blocks.set(World.key(x, h + 1, z), "watermelon"); // melons in the sand
-      else if (r > 0.985) this.placeTree(x, h + 1, z, true); // rare oasis apple tree
+      else if (this.legacy && r > 0.985) this.placeTree(x, h + 1, z, true);
       return;
     }
 
@@ -966,11 +986,9 @@
       return;
     }
 
-    // Snowy hills: scattered frosted trees, nothing growing on the ground.
-    if (biome === "snow") {
-      if (r < 0.045) this.placeTree(x, h + 1, z, false, true);
-      return;
-    }
+    // Snowy hills: a bare, windswept snowfield — nothing grows up here. The
+    // frozen ponds are the landmark, not trees.
+    if (biome === "snow") return;
 
     // Forest: lots of trees, ~1/3 of them bearing apples, plus melons on the ground.
     if (r < 0.12) {
@@ -986,7 +1004,7 @@
     for (let i = 0; i < tall; i++) this.blocks.set(World.key(x, y + i, z), "cactus");
   };
 
-  World.prototype.placeTree = function (x, y, z, apple, snowy) {
+  World.prototype.placeTree = function (x, y, z, apple) {
     const trunk = 4 + Math.floor(Game.hash(this.seed, x, 9, z) * 2);
     for (let i = 0; i < trunk; i++) this.blocks.set(World.key(x, y + i, z), "wood");
     const top = y + trunk;
@@ -1022,21 +1040,6 @@
         if (this.occupied(ax, hangY, az)) continue;
         if (Game.hash(this.seed ^ 0x5a17, ax, hangY, az) < 0.55) {
           this.blocks.set(World.key(ax, hangY, az), "apple");
-        }
-      }
-    }
-
-    // Snowy-hills trees wear a dusting of snow on top of the canopy.
-    if (snowy) {
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          if (Math.abs(dx) + Math.abs(dz) > 2) continue;
-          const sx = x + dx, sz = z + dz;
-          const capY = this.occupied(sx, top + 1, sz) ? top + 2 : top + 1;
-          if (this.occupied(sx, capY, sz) || !this.occupied(sx, capY - 1, sz)) continue;
-          if (Game.hash(this.seed ^ 0x510e, sx, capY, sz) < 0.6) {
-            this.blocks.set(World.key(sx, capY, sz), "snow");
-          }
         }
       }
     }
@@ -1793,6 +1796,40 @@
 
     // 4) The house in the middle, with the door / contents for this stage.
     this.buildQuestHouse(cx, cz, floorY, level, num);
+
+    // 5) The FIRST settlement is a proper starter town, not just a house.
+    if (num === 1) this.furnishStarterTown(cx, cz, floorY);
+  };
+
+  // Dress the first settlement up as a welcoming starter town: a crafting
+  // corner (table + furnace + a stocked chest), a ripe melon patch, and a
+  // little fenced pen in the corner with two farm animals.
+  World.prototype.furnishStarterTown = function (cx, cz, floorY) {
+    const y1 = floorY + 1;
+    // Crafting corner along the east wall, lit by a torch.
+    this.blocks.set(World.key(cx + 4, y1, cz - 1), "crafting_table");
+    this.blocks.set(World.key(cx + 4, y1, cz), "furnace");
+    this.blocks.set(World.key(cx + 4, y1, cz + 1), "chest");
+    this.blocks.set(World.key(cx + 4, y1, cz - 2), "torch");
+    this.starterChest = { x: cx + 4, y: y1, z: cz + 1 };
+    // A ripe melon patch along the west wall.
+    [[-4, -1], [-4, 0], [-4, 1], [-3, 0]].forEach(([dx, dz]) => {
+      this.blocks.set(World.key(cx + dx, y1, cz + dz), "watermelon");
+    });
+    // A fenced pen sharing the settlement's corner walls, home to two animals.
+    for (let d = 2; d <= 4; d++) {
+      this.blocks.set(World.key(cx + 2, y1, cz + d), "fence");
+      this.blocks.set(World.key(cx + d, y1, cz + 2), "fence");
+    }
+    const kinds = ["pig", "sheep"];
+    kinds.forEach((kind, i) => {
+      const pet = makeAnimal(kind);
+      pet.position.set(cx + 3.3 + i * 0.9, y1, cz + 3.3 + i * 0.7);
+      pet.userData.dir = i * 2.1;
+      pet.userData.timer = 1 + i;
+      pet.userData.hop = 0;
+      this.animals.push(pet);
+    });
   };
 
   // A little house in the centre of a settlement. House 1 has a plain door;
@@ -2542,6 +2579,65 @@
     }
   };
 
+  // ---- Anti-twitch helpers ---------------------------------------
+  // Ease a critter's body toward the way it's walking instead of snapping.
+  // Combined with the turn pause below, a blocked animal calmly looks around
+  // for a new way out rather than spinning like a top.
+  function faceYaw(a, target, dt) {
+    let d = target - a.rotation.y;
+    d = ((d % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; // shortest way round
+    a.rotation.y += d * Math.min(1, dt * 6);
+  }
+
+  // A blocked wanderer turns around (with a little randomness) — but only a
+  // few times a second. Re-picking a direction EVERY frame while stuck was
+  // what caused the hyperactive twitching.
+  function turnWhenBlocked(u) {
+    if (u.turnPause > 0) return;
+    u.dir += Math.PI * (0.75 + Math.random() * 0.5);
+    u.turnPause = 0.35 + Math.random() * 0.3;
+  }
+
+  // An animal whose own cell has become un-standable (a wall or house was
+  // built right on top of its meadow) pops free to the nearest open spot.
+  // Animals penned in by fences never trigger this — their own cell is fine.
+  World.prototype.unstickAnimal = function (a) {
+    const ax = Math.floor(a.position.x), az = Math.floor(a.position.z);
+    for (let r = 1; r <= 6; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = ax + dx + 0.5, z = az + dz + 0.5;
+          const y = this.surfaceY(ax + dx, az + dz) + 1;
+          if (!this.canStand(x, z, y)) continue;
+          a.position.set(x, y, z);
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Shared walking step for every ground wanderer: advance if the way is
+  // clear, otherwise turn (paced), and pop free if genuinely stuck.
+  World.prototype.wanderStep = function (a, dt, speed) {
+    const u = a.userData;
+    if (u.turnPause > 0) u.turnPause -= dt;
+    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
+    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
+    if (this.canStand(nx, nz, a.position.y)) {
+      a.position.x = nx; a.position.z = nz;
+      u.stuckFor = 0;
+    } else {
+      turnWhenBlocked(u);
+      u.stuckFor = (u.stuckFor || 0) + dt;
+      if (u.stuckFor > 3) { this.unstickAnimal(a); u.stuckFor = 0; }
+    }
+    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
+    faceYaw(a, -u.dir + Math.PI / 2, dt);
+  };
+
   World.prototype.updateAnimals = function (dt) {
     for (const a of this.animals) {
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
@@ -2563,17 +2659,8 @@
       }
       let speed = 0.7;
       if (a.userData.hop > 0) { a.userData.hop -= dt; speed = 1.9; } // spooked: trot off
-      const nx = a.position.x + Math.cos(a.userData.dir) * speed * dt;
-      const nz = a.position.z + Math.sin(a.userData.dir) * speed * dt;
-      // stay inside the world — and inside any fence (a solid block stops them).
-      if (this.canStand(nx, nz, a.position.y)) {
-        a.position.x = nx; a.position.z = nz;
-      } else {
-        a.userData.dir += Math.PI; // turn around at the border / fence
-      }
-      const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-      a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-      a.rotation.y = -a.userData.dir + Math.PI / 2;
+      // Walk on if the way is clear; turn calmly at borders and fences.
+      this.wanderStep(a, dt, speed);
     }
   };
 
@@ -2584,11 +2671,32 @@
     for (const a of this.animals) {
       const kind = a.userData.kind;
       if (kind !== "skeleton" && kind !== "zombie") continue;
-      if (!isNight) { a.visible = false; continue; }  // both vanish by day
+      if (!isNight) { a.visible = false; a.userData.nightPlaced = false; continue; } // both vanish by day
+      // Each nightfall the monsters creep in out of the dark to prowl NEAR the
+      // player. (They used to wake wherever they happened to be on the big
+      // map — most nights you'd never even see one.)
+      if (!a.userData.nightPlaced) { a.userData.nightPlaced = true; this.stalkPlayer(a, player); }
       if (kind === "skeleton") this.updateSkeleton(a, dt, player);
       else this.updateZombie(a, dt, player);
     }
     this.updateArrows(dt, player);
+  };
+
+  // Drop a night monster somewhere standable 10-22 blocks from the player —
+  // close enough to run into, far enough that it isn't right on top of them.
+  World.prototype.stalkPlayer = function (a, player) {
+    for (let t = 0; t < 24; t++) {
+      const ang = Math.random() * Math.PI * 2;
+      const d = 10 + Math.random() * 12;
+      const x = Math.floor(player.pos.x + Math.cos(ang) * d);
+      const z = Math.floor(player.pos.z + Math.sin(ang) * d);
+      if (x < 3 || z < 3 || x >= C.WORLD - 3 || z >= C.WORLD - 3) continue;
+      const y = this.surfaceY(x, z) + 1;
+      if (!this.canStand(x + 0.5, z + 0.5, y)) continue;
+      a.position.set(x + 0.5, y, z + 0.5);
+      return;
+    }
+    // No luck (odd terrain everywhere) — it just wakes wherever it slept.
   };
 
   // A zombie shambles about the surface at random. If it lurches into the player
@@ -2598,14 +2706,7 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.2 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
-    const speed = 0.8;
-    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
-    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
-    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
-    else u.dir += Math.PI;
-    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-    a.rotation.y = -u.dir + Math.PI / 2;
+    this.wanderStep(a, dt, 0.8);
 
     // Bump into the player? Take a bite (with a cooldown so it isn't instant death).
     if (u.hitCooldown > 0) u.hitCooldown -= dt;
@@ -2629,14 +2730,7 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
-    const speed = 0.9;
-    const nx = a.position.x + Math.cos(u.dir) * speed * dt;
-    const nz = a.position.z + Math.sin(u.dir) * speed * dt;
-    if (this.canStand(nx, nz, a.position.y)) { a.position.x = nx; a.position.z = nz; }
-    else u.dir += Math.PI;
-    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
-    a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
-    a.rotation.y = -u.dir + Math.PI / 2;
+    this.wanderStep(a, dt, 0.9);
 
     // Fire an arrow off in a random direction if the player is roughly nearby.
     u.shootTimer -= dt;
@@ -2778,6 +2872,7 @@
     u.t += dt;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 2.5; u.dir = Math.random() * Math.PI * 2; }
+    if (u.turnPause > 0) u.turnPause -= dt;
     const speed = 1.0;
     const nx = a.position.x + Math.cos(u.dir) * speed * dt;
     const nz = a.position.z + Math.sin(u.dir) * speed * dt;
@@ -2786,7 +2881,7 @@
     const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
       this.solidAt(fx, Math.floor(a.position.y), fz) ||
       (dhx * dhx + dhz * dhz) > u.roam * u.roam;         // stay near home
-    if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
+    if (blocked) { turnWhenBlocked(u); }
     else { a.position.x = nx; a.position.z = nz; }
     // Hover with a gentle bob, kept clear of the floor and ceiling.
     a.position.y = u.baseY + Math.sin(u.t * 0.9) * 0.5;
@@ -2858,16 +2953,17 @@
     const u = a.userData;
     u.timer -= dt;
     if (u.timer <= 0) { u.timer = 1.5 + Math.random() * 3; u.dir = Math.random() * Math.PI * 2; }
+    if (u.turnPause > 0) u.turnPause -= dt;
     const speed = 0.8;
     const nx = a.position.x + Math.cos(u.dir) * speed * dt;
     const nz = a.position.z + Math.sin(u.dir) * speed * dt;
     const fx = Math.floor(nx), fz = Math.floor(nz);
     const blocked = fx < 2 || fz < 2 || fx >= C.WORLD - 2 || fz >= C.WORLD - 2 ||
       this.solidAt(fx, FLOOR + 1, fz) || this.get(fx, FLOOR, fz) === "lava";
-    if (blocked) { u.dir += Math.PI * (0.5 + Math.random()); }
+    if (blocked) { turnWhenBlocked(u); }
     else { a.position.x = nx; a.position.z = nz; }
     a.position.y = FLOOR + 1;
-    a.rotation.y = -u.dir + Math.PI / 2;
+    faceYaw(a, -u.dir + Math.PI / 2, dt);
   };
 
   // A fireball. Ghasts spit orange ones; the Ender Dragon breathes purple ones

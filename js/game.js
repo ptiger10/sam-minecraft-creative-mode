@@ -57,8 +57,9 @@
     worldClock: 0,           // seconds into the day/night cycle
     invertLook: true         // pull DOWN to look UP (inverted) — the default
   };
-  // Day/night: 10 minutes of daylight, then 2 minutes of night, repeating.
-  const DAY_LEN = 6 * 60, NIGHT_LEN = 2 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
+  // Day/night: 3½ minutes of daylight, then 1½ minutes of night — so night
+  // (and its monsters) comes round every 5 minutes.
+  const DAY_LEN = 3.5 * 60, NIGHT_LEN = 1.5 * 60, CYCLE_LEN = DAY_LEN + NIGHT_LEN;
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
@@ -1120,6 +1121,25 @@
     });
   }
 
+  // The first settlement's starter chest: a friendly welcome kit.
+  function prefillStarterChest(world) {
+    const c = world.starterChest;
+    if (!c) return;
+    const key = c.x + "," + c.y + "," + c.z;
+    if (key in S.chests) return;
+    const loot = [
+      { id: "pickaxe", count: 1 },
+      { id: "apple", count: 5 },
+      { id: "torch", count: 6 },
+      { id: "wood", count: 8 },
+      { id: "stick", count: 4 },
+      { id: "bed", count: 1 }
+    ];
+    const arr = new Array(CHEST_SIZE).fill(null);
+    loot.forEach((it, i) => { arr[i] = it; });
+    S.chests[key] = arr;
+  }
+
   // A ghast fires only once per Nether visit; re-arm every ghast on entry.
   function resetGhasts(world) {
     world.animals.forEach((a) => {
@@ -1681,15 +1701,6 @@
   function renderVitals() {
     drawPips($("health-row"), S.player.hp, C.MAX_HP, "hp");
     drawPips($("food-row"), S.player.food, C.MAX_FOOD, "food");
-    // Air bubbles only appear while you're underwater (and draining/refilling).
-    const airRow = $("air-row");
-    if (S.player.air < C.MAX_AIR - 0.05) {
-      airRow.style.display = "";
-      drawPips(airRow, S.player.air, C.MAX_AIR, "air");
-    } else {
-      airRow.style.display = "none";
-      airRow.innerHTML = "";
-    }
   }
 
   // Darken the screen while the wither effect is draining the player, easing the
@@ -1948,9 +1959,11 @@
       S.questKeysGiven = {};
       S.equip = emptyEquip();
     }
-    // The mansion's chests come stocked with treasure (skipped for any chest
-    // the player already opened — their contents live in the save).
+    // The mansion's chests come stocked with treasure, and the first
+    // settlement's starter chest with a welcome kit (both skipped for any
+    // chest the player already opened — their contents live in the save).
     prefillMansionChests(world);
+    prefillStarterChest(world);
 
     // A fresh world starts with NO save slot — nothing saves until the player
     // presses Save and picks one. (loadGame re-binds the slot right after.)
@@ -2021,6 +2034,18 @@
     // Fresh worlds are always full-size (a legacy save may have shrunk C.WORLD).
     Game.CONST.WORLD = DEFAULT_WORLD_SIZE;
     const world = new Game.World(null, seed, biome);
+    world.generate();
+    startWorld(world, null);
+  }
+
+  // The Classic map: a brand-new world on the original cosy 40x40 layout —
+  // one biome throughout, sky-high settlement spires on the centre axes, and
+  // the original key quest (the gold key opens the fourth house's lit portal).
+  function newLegacyWorld() {
+    const biome = (randomSeed() & 1) ? "forest" : "desert";
+    const seed = randomSeed();
+    Game.CONST.WORLD = 40;
+    const world = new Game.World(null, seed, biome, true);
     world.generate();
     startWorld(world, null);
   }
@@ -2238,6 +2263,7 @@
     tapButton($("btn-new-forest"), () => newWorld("forest"));
     tapButton($("btn-new-desert"), () => newWorld("desert"));
     tapButton($("btn-new-random"), () => newWorld("random"));
+    tapButton($("btn-new-legacy"), () => newLegacyWorld());
     // Three continue buttons on the title screen, one per save slot.
     [1, 2, 3].forEach((n) => {
       tapButton($("btn-load-" + n), () => { if (!loadGame(n)) toast("That slot is empty."); });

@@ -24,8 +24,6 @@
     this.foodTimer = 0;
     this.starveTimer = 0;
     this.regenTimer = 0;
-    this.air = C.MAX_AIR;        // breath remaining while underwater
-    this.drownTimer = 0;
     this.wither = 0;             // seconds of wither effect remaining
     this.witherDmgTimer = 0;     // counts up to the next wither heart loss
     this.dead = false;
@@ -136,38 +134,20 @@
     if (input.lookPitch) this.pitch += input.lookPitch;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
 
-    // --- Are we in water? (drives swimming, buoyancy and no fall damage) ---
-    const feetWater = this.inWaterAt(this.pos.y + 0.1);
-    const bodyWater = this.inWaterAt(this.pos.y + 0.9);
-    const swimming = feetWater || bodyWater;
-    if (swimming) this.fallPeak = this.pos.y; // splashing into water never hurts
-
-    // --- Horizontal movement (a little slower while swimming) ---
+    // --- Horizontal movement ---
     let dx = 0, dz = 0;
     if (input.forward) {
       const f = this.forwardH();
-      const sp = swimming ? C.MOVE_SPEED * 0.65 : C.MOVE_SPEED;
-      dx = f.x * sp * dt;
-      dz = f.z * sp * dt;
+      dx = f.x * C.MOVE_SPEED * dt;
+      dz = f.z * C.MOVE_SPEED * dt;
     }
 
-    // --- Climbing, swimming, or jump + gravity ---
+    // --- Climbing, or jump + gravity ---
     const climbing = this.ladderInFront();
     if (climbing) {
       // Hold forward (push into it) or jump to go up; otherwise slide gently
       // down. No gravity build-up while you're on the rungs.
       this.vel.y = (input.forward || input.jump) ? C.CLIMB_SPEED : -C.CLIMB_SPEED * 0.5;
-    } else if (swimming) {
-      if (input.jump) {
-        this.vel.y = C.SWIM_UP;              // press jump to rise to the surface
-      } else {
-        // No jump: you sink. Reduced gravity pulls you down and water drag
-        // settles you to a slow, steady sink — so hold jump to come back up.
-        this.vel.y -= C.GRAVITY * 0.25 * dt;
-        this.vel.y -= this.vel.y * 3 * dt;    // water drag (frame-rate independent)
-        if (this.vel.y < -C.SWIM_SINK) this.vel.y = -C.SWIM_SINK;
-        if (this.vel.y > C.SWIM_UP) this.vel.y = C.SWIM_UP;
-      }
     } else {
       if (input.jump && this.onGround) {
         this.vel.y = C.JUMP_V;
@@ -197,9 +177,24 @@
       this.vel.y = 0;
     }
 
-    // Track the peak height of a fall for damage purposes. Climbing and being
-    // in water never hurt, so they keep the peak pinned to where you are.
-    if (this.onGround || climbing || swimming) {
+    // --- Water: there's no swimming or diving — you wade straight across the
+    // TOP of any pond. If your feet dip into a water cell, pop up to the
+    // surface and stand there as if it were solid ground. ---
+    if (this.inWaterAt(this.pos.y + 0.05)) {
+      const fx = Math.floor(this.pos.x), fz = Math.floor(this.pos.z);
+      let wy = Math.floor(this.pos.y + 0.05);
+      while (this.world.get(fx, wy + 1, fz) === "water") wy++;
+      if (!this.collides(this.pos.x, wy + 1, this.pos.z)) {
+        this.pos.y = wy + 1;
+        this.vel.y = 0;
+        this.onGround = true;
+      }
+      this.fallPeak = this.pos.y; // splashing into water never hurts
+    }
+
+    // Track the peak height of a fall for damage purposes. Climbing never
+    // hurts, so it keeps the peak pinned to where you are.
+    if (this.onGround || climbing) {
       this.fallPeak = this.pos.y;
     } else if (this.pos.y > this.fallPeak) {
       this.fallPeak = this.pos.y;
@@ -247,22 +242,6 @@
       }
     }
 
-    // Breath: while your head is underwater your air runs down; once it's gone
-    // you start losing health, so come up for air. Air refills quickly above
-    // the surface.
-    const submerged = this.inWaterAt(this.pos.y + C.EYE - 0.1);
-    if (submerged) {
-      this.air -= dt;
-      if (this.air <= 0) {
-        this.air = 0;
-        this.drownTimer += dt;
-        if (this.drownTimer >= 1.5) { this.drownTimer = 0; this.damage(1, "drowned"); }
-      }
-    } else if (this.air < C.MAX_AIR) {
-      this.air = Math.min(C.MAX_AIR, this.air + dt * 4);
-      this.drownTimer = 0;
-    }
-
     // Wither: a wither skull's poison drains a heart every ~3 seconds until it
     // wears off after 6 seconds. The screen tint is driven from the game loop.
     if (this.wither > 0) {
@@ -294,8 +273,6 @@
     this.food = C.MAX_FOOD;
     this.foodTimer = 0;
     this.starveTimer = 0;
-    this.air = C.MAX_AIR;
-    this.drownTimer = 0;
     this.wither = 0;
     this.witherDmgTimer = 0;
     this.dead = false;
