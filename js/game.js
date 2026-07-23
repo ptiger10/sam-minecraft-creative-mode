@@ -59,6 +59,9 @@
   const DUSK = 10; // seconds of dusk/dawn fade at each edge of night
   Game.S = S;
   const CHEST_SIZE = 27;
+  // Full-size worlds are this wide; loading an old 40-block save shrinks
+  // Game.CONST.WORLD for that session (see loadGame), so remember the default.
+  const DEFAULT_WORLD_SIZE = Game.CONST.WORLD;
 
   // Take a healthy break: after 17 minutes of actual play, save + pause the
   // game and run a 3-minute countdown before letting the player resume.
@@ -1007,7 +1010,7 @@
   // later (e.g. a linked portal) can re-mesh even before you first step through.
   function ensureNether() {
     if (!S.netherWorld) {
-      const nw = new Game.World(null, S.overworld.seed, "nether");
+      const nw = new Game.World(null, S.overworld.seed, "nether", S.overworld.legacy);
       nw.generateNether();
       S.netherWorld = nw;
       buildWorldScene(nw);       // give it a scene so edits re-mesh safely
@@ -1034,6 +1037,34 @@
       ];
       const arr = new Array(CHEST_SIZE).fill(null);
       loot.forEach((it, i) => { arr[i] = it; });
+      S.chests[key] = arr;
+    });
+  }
+
+  // Stock the woodland mansion's two chests with treasure — but only if the
+  // player hasn't already opened them (a saved key means "leave it as found").
+  function prefillMansionChests(world) {
+    (world.mansionChests || []).forEach((c, i) => {
+      const key = c.x + "," + c.y + "," + c.z;
+      if (key in S.chests) return;
+      // Ground floor: useful supplies. Upstairs: the real treasure.
+      const loot = i === 0
+        ? [
+            { id: "emerald", count: 6 },
+            { id: "torch", count: 8 },
+            { id: "apple", count: 4 },
+            { id: "bricks", count: 12 },
+            { id: "book", count: 1 }
+          ]
+        : [
+            { id: "diamond", count: 4 },
+            { id: "diamond_chestplate", count: 1 },
+            { id: "gold_ingot", count: 3 },
+            { id: "glowstone", count: 6 },
+            { id: "battery", count: 1 }
+          ];
+      const arr = new Array(CHEST_SIZE).fill(null);
+      loot.forEach((it, j) => { arr[j] = it; });
       S.chests[key] = arr;
     });
   }
@@ -1074,7 +1105,7 @@
   // craft from four End Crystals — and stepping through THAT wins the game.
   function ensureEnd() {
     if (!S.endWorld) {
-      const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end");
+      const ew = new Game.World(null, (S.overworld.seed ^ 0x3e4d) >>> 0, "end", S.overworld.legacy);
       ew.generateEnd();
       S.endWorld = ew;
       buildWorldScene(ew);
@@ -1841,6 +1872,10 @@
       S.questKeysGiven = {};
       S.equip = emptyEquip();
     }
+    // The mansion's chests come stocked with treasure (skipped for any chest
+    // the player already opened — their contents live in the save).
+    prefillMansionChests(world);
+
     S.riding = null;
     S.playClock = (restore && restore.playClock) || 0;
     S.onBreak = false;
@@ -1903,6 +1938,8 @@
     // "Surprise me" rolls a fresh biome AND a fresh seed every single time.
     if (biome === "random") biome = (randomSeed() & 1) ? "forest" : "desert";
     const seed = randomSeed();
+    // Fresh worlds are always full-size (a legacy save may have shrunk C.WORLD).
+    Game.CONST.WORLD = DEFAULT_WORLD_SIZE;
     const world = new Game.World(null, seed, biome);
     world.generate();
     startWorld(world, null);
@@ -1926,7 +1963,9 @@
     // return to, so loading never drops you into the (regenerated) Nether.
     const pos = S.inNether ? (S.questPortalExit || ow.spawn) : S.player.pos;
     const data = {
-      version: 2,        // v2: single "brick" items + plural "bricks" blocks
+      version: 3,        // v3: big multi-biome worlds (v2: the brick-item split)
+      worldSize: Game.CONST.WORLD,
+      legacy: !!ow.legacy, // an old 40-block world stays its old self forever
       seed: ow.seed,
       biome: ow.biome,
       changes: changes,
@@ -1985,7 +2024,12 @@
     try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
     if (!data) return false;
     if (!data.version) migrateBrickBlocks(data);   // upgrade legacy brick ids
-    const world = new Game.World(null, data.seed, data.biome);
+    // Worlds saved before the multi-biome update were 40 blocks wide with one
+    // biome throughout. They regenerate exactly as they were: same size, same
+    // generator — so nothing the player built or explored moves.
+    const legacy = (data.version || 0) < 3 || !!data.legacy;
+    Game.CONST.WORLD = data.worldSize || (legacy ? 40 : DEFAULT_WORLD_SIZE);
+    const world = new Game.World(null, data.seed, data.biome, legacy);
     world.generate();
     if (data.changes) world.applyChanges(data.changes);
     // make sure the inventory array is the right length

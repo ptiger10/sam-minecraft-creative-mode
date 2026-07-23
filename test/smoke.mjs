@@ -390,7 +390,9 @@ const climb = await page.evaluate(async () => {
   const startY = p.pos.y;
   const front = p.ladderInFront();
   S.input.forward = true;
-  await new Promise((r) => setTimeout(r, 600));
+  // The big 96-block world renders slowly under headless software rasterizing,
+  // so allow enough real time for a handful of game frames to run.
+  await new Promise((r) => setTimeout(r, 1500));
   S.input.forward = false;
   return { front, startY, climbedY: p.pos.y, hp: p.hp };
 });

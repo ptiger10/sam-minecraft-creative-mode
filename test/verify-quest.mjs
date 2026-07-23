@@ -149,7 +149,8 @@ const nether = await page.evaluate(() => {
     fortressChests: (nw.fortressChests || []).length,
     oreDrop: Game.BlockDefs.netherite_ore.drop, isNether: nw.isNether };
 });
-check("netherite ore is now rare in the Nether", nether.ore >= 0 && nether.ore < 30);
+// Same 0.8% rarity as ever, over a 96x96 floor instead of 40x40 (5.76x area).
+check("netherite ore is now rare in the Nether", nether.ore >= 0 && nether.ore < 30 * 5.76);
 check("mining netherite ore drops netherite", nether.oreDrop === "netherite");
 check("a Nether fortress holds a chest", nether.fortressChests >= 1 && nether.chests >= 1);
 check("the fortress has brick stairs", nether.stairs >= 4);
@@ -711,7 +712,7 @@ const zombies = await page.evaluate(() => {
   S.equip = savedEq;
   return { count: zs.length, hiddenByDay, movedAtNight, bitOnce, armourBlocksBite };
 });
-check("three zombies roam the world", zombies.count === 3);
+check("seven zombies roam the big open world", zombies.count === 7);
 check("zombies disappear in the day", zombies.hiddenByDay);
 check("zombies wander at night", zombies.movedAtNight);
 check("a zombie bump hurts (one heart, on a cooldown)", zombies.bitOnce);

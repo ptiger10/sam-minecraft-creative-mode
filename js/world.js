@@ -12,8 +12,9 @@
 
   // The world is meshed in square columns CHUNK blocks wide/deep (full height).
   // An edit only re-meshes the affected chunk (+ a neighbour if it sits on the
-  // chunk's edge), instead of rebuilding the entire world every time.
-  const CHUNK = 10;
+  // chunk's edge), instead of rebuilding the entire world every time. Sized so
+  // the big 96-block worlds stay at a modest 6x6 grid of chunks.
+  const CHUNK = 16;
   const chunkKey = (x, z) => Math.floor(x / CHUNK) + "," + Math.floor(z / CHUNK);
 
   // ---- Per-type cube geometry (vertex-coloured faces) ------------
@@ -444,10 +445,14 @@
   }
 
   // ---- The World -------------------------------------------------
-  function World(scene, seed, biome) {
+  function World(scene, seed, biome, legacy) {
     this.scene = scene;
     this.seed = seed >>> 0;
-    this.biome = biome; // "forest" | "desert"
+    this.biome = biome; // the biome around the spawn: "forest" | "desert"
+    // Worlds saved before the big multi-biome update were 40 blocks wide with a
+    // single biome throughout. They regenerate through the exact old code paths
+    // (see biomeAt) so nothing a player built or explored moves an inch.
+    this.legacy = !!legacy;
     this.blocks = new Map();         // "x,y,z" -> block id
     this.changes = new Map();        // edits since generation (for saving)
     this.chunkBlocks = new Map();    // chunkKey -> Set of "x,y,z" (blocks per chunk)
@@ -512,8 +517,8 @@
 
   // ---- Generation ------------------------------------------------
   World.prototype.generate = function () {
-    const height = Game.makeHeight(this.seed);
-    const desert = this.biome === "desert";
+    const height = this.legacy ? Game.makeHeight(this.seed) : Game.makeOpenHeight(this.seed);
+    this.setupBiomes();
     const WATER = C.WATER_LEVEL;
     const cx = Math.floor(C.WORLD / 2), cz = Math.floor(C.WORLD / 2);
     const nearSpawn = (x, z) => Math.abs(x - cx) <= 3 && Math.abs(z - cz) <= 3;
@@ -532,13 +537,13 @@
     this.stampWateringHoles(H, WATER);
 
     // A column floods if it dips below the water line (kept away from spawn so
-    // you never start in a puddle). Natural low-terrain ponds are forest-only,
-    // but a carved watering hole floods in either biome.
+    // you never start in a puddle). Natural low-terrain ponds skip the desert,
+    // but a carved watering hole floods in any biome.
     const isWater = (x, z) => {
       if (x < 0 || x >= C.WORLD || z < 0 || z >= C.WORLD) return false;
       if (nearSpawn(x, z)) return false;
       if (this._holes.has(x + "," + z)) return true;
-      return !desert && H[x][z] < WATER;
+      return this.biomeAt(x, z) !== "desert" && H[x][z] < WATER;
     };
     this._isWater = isWater;
 
@@ -546,11 +551,15 @@
       for (let z = 0; z < C.WORLD; z++) {
         const h = H[x][z];
         const water = isWater(x, z);
+        const biome = this.biomeAt(x, z);
+        const desert = biome === "desert";
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === h) {
             if (water) id = Game.hash(this.seed ^ 0xc1a7, x, 0, z) < 0.5 ? "clay" : "sand"; // pond bed
             else if (desert) id = this.desertSurface(x, z);
+            else if (biome === "roofed") id = "dark_grass";
+            else if (biome === "snow") id = "snow";
             else id = "grass";
           } else if (y >= h - 2) {
             id = desert ? "sand" : "dirt";
@@ -559,10 +568,14 @@
           }
           this.blocks.set(World.key(x, y, z), id);
         }
-        // Fill the pond with water up to the water line.
-        if (water) for (let y = h + 1; y <= WATER; y++) this.blocks.set(World.key(x, y, z), "water");
+        // Fill the pond with water up to the water line. Snowy ponds freeze
+        // over — the top layer is ice you can walk right across.
+        if (water) {
+          for (let y = h + 1; y <= WATER; y++) this.blocks.set(World.key(x, y, z), "water");
+          if (biome === "snow" && h < WATER) this.blocks.set(World.key(x, WATER, z), "ice");
+        }
         // Vegetation sits on top of dry land only.
-        if (!water) this.maybeVegetation(x, z, h, desert);
+        if (!water) this.maybeVegetation(x, z, h, biome);
       }
     }
 
@@ -594,17 +607,70 @@
     this.scatterLavaPools();
     this.scatterSurfaceLava();
 
-    this.spawnAnimals(desert ? 3 : 4);
+    // The big open worlds hold more life (and more night-time danger) so the
+    // extra ground never feels empty. Legacy worlds keep their original counts.
+    this.spawnAnimals(this.legacy ? (this.biome === "desert" ? 3 : 4) : 12);
     // Four settlements joined by a yellow brick road, with the quest villagers.
     this.buildQuestWorld();
+
+    // The woodland mansion, deep in its guaranteed roofed-forest grove.
+    if (!this.legacy) this.buildWoodlandMansion();
 
     // Fluffy clouds drifting high above everything else.
     this.scatterClouds();
 
     // Night monsters: skeleton archers and shambling zombies. Hidden by day.
     this.arrows = [];
-    this.spawnSkeletons(2);
-    this.spawnZombies(3);
+    this.spawnSkeletons(this.legacy ? 2 : 5);
+    this.spawnZombies(this.legacy ? 3 : 7);
+  };
+
+  // ---- Biomes ----------------------------------------------------
+  // New worlds are a patchwork of biomes painted by two slow noise fields
+  // (temperature picks snow / desert, moisture picks roofed forest), so walking
+  // in any direction eventually crosses into somewhere that looks different.
+  World.prototype.setupBiomes = function () {
+    if (this.legacy) return; // old worlds are one biome throughout
+    const temp = Game.makeNoise(this.seed ^ 0x7e39a1, 23, 111);
+    const moist = Game.makeNoise(this.seed ^ 0x30157e, 19, 222);
+    const raw = (x, z) => {
+      const t = temp(x, z);
+      if (t < 0.33) return "snow";
+      if (t > 0.70) return "desert";
+      return moist(x, z) > 0.60 ? "roofed" : "forest";
+    };
+    this._rawBiome = raw;
+
+    // Shift the whole biome map (deterministically) until the spawn clearing
+    // sits in the biome the player picked on the title screen.
+    const sc = Math.floor(C.WORLD / 2);
+    const want = this.biome === "desert" ? "desert" : "forest";
+    const samples = [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8]];
+    this._biomeOff = { x: 0, z: 0 };
+    for (let k = 0; k < 600; k++) {
+      const ox = Math.floor(Game.hash(this.seed ^ 0x0ff5e7, k, 0, 0) * 4096);
+      const oz = Math.floor(Game.hash(this.seed ^ 0x0ff5e7, k, 1, 0) * 4096);
+      if (samples.every(([dx, dz]) => raw(sc + dx + ox, sc + dz + oz) === want)) {
+        this._biomeOff = { x: ox, z: oz };
+        break;
+      }
+    }
+
+    // One roofed-forest grove is guaranteed, tucked into a quadrant of the map
+    // well away from the spawn, the road and the four settlements — the
+    // woodland mansion is built at its heart.
+    const q = Math.floor(C.WORLD / 4);
+    const centres = [[q, q], [C.WORLD - q, q], [q, C.WORLD - q], [C.WORLD - q, C.WORLD - q]];
+    const pick = centres[Math.floor(Game.hash(this.seed ^ 0x9a05e, 1, 2, 3) * 4)];
+    this._grove = { x: pick[0], z: pick[1], r: 15 };
+  };
+
+  // Which biome does this column belong to?
+  World.prototype.biomeAt = function (x, z) {
+    if (this.legacy) return this.biome; // uniform, exactly like the old worlds
+    const g = this._grove;
+    if (g && Math.max(Math.abs(x - g.x), Math.abs(z - g.z)) <= g.r) return "roofed";
+    return this._rawBiome(x + this._biomeOff.x, z + this._biomeOff.z);
   };
 
   // A few skeleton archers, hidden away by day. They wake and roam at night.
@@ -682,14 +748,17 @@
     const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x1a0ace);
+    const want = this.legacy ? 2 : 5;   // more lakes to stumble on in a big world
+    const cap = this.legacy ? 80 : 300; // legacy keeps its exact old try budget
     let made = 0, tries = 0;
-    while (made < 2 && tries < 80) {
+    while (made < want && tries < cap) {
       tries++;
       const r = 1 + Math.floor(rng() * 2);              // radius 1..2 (small lakes)
       const x = 5 + Math.floor(rng() * (C.WORLD - 10));
       const z = 5 + Math.floor(rng() * (C.WORLD - 10));
       if (cheb(x, z, sc, sc) <= 6) continue;            // away from the spawn plaza
       if (siteCenters.some(([ox, oz]) => cheb(x, z, ox, oz) <= r + 6)) continue; // clear of towns
+      if (this._grove && cheb(x, z, this._grove.x, this._grove.z) <= 14) continue; // off the mansion grounds
       if (this._holes && this._holes.has(x + "," + z)) continue; // not in a water hole
       this.carveSurfaceLavaLake(x, z, r);
       made++;
@@ -740,14 +809,17 @@
     const siteCenters = [[9, sc], [sc, 9], [C.WORLD - 9, sc], [sc, C.WORLD - 9]];
     const cheb = (x, z, ox, oz) => Math.max(Math.abs(x - ox), Math.abs(z - oz));
     const rng = Game.mulberry32(this.seed ^ 0x0a51de);
+    const want = this.legacy ? 4 : 10;  // more ponds spread across the big map
+    const cap = this.legacy ? 80 : 300; // legacy keeps its exact old try budget
     let made = 0, tries = 0;
-    while (made < 4 && tries < 80) {
+    while (made < want && tries < cap) {
       tries++;
       const r = 2 + Math.floor(rng() * 2);              // radius 2..3
       const x = 5 + Math.floor(rng() * (C.WORLD - 10));
       const z = 5 + Math.floor(rng() * (C.WORLD - 10));
       if (cheb(x, z, sc, sc) <= 5) continue;            // off the spawn plaza
       if (siteCenters.some(([ox, oz]) => cheb(x, z, ox, oz) <= r + 6)) continue; // clear of towns
+      if (this._grove && cheb(x, z, this._grove.x, this._grove.z) <= 14) continue; // off the mansion grounds
       for (let dx = -r; dx <= r; dx++) {
         for (let dz = -r; dz <= r; dz++) {
           const dist = Math.abs(dx) + Math.abs(dz);
@@ -782,8 +854,10 @@
     return "stone";
   };
 
-  // Trees, apple trees and cacti — deterministic from the seed.
-  World.prototype.maybeVegetation = function (x, z, h, desert) {
+  // Trees, apple trees and cacti — deterministic from the seed, and different
+  // in every biome. (Legacy worlds only ever pass "forest" or "desert", and
+  // those branches keep their exact original maths.)
+  World.prototype.maybeVegetation = function (x, z, h, biome) {
     // keep vegetation away from the very edges
     if (x < 2 || z < 2 || x >= C.WORLD - 2 || z >= C.WORLD - 2) return;
     // keep a clearing around the spawn point so you never start stuck in a tree
@@ -791,10 +865,23 @@
     if (Math.abs(x - cx) <= 2 && Math.abs(z - cz) <= 2) return;
     const r = Game.hash(this.seed ^ 0x55aa, x, 0, z);
 
-    if (desert) {
+    if (biome === "desert") {
       if (r < 0.05) this.placeCactus(x, h + 1, z);
       else if (r < 0.065) this.blocks.set(World.key(x, h + 1, z), "watermelon"); // melons in the sand
       else if (r > 0.985) this.placeTree(x, h + 1, z, true); // rare oasis apple tree
+      return;
+    }
+
+    // Roofed forest: huge dark oaks packed so tight their canopies knit into a
+    // shady roof. No melons down here — it's too dark.
+    if (biome === "roofed") {
+      if (r < 0.09) this.placeDarkTree(x, h + 1, z);
+      return;
+    }
+
+    // Snowy hills: scattered frosted trees, nothing growing on the ground.
+    if (biome === "snow") {
+      if (r < 0.045) this.placeTree(x, h + 1, z, false, true);
       return;
     }
 
@@ -812,7 +899,7 @@
     for (let i = 0; i < tall; i++) this.blocks.set(World.key(x, y + i, z), "cactus");
   };
 
-  World.prototype.placeTree = function (x, y, z, apple) {
+  World.prototype.placeTree = function (x, y, z, apple, snowy) {
     const trunk = 4 + Math.floor(Game.hash(this.seed, x, 9, z) * 2);
     for (let i = 0; i < trunk; i++) this.blocks.set(World.key(x, y + i, z), "wood");
     const top = y + trunk;
@@ -852,7 +939,43 @@
       }
     }
 
+    // Snowy-hills trees wear a dusting of snow on top of the canopy.
+    if (snowy) {
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          if (Math.abs(dx) + Math.abs(dz) > 2) continue;
+          const sx = x + dx, sz = z + dz;
+          const capY = this.occupied(sx, top + 1, sz) ? top + 2 : top + 1;
+          if (this.occupied(sx, capY, sz) || !this.occupied(sx, capY - 1, sz)) continue;
+          if (Game.hash(this.seed ^ 0x510e, sx, capY, sz) < 0.6) {
+            this.blocks.set(World.key(sx, capY, sz), "snow");
+          }
+        }
+      }
+    }
+
     // Remember the tree so a monkey can come and swing in its canopy.
+    this.trees.push({ x: x, z: z, top: top });
+  };
+
+  // A dark oak for the roofed forest: a taller trunk under a broad, flat canopy
+  // that merges with its neighbours into a near-solid leafy roof.
+  World.prototype.placeDarkTree = function (x, y, z) {
+    const trunk = 5 + Math.floor(Game.hash(this.seed ^ 0xda2c, x, 9, z) * 2); // 5..6
+    for (let i = 0; i < trunk; i++) this.blocks.set(World.key(x, y + i, z), "dark_wood");
+    const top = y + trunk;
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        for (let dy = -1; dy <= 0; dy++) {
+          const reach = dy === 0 ? 3 : 4;   // wider skirt just under the top layer
+          if (Math.abs(dx) + Math.abs(dz) > reach) continue;
+          const lx = x + dx, ly = top + dy, lz = z + dz;
+          if (this.occupied(lx, ly, lz)) continue; // don't overwrite the trunk
+          this.blocks.set(World.key(lx, ly, lz), "dark_leaves");
+        }
+      }
+    }
+    if (!this.occupied(x, top + 1, z)) this.blocks.set(World.key(x, top + 1, z), "dark_leaves");
     this.trees.push({ x: x, z: z, top: top });
   };
 
@@ -1678,6 +1801,113 @@
     return { x: x, y: y, z: z };
   };
 
+  // ================================================================
+  //  The Woodland Mansion: a grand two-storey dark-oak manor hidden
+  //  deep in the roofed forest, with treasure chests waiting inside.
+  // ================================================================
+  World.prototype.buildWoodlandMansion = function () {
+    const g = this._grove;
+    if (!g) return;
+    const cx = g.x, cz = g.z;
+    const HX = 8, HZ = 6;                       // half-footprint: 17 x 13 blocks
+    const floorY = Math.max(4, Math.min(9, this.surfaceY(cx, cz)));
+    const y1 = floorY + 1;                      // ground-floor walk level
+    const slabY = floorY + 5;                   // the upstairs floor
+    const top2 = slabY + 4;                     // top of the upper walls
+    const wall = "dark_planks", beam = "dark_wood";
+    const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
+
+    // 1) Clear and level the grounds: the footprint plus a 2-block lawn.
+    for (let dx = -HX - 2; dx <= HX + 2; dx++) {
+      for (let dz = -HZ - 2; dz <= HZ + 2; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+        // Bridge any dip between the real ground and the mansion floor.
+        for (let y = this.surfaceY(x, z) + 1; y < floorY; y++) this.blocks.set(World.key(x, y, z), "dirt");
+        const inside = Math.abs(dx) <= HX && Math.abs(dz) <= HZ;
+        this.blocks.set(World.key(x, floorY, z), inside ? "dark_planks" : "dark_grass");
+      }
+    }
+
+    // 2) Two storeys of walls: dark-plank panels between dark-wood beams, with
+    //    a row of windows on each floor and a grand 3-wide front doorway (-z).
+    for (let dx = -HX; dx <= HX; dx++) {
+      for (let dz = -HZ; dz <= HZ; dz++) {
+        if (Math.abs(dx) !== HX && Math.abs(dz) !== HZ) continue; // edge cells only
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        const doorway = dz === -HZ && Math.abs(dx) <= 1;
+        if (doorway) {
+          // Double doors with a windowed centre door, clear space above, then a
+          // dark-wood lintel and the wall carrying on over the top.
+          this.blocks.set(World.key(x, y1, z), dx === 0 ? "door_window" : "door");
+          this.blocks.set(World.key(x, y1 + 2, z), beam);   // lintel (y1+1 stays open)
+          for (let y = y1 + 3; y <= top2; y++) this.blocks.set(World.key(x, y, z), wall);
+          continue;
+        }
+        const corner = Math.abs(dx) === HX && Math.abs(dz) === HZ;
+        const isBeam = corner ||
+          (Math.abs(dx) === HX && dz % 4 === 0) ||
+          (Math.abs(dz) === HZ && dx % 4 === 0);
+        for (let y = y1; y <= top2; y++) this.blocks.set(World.key(x, y, z), isBeam ? beam : wall);
+        if (!isBeam) {
+          this.blocks.set(World.key(x, y1 + 1, z), "glass");    // ground-floor window
+          this.blocks.set(World.key(x, slabY + 2, z), "glass"); // upstairs window
+        }
+      }
+    }
+
+    // 3) The upstairs floor slab, minus the stairwell opening along the +x wall.
+    for (let dx = -HX + 1; dx <= HX - 1; dx++) {
+      for (let dz = -HZ + 1; dz <= HZ - 1; dz++) {
+        if (dx === HX - 1 && dz >= -2 && dz <= 1) continue; // stairwell stays open
+        this.blocks.set(World.key(cx + dx, slabY, cz + dz), "dark_planks");
+      }
+    }
+    // A straight flight of stairs up the +x wall (walk straight up, no jumps).
+    for (let i = 0; i <= 4; i++) {
+      this.blocks.set(World.key(cx + HX - 1, y1 + i, cz - 2 + i), "stairs");
+    }
+
+    // 4) A steep stepped roof, capped with a dark-wood ridge beam.
+    for (let L = 0; L <= 3; L++) {
+      const zHalf = (L === 0 ? HZ + 1 : HZ + 1 - 2 * L);
+      const xHalf = HX + (L === 0 ? 1 : 0);   // the lowest course overhangs
+      for (let dx = -xHalf; dx <= xHalf; dx++) {
+        for (let dz = -zHalf; dz <= zHalf; dz++) {
+          const x = cx + dx, z = cz + dz;
+          if (!inBounds(x, z)) continue;
+          const mat = (L === 3 && dz === 0) ? beam : wall;
+          this.blocks.set(World.key(x, top2 + 1 + L, z), mat);
+        }
+      }
+    }
+
+    // 5) Furnishings: torches in every corner of both floors, a work corner
+    //    with a crafting table and furnace, beds, and the two treasure chests.
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+      this.blocks.set(World.key(cx + sx * (HX - 2), y1, cz + sz * (HZ - 2)), "torch");
+      this.blocks.set(World.key(cx + sx * (HX - 2), slabY + 1, cz + sz * (HZ - 2)), "torch");
+    });
+    this.blocks.set(World.key(cx - 3, y1, cz + HZ - 2), "crafting_table");
+    this.blocks.set(World.key(cx - 2, y1, cz + HZ - 2), "furnace");
+    this.blocks.set(World.key(cx + 2, y1, cz + HZ - 2), "bed");
+    this.blocks.set(World.key(cx + 4, y1, cz + HZ - 2), "bed");
+    // Torches flanking the front doors outside, so the mansion glows at night.
+    this.blocks.set(World.key(cx - 2, y1, cz - HZ - 1), "torch");
+    this.blocks.set(World.key(cx + 2, y1, cz - HZ - 1), "torch");
+
+    this.mansionChests = [];
+    const c1 = { x: cx - HX + 2, y: y1, z: cz + HZ - 2 };        // ground floor
+    const c2 = { x: cx - HX + 2, y: slabY + 1, z: cz - HZ + 2 }; // upstairs
+    [c1, c2].forEach((c) => {
+      this.blocks.set(World.key(c.x, c.y, c.z), "chest");
+      this.mansionChests.push(c);
+    });
+    this.mansion = { x: cx, y: floorY, z: cz };
+  };
+
   // Try to light a Nether portal from an obsidian block struck with flint &
   // steel. Looks for a flat, obsidian-ringed pocket of air touching this block
   // (in either vertical plane) and fills it with glowing portal blocks. Returns
@@ -1915,9 +2145,10 @@
     const fortX = SZ - 8, fortZ = SZ - 8;
     this.buildNetherFortress(fortX, fortZ);
 
-    // Floating ghasts that drift overhead and spit fire.
+    // Floating ghasts that drift overhead and spit fire (more of them in the
+    // big open-world Nether, so the longer trek stays exciting).
     const rng = Game.mulberry32(this.seed ^ 0x6ace);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < (this.legacy ? 4 : 8); i++) {
       const g = makeGhast();
       const gx = 12 + Math.floor(rng() * (SZ - 24));
       const gz = 12 + Math.floor(rng() * (SZ - 24));
@@ -1932,8 +2163,8 @@
       this.animals.push(g);
     }
 
-    // A couple of piglins snuffling around the floor, ready to trade.
-    for (let i = 0; i < 2; i++) {
+    // A few piglins snuffling around the floor, ready to trade.
+    for (let i = 0; i < (this.legacy ? 2 : 4); i++) {
       const pg = makePiglin();
       let gx, gz, tries = 0;
       do {

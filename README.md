@@ -1,9 +1,15 @@
 # ⛏️ Blocky World — Creative Mode
 
-A tiny, kid-friendly sandbox game in the browser, inspired by Minecraft's
+A kid-friendly open-world sandbox game in the browser, inspired by Minecraft's
 creative mode. Everything is blocky — the world, the trees, the animals and
-you. Explore a forest or a desert, punch trees, dig up ores, craft tools and
-build whatever you like. 🌳🏜️
+you. Each world is a big patchwork of biomes: sunny forests, sandy deserts,
+snowy hills with frozen ponds you can walk across, and a dark **roofed forest**
+hiding a two-storey **woodland mansion** stuffed with treasure. Punch trees,
+dig up ores, craft tools and build whatever you like. 🌳🏜️❄️🏰
+
+The title-screen choice (Forest / Desert) picks the biome you *start* in —
+wander far enough and you'll cross into all the others. Worlds saved before
+the big-world update still load exactly as they were.
 
 It's a single web page built with plain HTML/CSS/JavaScript and
 [Three.js](https://threejs.org/) for the 3D graphics. No build step, no
