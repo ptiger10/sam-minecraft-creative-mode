@@ -280,7 +280,9 @@ window.Game = window.Game || {};
   Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6, desc: "Eat it to fill your food bar." };
   Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 10, desc: "Burns in a furnace — smelts 10 items. Makes torches too." };
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
-  Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
+  // The emerald draws as a proper faceted gem (see gemIconHTML), not an emoji.
+  Game.ItemDefs.emerald = { name: "Emerald", gem: true, swatch: 0x2ecc71, swatchSide: 0x15803f,
+    placeable: false, desc: "A sparkling green gem — shiny money. Villagers love these." };
   // Netherite: a rare metal you mine in the Nether and trade for the gold key.
   Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x0a0a0c, swatchSide: 0x050506, placeable: false, desc: "A rare, pitch-black metal. Found in a Nether fortress chest, traded from a piglin, or (rarely) mined. The third villager prizes it." };
   // The Totem of Undying: the woodland mansion's one-of-a-kind treasure. Not
