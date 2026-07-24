@@ -718,9 +718,12 @@ const skyBodies = await page.evaluate(async () => {
   const night = await at(4 * 60);               // the middle of the night
   S.worldClock = 60;                            // leave it daytime
   return { ok: true, morning, noon, evening, night,
-    noonOverhead: Math.abs(noon.sx - p.x) < 6 };
+    noonOverhead: Math.abs(noon.sx - p.x) < 6,
+    circles: dn.sunMesh.geometry.type === "CircleGeometry" &&
+             dn.moonMesh.geometry.type === "CircleGeometry" };
 });
 check("a sun shines in the daytime sky", skyBodies.ok && skyBodies.morning.sun && !skyBodies.morning.moon);
+check("the sun and moon are big circles", skyBodies.circles);
 check("the sun climbs from sunrise to noon", skyBodies.noon.sy > skyBodies.morning.sy + 10);
 check("noon puts the sun overhead", skyBodies.noonOverhead);
 check("the sun sinks again toward sunset", skyBodies.evening.sy < skyBodies.noon.sy - 10);

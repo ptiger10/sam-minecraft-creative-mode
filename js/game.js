@@ -1767,13 +1767,14 @@
     const fill = new THREE.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-0.5, 0.6, -0.4);
     scene.add(fill);
-    // A blocky sun and moon hang in the sky. They ignore the fog (so they
-    // glow at any distance) and updateDayNight arcs them across the sky:
-    // the sun from sunrise to sunset, then the moon through the night.
-    const sunMesh = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3),
-      new THREE.MeshBasicMaterial({ color: 0xffd23b, fog: false }));
-    const moonMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.4, 2.4),
-      new THREE.MeshBasicMaterial({ color: 0xe8ecf2, fog: false }));
+    // A big round sun and moon hang in the sky — flat glowing discs that
+    // always turn to face you. They ignore the fog (so they glow at any
+    // distance) and updateDayNight arcs them across the sky: the sun from
+    // sunrise to sunset, then the moon through the night.
+    const sunMesh = new THREE.Mesh(new THREE.CircleGeometry(4.5, 40),
+      new THREE.MeshBasicMaterial({ color: 0xffd23b, fog: false, side: THREE.DoubleSide }));
+    const moonMesh = new THREE.Mesh(new THREE.CircleGeometry(3.8, 40),
+      new THREE.MeshBasicMaterial({ color: 0xe8ecf2, fog: false, side: THREE.DoubleSide }));
     moonMesh.visible = false;                 // worlds start at dawn
     scene.add(sunMesh);
     scene.add(moonMesh);
@@ -1895,7 +1896,7 @@
       dn.sunMesh.visible = day;
       dn.moonMesh.visible = !day;
       body.position.set(p.x + Math.cos(a) * 40, 3 + Math.sin(a) * 26, p.z - 22);
-      body.rotation.y += dt * 0.15;           // a slow, gentle twinkle-spin
+      body.lookAt(p.x, p.y, p.z);             // a disc always faces the player
     }
   }
 

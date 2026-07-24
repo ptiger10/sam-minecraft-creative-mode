@@ -100,9 +100,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   your food runs out you start losing health.
 - 🌗 **Day & night.** Every **3½ minutes of daylight** is followed by **1½
   minutes of night**, when the sky darkens and the world dims — then day
-  returns. A blocky **☀️ sun** rises in the east, sails overhead and sets in
-  the west as night falls — then a pale **🌙 moon** takes the same arc across
-  the night sky until sunrise. After dark the monsters come out: **🏹 skeleton archers** roam the
+  returns. A big round **☀️ sun** rises in the east, sails overhead and sets in
+  the west as night falls — then a big pale **🌙 moon** takes the same arc
+  across the night sky until sunrise. After dark the monsters come out: **🏹 skeleton archers** roam the
   surface loosing **arrows in random directions**, and **🧟 zombies**
   shamble about at random — **bump into one and it bites you** (a heart's worth).
   All of them **vanish again at daybreak**. Craft and **wear** some armour or a
