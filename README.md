@@ -90,7 +90,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   **forest**, with the desert, the snowy mountains and the roofed forest
   waiting further down the road.
 - 👤 First-person view with a blocky character (you can see the item in your hand).
-- 🌳 **Punch trees** to collect wood. Apple trees dangle red apples down low —
+- 🌳 **Punch trees** to collect wood — it takes **two punches** (the log
+  visibly **cracks** after the first), or just **one swing with a pickaxe**.
+  Apple trees dangle red apples down low —
   aim the crosshair at one and tap to pick it (even with a block in your hand).
 - 🍉 **Watermelons** grow on the ground (light green with dark-green stripes) —
   pick them up, build with them, or eat them.
@@ -137,8 +139,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     **every stop numbered in order**, plus a red *you-are-here* dot. Hold the
     map and tap **Place** (or the world) to unfold it.
   - **The desert temple** — a stepped sandstone ziggurat out in the dunes. Its
-    door swings open (the map shows the way); inside, the desert villager hands
-    over the 🗝️ **Silver Key**, and a treasure chest sweetens the visit.
+    door swings open (the map shows the way); inside, the desert villager
+    **sells the 🗝️ Silver Key for 1 emerald** — and the temple's own treasure
+    chest holds a few emeralds, if you arrive short.
   - **The igloo** — up in the **snowy mountains**, behind the Silver Key's
     locked door. Inside glows a 🔥 **portal to the Nether**, a fiery red cavern
     where **👻 ghasts float overhead and spit fireballs** — a hit costs you
@@ -208,7 +211,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   world and on its inventory icon), keeping with the blocky look, so you can spot
   it underground.
   Stone and ores need a **pickaxe** (wooden or stone); dig down and mine the
-  cyan-flecked blocks for diamond.
+  cyan-flecked blocks for diamond. Sturdy blocks **crack before they break**:
+  stone and ores take **three swings** of the wooden pickaxe — the crack
+  spreads with each hit — or **two** with the sturdier stone pickaxe.
 - 🔥 **Furnaces.** Craft one from **4 stone** (it has a distinctive glowing
   firebox so it's easy to spot), place it and tap it. Load a **fuel** (coal, or
   a long-lasting **battery**) and something to **smelt**: sand → **glass**, clay

@@ -166,6 +166,61 @@ check("you stand right on the water's surface", Math.abs(wade.surfaceY - wade.to
 check("standing on water is perfectly steady", wade.stillWobble < 0.001);
 check("wading across water is glassy smooth", wade.walkWobble < 0.001);
 
+// --- Multi-hit mining: wood and stone crack before they break ---
+const cracks = await page.evaluate(async () => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  const savedAnimals = W.animals;
+  W.animals = [];                        // so a stray animal can't eat the tap
+  const place = (id) => {
+    p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+    const eye = p.eyePosition(), dir = p.lookDir();
+    for (let i = 0; i <= 5; i++) W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+    const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+    W.blocks.set(key(bx, by, bz), id);
+    W.buildMeshes();
+    return { bx: bx, by: by, bz: bz, k: key(bx, by, bz) };
+  };
+  const mine = () => new Promise((r) => { document.getElementById("btn-mine").click(); setTimeout(r, 40); });
+  const at = (c) => W.blocks.get(c.k);
+
+  // Wood bare-handed: two punches, visibly cracked in between.
+  S.inv.fill(null); document.querySelectorAll("#hotbar .slot")[0].click();
+  const w = place("wood");
+  await mine();
+  const woodCracked = at(w) === "wood" && W.mineDamage.get(w.k) === 1 && W._crackMeshes.has(w.k);
+  await mine();
+  const woodGone = at(w) === undefined && !W._crackMeshes.has(w.k);
+
+  // Wood with a pickaxe: one swing fells it.
+  S.inv[0] = { id: "pickaxe", count: 1 }; document.querySelectorAll("#hotbar .slot")[0].click();
+  const w2 = place("wood");
+  await mine();
+  const woodOneWithPick = at(w2) === undefined;
+
+  // Stone with the STONE pickaxe: cracks on the first swing, mined in two.
+  S.inv[0] = { id: "stone_pickaxe", count: 1 }; document.querySelectorAll("#hotbar .slot")[0].click();
+  const st = place("stone");
+  await mine();
+  const stoneCracked = at(st) === "stone" && W.mineDamage.get(st.k) === 1;
+  await mine();
+  const stoneGoneInTwo = at(st) === undefined;
+
+  // Bare hands still can't mine stone at all — the pickaxe rule is unchanged.
+  S.inv[0] = null; document.querySelectorAll("#hotbar .slot")[0].click();
+  const st2 = place("stone");
+  await mine();
+  const handRefused = at(st2) === "stone" && !W.mineDamage.get(st2.k);
+  W.setBlock(st2.bx, st2.by, st2.bz, null);
+  W.animals = savedAnimals;
+  return { woodCracked, woodGone, woodOneWithPick, stoneCracked, stoneGoneInTwo, handRefused };
+});
+check("a bare-hand punch only cracks wood (crack overlay shows)", cracks.woodCracked);
+check("the second punch fells it and clears the crack", cracks.woodGone);
+check("a pickaxe fells wood in a single swing", cracks.woodOneWithPick);
+check("the stone pickaxe cracks stone in one hit, mines it in two", cracks.stoneCracked && cracks.stoneGoneInTwo);
+check("stone still can't be mined bare-handed", cracks.handRefused);
+
 // --- Smelting iron ingots with coal fuel yields steel ---
 const smelt = await page.evaluate(() => {
   const S = window.Game.S, G = window.Game, FUR = S.furnace;

@@ -1574,6 +1574,21 @@
       return;
     }
 
+    // Multi-hit mining: sturdy blocks crack before they break. Wood takes two
+    // bare-handed punches (one with any pickaxe); stone & ores take three
+    // swings of the wooden pickaxe — the crack spreading with each hit — or
+    // two with the stone pickaxe. Anything else still breaks in one.
+    const heldId = selectedSlot() ? selectedSlot().id : null;
+    const needed = Game.hitsToMine(id, heldId);
+    if (needed > 1) {
+      const dk = hit.block.x + "," + hit.block.y + "," + hit.block.z;
+      const done = (S.world.mineDamage.get(dk) || 0) + 1;
+      if (done < needed) {
+        S.world.setMineDamage(hit.block.x, hit.block.y, hit.block.z, done);
+        return;
+      }
+    }
+
     // A broken chest spills its contents back to you.
     if (id === "chest") dumpChest(hit.block);
 

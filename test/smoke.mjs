@@ -379,15 +379,24 @@ check("diamond ore sits in the crosshair", diamondAim.hit
   && diamondAim.hit.block.x === diamondAim.block.x
   && diamondAim.hit.block.y === diamondAim.block.y
   && diamondAim.hit.block.z === diamondAim.block.z);
-await page.evaluate(() => document.getElementById("btn-mine").click());
-await page.waitForTimeout(60);
-const diamondMined = await page.evaluate((cell) => {
-  const S = window.Game.S, W = S.world;
-  return { gone: W.blocks.get(cell.x + "," + cell.y + "," + cell.z) !== "diamond_ore",
-    diamonds: S.inv.reduce((n, s) => n + (s && s.id === "diamond_ore" ? s.count : 0), 0) };
-}, diamondAim.block);
-check("a pickaxe mines diamond ore", diamondMined.gone);
-check("mining diamond ore drops a diamond", diamondMined.diamonds === diamondAim.diamonds + 1);
+// Ore takes THREE swings of the wooden pickaxe, cracking along the way.
+const swing = async () => {
+  await page.evaluate(() => document.getElementById("btn-mine").click());
+  await page.waitForTimeout(60);
+  return page.evaluate((cell) => {
+    const S = window.Game.S, W = S.world;
+    const k = cell.x + "," + cell.y + "," + cell.z;
+    return { there: W.blocks.get(k) === "diamond_ore", damage: W.mineDamage.get(k) || 0,
+      diamonds: S.inv.reduce((n, s) => n + (s && s.id === "diamond_ore" ? s.count : 0), 0) };
+  }, diamondAim.block);
+};
+const hit1 = await swing();
+const hit2 = await swing();
+const hit3 = await swing();
+check("one pickaxe swing only cracks diamond ore", hit1.there && hit1.damage === 1);
+check("a second swing cracks it further", hit2.there && hit2.damage === 2);
+check("the third swing mines it", !hit3.there);
+check("mining diamond ore drops a diamond", hit3.diamonds === diamondAim.diamonds + 1);
 
 // --- Ladders: stand at the foot of a ladder, hold forward, and climb up ---
 const climb = await page.evaluate(async () => {

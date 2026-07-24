@@ -394,6 +394,25 @@ window.Game = window.Game || {};
   // Any pickaxe can mine stone & ores.
   Game.isPickaxe = (id) => id === "pickaxe" || id === "stone_pickaxe";
 
+  // ---- Multi-hit mining ------------------------------------------
+  // Sturdy blocks crack before they break. How many Mine taps a block takes
+  // depends on what's in your hand:
+  //  - Wood blocks: 2 bare-handed punches (a crack shows after the first),
+  //    or just 1 swing with any pickaxe.
+  //  - Stone & ores: 3 swings of the wooden pickaxe (the crack spreads with
+  //    each hit), or 2 with the sturdier stone pickaxe. A pickaxe is still
+  //    REQUIRED to mine them at all — that rule is unchanged.
+  //  - Everything else still breaks in a single hit.
+  const WOOD_BLOCKS = ["wood", "dark_wood", "planks", "dark_planks",
+    "wood_red", "wood_blue", "wood_green", "wood_yellow"];
+  const ROCK_BLOCKS = ["stone", "sandstone", "coal_ore", "iron_ore", "gold_ore",
+    "redstone_ore", "diamond_ore", "emerald_ore", "netherite_ore"];
+  Game.hitsToMine = function (id, held) {
+    if (WOOD_BLOCKS.indexOf(id) !== -1) return Game.isPickaxe(held) ? 1 : 2;
+    if (ROCK_BLOCKS.indexOf(id) !== -1) return held === "stone_pickaxe" ? 2 : 3;
+    return 1;
+  };
+
   Game.itemName = (id) => (Game.ItemDefs[id] ? Game.ItemDefs[id].name : id);
   Game.itemDef = (id) => Game.ItemDefs[id];
   Game.MAX_STACK = 99;
