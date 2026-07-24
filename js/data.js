@@ -96,6 +96,7 @@ window.Game = window.Game || {};
     grass:        { name: "Grass Block", top: 0x6abe46, side: 0x7d6a3f, bottom: 0x73553a, tool: "hand", drop: "grass" },
     dirt:         { name: "Dirt",        all: 0x7d5a36, tool: "hand", drop: "dirt" },
     sand:         { name: "Sand",        all: 0xe3d8a3, tool: "hand", drop: "sand" },
+    sandstone:    { name: "Sandstone",   all: 0xdbc98c, top: 0xe7d9a4, bottom: 0xcbb87a, tool: "pickaxe", drop: "sandstone" },
     stone:        { name: "Stone",       all: 0x8a8a8d, tool: "pickaxe", drop: "stone" },
     water:        { name: "Water",       all: 0x2f6fd8, top: 0x4f8ff0, tool: "hand", drop: null, solid: false },
     wood:         { name: "Wood",        top: 0x9c7a48, side: 0x6f5230, bottom: 0x9c7a48, tool: "hand", drop: "wood", harvestOnTap: true },
@@ -291,9 +292,9 @@ window.Game = window.Game || {};
   Game.ItemDefs.eye_of_ender = { name: "Eye of Ender", emoji: "🧿", placeable: false,
     desc: "Tap an empty End Portal Frame socket to set it in. All 8 light the portal to The End; tap one to take it back out." };
   // The three keys, each opening one locked house door.
-  Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door of the second house." };
-  Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door of the third house." };
-  Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the locked door of the fourth house." };
+  Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door at the yellow brick road's second stop." };
+  Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door at the yellow brick road's third stop." };
+  Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the door to the End Portal's room." };
   Game.ItemDefs.iron_ingot = { name: "Iron Ingot", emoji: "🔩", placeable: false, desc: "Smelted iron. Craft armour, steel and more." };
   Game.ItemDefs.gold_ingot = { name: "Gold Ingot", swatch: 0xe6c34a, swatchSide: 0xc9a52f, placeable: false, desc: "Smelted from gold ore. Shiny!" };
   Game.ItemDefs.redstone = { name: "Redstone", emoji: "🔴", placeable: false, desc: "Smelted from redstone ore." };
@@ -376,6 +377,7 @@ window.Game = window.Game || {};
     redstone_ore: "Smelt it in a furnace to get redstone.",
     diamond_ore: "Smelt it in a furnace to get a diamond.",
     sugarcane: "Craft three into paper at a crafting table.",
+    sandstone: "Carved desert stone — what the desert temple is built from.",
     dark_wood: "Shadowy wood from the roofed forest. Craft it into dark planks.",
     dark_planks: "Dark planks — what the woodland mansion is built from.",
     dark_leaves: "The thick canopy of the roofed forest.",

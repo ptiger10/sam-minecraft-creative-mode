@@ -564,6 +564,23 @@
         H[x][z] = Math.max(2, Math.min(C.MAX_Y - 6, height(x, z)));
       }
     }
+    // The snowy region rises into proper mountains: a broad cone of extra
+    // height peaks near the igloo and fades out gently, so the road climbs
+    // real slopes (walkable ones) instead of hitting a sheer cliff.
+    if (!this.legacy) {
+      const sa = this._biomeAnchors.find((a) => a.b === "snow");
+      const mtn = Game.makeNoise(this.seed ^ 0x5c0e77, 7, 444);
+      const RAD = 26;
+      for (let x = 0; x < C.WORLD; x++) {
+        for (let z = 0; z < C.WORLD; z++) {
+          const d = Math.hypot(x - sa.x, z - sa.z);
+          if (d >= RAD) continue;
+          const lift = (1 - d / RAD) * (5 + mtn(x, z) * 4);
+          H[x][z] = Math.min(C.MAX_Y - 6, H[x][z] + Math.round(lift));
+        }
+      }
+    }
+
     // Stamp a few deliberate watering holes into the heightmap so every world
     // gets some surface water (an oasis or two even in the dry desert).
     this._holes = new Set();
@@ -664,39 +681,16 @@
   };
 
   // ---- Biomes ----------------------------------------------------
-  // New worlds are a patchwork of biomes painted by two slow noise fields
-  // (temperature picks snow / desert, moisture picks roofed forest), so walking
-  // in any direction eventually crosses into somewhere that looks different.
+  // The expanded worlds are one long journey: the yellow brick road leads from
+  // the forest into the desert, up into the snowy mountains, and finally into
+  // the roofed forest where the woodland mansion hides. Each region's exact
+  // terrain is random (per seed), but the ORDER of the biomes never changes.
   World.prototype.setupBiomes = function () {
     if (this.legacy) return; // old worlds are one biome throughout
-    const temp = Game.makeNoise(this.seed ^ 0x7e39a1, 23, 111);
-    const moist = Game.makeNoise(this.seed ^ 0x30157e, 19, 222);
-    const raw = (x, z) => {
-      const t = temp(x, z);
-      if (t < 0.33) return "snow";
-      if (t > 0.70) return "desert";
-      return moist(x, z) > 0.60 ? "roofed" : "forest";
-    };
-    this._rawBiome = raw;
 
-    // Shift the whole biome map (deterministically) until the spawn clearing
-    // sits in the biome the player picked on the title screen.
-    const sc = Math.floor(C.WORLD / 2);
-    const want = this.biome === "desert" ? "desert" : "forest";
-    const samples = [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8]];
-    this._biomeOff = { x: 0, z: 0 };
-    for (let k = 0; k < 600; k++) {
-      const ox = Math.floor(Game.hash(this.seed ^ 0x0ff5e7, k, 0, 0) * 4096);
-      const oz = Math.floor(Game.hash(this.seed ^ 0x0ff5e7, k, 1, 0) * 4096);
-      if (samples.every(([dx, dz]) => raw(sc + dx + ox, sc + dz + oz) === want)) {
-        this._biomeOff = { x: ox, z: oz };
-        break;
-      }
-    }
-
-    // One roofed-forest grove is guaranteed — the woodland mansion's home. It
-    // takes one of the eight ring anchor spots (see ringSlots); the settlements
-    // later take four spots at least two ring-steps away, so nothing collides.
+    // The roofed-forest grove — the woodland mansion's home and the journey's
+    // final destination — takes one of the eight ring anchor spots (see
+    // ringSlots); the three settlements take the spots arcing around to it.
     const slots = this.ringSlots();
     const gi = Math.floor(Game.hash(this.seed ^ 0x9a05e, 1, 2, 3) * 8);
     this._grove = { x: slots[gi].x, z: slots[gi].z, r: 15, slot: gi };
@@ -732,29 +726,43 @@
     const rng = Game.mulberry32(this.seed ^ 0x517e5);
     const cheb = (ax, az, bx, bz) => Math.max(Math.abs(ax - bx), Math.abs(az - bz));
     const clamp = (v) => Math.max(9, Math.min(C.WORLD - 10, v));
-    // The grove owns one ring slot; the settlements take four of the five
-    // slots that sit at least two ring-steps away — so the mansion always has
-    // breathing room. One slot is skipped at random and the walk direction
-    // flips at random, so every world's journey arcs differently.
+    // The journey arcs around the ring toward the mansion's grove: the forest
+    // village sits opposite the grove, then the desert temple and the igloo
+    // step around to it. The walk direction flips at random (and every stop
+    // jitters off its slot), so each world's journey bends differently.
     const slots = this.ringSlots();
     const gi = this._grove.slot;
-    const avail = [2, 3, 4, 5, 6].map((o) => (gi + o) % 8);
-    avail.splice(Math.floor(rng() * avail.length), 1);
-    if (rng() < 0.5) avail.reverse();
+    const dir = rng() < 0.5 ? 1 : -1;
     const plan = [];
-    avail.forEach((si, i) => {
-      const s = slots[si];
+    [4, 3, 2].forEach((step, i) => {
+      const s = slots[(gi + dir * step + 8) % 8];
       let cx = clamp(s.x), cz = clamp(s.z);
       for (let t = 0; t < 20; t++) {                 // jitter, but stay spread out
         const tx = clamp(s.x + Math.floor(rng() * 7) - 3);
         const tz = clamp(s.z + Math.floor(rng() * 7) - 3);
-        if (plan.some((p) => cheb(tx, tz, p.cx, p.cz) < 17)) continue;
+        if (plan.some((p) => cheb(tx, tz, p.cx, p.cz) < 15)) continue;
+        if (cheb(tx, tz, this._grove.x, this._grove.z) < 17) continue;
         cx = tx; cz = tz;
         break;
       }
       plan.push({ cx: cx, cz: cz, level: i + 1 });
     });
     this._sitePlan = plan;
+
+    // Paint the biomes: every column belongs to the nearest journey anchor —
+    // forest around the spawn and the first village, desert around the temple,
+    // snow around the igloo, roofed forest around the mansion's grove.
+    this._biomeAnchors = [
+      { x: sc, z: sc, b: "forest" },
+      { x: plan[0].cx, z: plan[0].cz, b: "forest" },
+      { x: plan[1].cx, z: plan[1].cz, b: "desert" },
+      { x: plan[2].cx, z: plan[2].cz, b: "snow" },
+      { x: this._grove.x, z: this._grove.z, b: "roofed" }
+    ];
+    // Warp fields wobble the borders so the regions meet in wandering,
+    // organic edges rather than dead-straight lines.
+    this._warpX = Game.makeNoise(this.seed ^ 0x77a591, 11, 331);
+    this._warpZ = Game.makeNoise(this.seed ^ 0x77a592, 11, 332);
   };
 
   // Which biome does this column belong to?
@@ -762,7 +770,15 @@
     if (this.legacy) return this.biome; // uniform, exactly like the old worlds
     const g = this._grove;
     if (g && Math.max(Math.abs(x - g.x), Math.abs(z - g.z)) <= g.r) return "roofed";
-    return this._rawBiome(x + this._biomeOff.x, z + this._biomeOff.z);
+    const wx = x + (this._warpX(x, z) - 0.5) * 12;
+    const wz = z + (this._warpZ(x, z) - 0.5) * 12;
+    let best = "forest", bd = Infinity;
+    for (const a of this._biomeAnchors) {
+      const dx = wx - a.x, dz = wz - a.z;
+      const d = dx * dx + dz * dz;
+      if (d < bd) { bd = d; best = a.b; }
+    }
+    return best;
   };
 
   // A few skeleton archers, hidden away by day. They wake and roam at night.
@@ -1379,6 +1395,43 @@
   }
   World.makeVillager = makeVillager;
 
+  // The vindicator: the woodland mansion's grim guard. Built like a villager
+  // but in a dark tunic, with a heavier brow and an iron axe in his fist. By
+  // day he stands watch before the mansion doors; at night he goes inside to
+  // sleep on one of the beds — the only time to slip past him.
+  function makeVindicator() {
+    const group = new THREE.Group();
+    const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const tunic = 0x3c4148, legsC = 0x24262b, head = 0xbfae96, nose = 0x9a8a72;
+    [-0.12, 0.12].forEach((dx) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.2), mat(legsC));
+      leg.position.set(dx, 0.25, 0); group.add(leg);
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.32), mat(tunic));
+    body.position.y = 0.85; group.add(body);
+    [-0.32, 0.32].forEach((dx) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.18), mat(tunic));
+      arm.position.set(dx, 0.85, 0); group.add(arm);
+    });
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), mat(head));
+    h.position.y = 1.42; group.add(h);
+    const n = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.24, 0.18), mat(nose));
+    n.position.set(0, 1.38, 0.26); group.add(n);
+    // A heavy, angry brow.
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.1, 0.06), mat(0x2a2018));
+    brow.position.set(0, 1.53, 0.22); group.add(brow);
+    // The iron axe, gripped at his right side: a wooden haft with a broad head.
+    const haft = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.72, 0.09), mat(0x6f5230));
+    haft.position.set(0.42, 0.78, 0.22); group.add(haft);
+    const axeHead = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.08), mat(0xc7ccd4));
+    axeHead.position.set(0.52, 1.1, 0.22); group.add(axeHead);
+    const axeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), mat(0xc7ccd4));
+    axeEdge.position.set(0.63, 1.1, 0.22); group.add(axeEdge);
+    group.userData.kind = "vindicator";
+    return group;
+  }
+  World.makeVindicator = makeVindicator;
+
   // A ghast: a big pale floating jelly-cube with a sad face and nine dangling
   // tentacles. It drifts overhead in the Nether and spits fireballs at you.
   function makeGhast() {
@@ -1701,25 +1754,179 @@
   };
 
   // ================================================================
-  //  The quest: four settlements joined by a yellow brick road.
+  //  The quest: settlements joined by a yellow brick road. Legacy
+  //  worlds keep their original four walled settlements; expanded
+  //  worlds walk a biome journey — the forest village, the desert
+  //  temple, the igloo, and finally the woodland mansion's grove.
   // ================================================================
   World.prototype.buildQuestWorld = function () {
     const sc = Math.floor(C.WORLD / 2); // spawn / world centre
-    // Four settlement centres spread around the map (see planQuestSites), each
-    // more elaborate than the last.
     const sites = this._sitePlan;
     this.questSites = sites;
+    this.questVillagers = [];
+    this.questPortalExit = null;
 
-    // The yellow brick road starts at the spawn and links the settlements in
-    // order: spawn -> 1 -> 2 -> 3 -> 4.
+    if (this.legacy) {
+      // The road first, then the four settlements — exactly the old order.
+      this.layRoad(sc, sc, sites[0].cx, sites[0].cz, sites);
+      for (let i = 0; i < sites.length - 1; i++) {
+        this.layRoad(sites[i].cx, sites[i].cz, sites[i + 1].cx, sites[i + 1].cz, sites);
+      }
+      sites.forEach((s, i) => this.buildQuestSettlement(s.cx, s.cz, s.level, i + 1));
+      return;
+    }
+
+    // Expanded journey: build the stops first (they sculpt the ground around
+    // themselves), THEN lay the road over the finished terrain so it always
+    // meets each doorstep cleanly — and carries on past the igloo to the
+    // mansion's grove.
+    this.buildQuestSettlement(sites[0].cx, sites[0].cz, 1, 1); // the forest village
+    this.buildDesertTemple(sites[1].cx, sites[1].cz);
+    this.buildIgloo(sites[2].cx, sites[2].cz);
     this.layRoad(sc, sc, sites[0].cx, sites[0].cz, sites);
     for (let i = 0; i < sites.length - 1; i++) {
       this.layRoad(sites[i].cx, sites[i].cz, sites[i + 1].cx, sites[i + 1].cz, sites);
     }
+    this.layRoad(sites[2].cx, sites[2].cz, this._grove.x, this._grove.z, sites);
+  };
 
-    this.questVillagers = [];
-    this.questPortalExit = null;
-    sites.forEach((s, i) => this.buildQuestSettlement(s.cx, s.cz, s.level, i + 1));
+  // The desert settlement: a stepped sandstone temple (a little ziggurat) with
+  // red-clay corners and apex. Its door is locked (Bronze Key); the desert
+  // villager inside hands over the Silver Key, and a treasure chest waits.
+  World.prototype.buildDesertTemple = function (cx, cz) {
+    const R = 5;
+    const floorY = this.surfaceY(cx, cz);
+    const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
+
+    // Level the site and pave a sandstone plaza.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+        this.fillColumn(x, z, Math.max(0, floorY - 1), floorY - 1, "sand");
+        this.blocks.set(World.key(x, floorY, z), "sandstone");
+      }
+    }
+
+    // The stepped pyramid: hollow square rings that shrink as they rise, then
+    // a solid cap — so the inside is one tall shady chamber.
+    for (let L = 0; L <= 4; L++) {
+      const half = R - L;
+      const y = floorY + 1 + L;
+      for (let dx = -half; dx <= half; dx++) {
+        for (let dz = -half; dz <= half; dz++) {
+          if (half > 1 && Math.max(Math.abs(dx), Math.abs(dz)) !== half) continue;
+          const x = cx + dx, z = cz + dz;
+          if (!inBounds(x, z)) continue;
+          const corner = Math.abs(dx) === half && Math.abs(dz) === half;
+          this.blocks.set(World.key(x, y, z), corner && L === 0 ? "red_clay" : "sandstone");
+        }
+      }
+    }
+    this.blocks.set(World.key(cx, floorY + 6, cz), "red_clay"); // the apex
+
+    // The entrance tunnel on the -z side: a locked door, then a clear walk in
+    // under a little sandstone lintel.
+    for (let z = cz - R; z <= cz - 2; z++) {
+      this.blocks.delete(World.key(cx, floorY + 1, z));
+      this.blocks.delete(World.key(cx, floorY + 2, z));
+    }
+    this.blocks.set(World.key(cx, floorY + 1, cz - R), "locked_door_2");
+    this.blocks.set(World.key(cx, floorY + 3, cz - R + 1), "sandstone");
+
+    // Torches and a treasure chest inside.
+    this.blocks.set(World.key(cx + 2, floorY + 1, cz + 2), "torch");
+    this.blocks.set(World.key(cx - 2, floorY + 1, cz - 2), "torch");
+    this.templeChest = { x: cx - 2, y: floorY + 1, z: cz + 2 };
+    this.blocks.set(World.key(this.templeChest.x, this.templeChest.y, this.templeChest.z), "chest");
+
+    // The desert villager, keeper of the Silver Key.
+    const v = makeVillager();
+    v.position.set(cx + 0.5, floorY + 1, cz + 0.5);
+    v.userData.home = { x: cx + 0.5, z: cz + 0.5 };
+    v.userData.roam = 1.8;
+    v.userData.floorY = floorY + 1;
+    v.userData.dir = 0;
+    v.userData.timer = 2;
+    v.userData.moving = false;
+    v.userData.house = 2;
+    v.userData.quest = { gives: "key3" };
+    this.questVillagers.push(v);
+    this.animals.push(v);
+  };
+
+  // The snowy settlement: an igloo — a blocky snow dome with ice windows. Its
+  // door is locked (Silver Key), and the Nether portal glows at the back
+  // inside, so the way to the Nether runs through the snowy mountains.
+  World.prototype.buildIgloo = function (cx, cz) {
+    const R = 5;
+    const floorY = this.surfaceY(cx, cz);
+    const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
+
+    // Level the site; a snowy floor all around.
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -R; dz <= R; dz++) {
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        for (let y = floorY + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+        this.fillColumn(x, z, Math.max(0, floorY - 1), floorY - 1, "dirt");
+        this.blocks.set(World.key(x, floorY, z), "snow");
+      }
+    }
+    // Terrace the mountainside around the plaza so the walk up (and back out)
+    // is never more than a one-block step, whichever way you approach.
+    for (let dx = -R - 3; dx <= R + 3; dx++) {
+      for (let dz = -R - 3; dz <= R + 3; dz++) {
+        const ring = Math.max(Math.abs(dx), Math.abs(dz)) - R;
+        if (ring < 1) continue;
+        const x = cx + dx, z = cz + dz;
+        if (!inBounds(x, z)) continue;
+        for (let y = floorY + ring + 1; y <= C.MAX_Y + 3; y++) this.blocks.delete(World.key(x, y, z));
+      }
+    }
+
+    // The dome, layer by layer: two wall rings, a stepping-in ring, and a cap.
+    const layers = [
+      { dy: 1, min: 3.2, max: 4.4 },
+      { dy: 2, min: 3.2, max: 4.4 },
+      { dy: 3, min: 2.2, max: 3.6 },
+      { dy: 4, min: -1, max: 2.6 }
+    ];
+    layers.forEach((L) => {
+      for (let dx = -4; dx <= 4; dx++) {
+        for (let dz = -4; dz <= 4; dz++) {
+          const r = Math.hypot(dx, dz);
+          if (r > L.max || r <= L.min) continue;
+          const x = cx + dx, z = cz + dz;
+          if (inBounds(x, z)) this.blocks.set(World.key(x, floorY + L.dy, z), "snow");
+        }
+      }
+    });
+    // Ice windows on the east and west walls.
+    this.blocks.set(World.key(cx - 4, floorY + 2, cz), "ice");
+    this.blocks.set(World.key(cx + 4, floorY + 2, cz), "ice");
+    // The locked front door on the -z side, with headroom cleared above it.
+    this.blocks.delete(World.key(cx, floorY + 2, cz - 4));
+    this.blocks.set(World.key(cx, floorY + 1, cz - 4), "locked_door_3");
+    // A torch inside, and the Nether portal glowing at the back.
+    this.blocks.set(World.key(cx + 2, floorY + 1, cz - 1), "torch");
+    this.buildPortal(cx, floorY + 1, cz + 2);
+    this.questPortalExit = { x: cx + 0.5, y: floorY + 1, z: cz + 0.5 };
+
+    // The igloo's villager — a cosy trader with no key to give; the way
+    // onward is the portal behind them (and the mansion beyond the snow).
+    const v = makeVillager();
+    v.position.set(cx - 1.5, floorY + 1, cz - 0.5);
+    v.userData.home = { x: cx - 1.5, z: cz - 0.5 };
+    v.userData.roam = 1.4;
+    v.userData.floorY = floorY + 1;
+    v.userData.dir = 0;
+    v.userData.timer = 3;
+    v.userData.moving = false;
+    v.userData.house = 3;
+    this.questVillagers.push(v);
+    this.animals.push(v);
   };
 
   // True if (x,z) sits within (or just outside) a settlement's footprint.
@@ -1899,6 +2106,7 @@
       v.position.set(cx + 0.5, floorY + 1, cz + 0.5);
       v.userData.home = { x: cx + 0.5, z: cz + 0.5 };
       v.userData.roam = hr - 1.2;                 // amble inside the house only
+      v.userData.floorY = floorY + 1;             // stand on the floor, not the roof
       v.userData.dir = 0;
       v.userData.timer = 1 + num;
       v.userData.moving = false;
@@ -1986,6 +2194,13 @@
     const top2 = slabY + 4;                     // top of the upper walls
     const wall = "dark_planks", beam = "dark_wood";
     const inBounds = (x, z) => x >= 1 && z >= 1 && x < C.WORLD - 1 && z < C.WORLD - 1;
+    // The whole mansion is ancient magic: every block it's built from is
+    // protected, so the only ways in are the front doors (past the
+    // vindicator) — never a pickaxe.
+    const set = (x, y, z, id) => {
+      this.blocks.set(World.key(x, y, z), id);
+      this.markProtected(x, y, z);
+    };
 
     // 1) Clear and level the grounds: the footprint plus a 2-block lawn.
     for (let dx = -HX - 2; dx <= HX + 2; dx++) {
@@ -1996,7 +2211,8 @@
         // Bridge any dip between the real ground and the mansion floor.
         for (let y = this.surfaceY(x, z) + 1; y < floorY; y++) this.blocks.set(World.key(x, y, z), "dirt");
         const inside = Math.abs(dx) <= HX && Math.abs(dz) <= HZ;
-        this.blocks.set(World.key(x, floorY, z), inside ? "dark_planks" : "dark_grass");
+        if (inside) set(x, floorY, z, "dark_planks");     // sealed floor — no tunnelling in
+        else this.blocks.set(World.key(x, floorY, z), "dark_grass");
       }
     }
 
@@ -2011,19 +2227,19 @@
         if (doorway) {
           // Double doors with a windowed centre door, clear space above, then a
           // dark-wood lintel and the wall carrying on over the top.
-          this.blocks.set(World.key(x, y1, z), dx === 0 ? "door_window" : "door");
-          this.blocks.set(World.key(x, y1 + 2, z), beam);   // lintel (y1+1 stays open)
-          for (let y = y1 + 3; y <= top2; y++) this.blocks.set(World.key(x, y, z), wall);
+          set(x, y1, z, dx === 0 ? "door_window" : "door");
+          set(x, y1 + 2, z, beam);                          // lintel (y1+1 stays open)
+          for (let y = y1 + 3; y <= top2; y++) set(x, y, z, wall);
           continue;
         }
         const corner = Math.abs(dx) === HX && Math.abs(dz) === HZ;
         const isBeam = corner ||
           (Math.abs(dx) === HX && dz % 4 === 0) ||
           (Math.abs(dz) === HZ && dx % 4 === 0);
-        for (let y = y1; y <= top2; y++) this.blocks.set(World.key(x, y, z), isBeam ? beam : wall);
+        for (let y = y1; y <= top2; y++) set(x, y, z, isBeam ? beam : wall);
         if (!isBeam) {
-          this.blocks.set(World.key(x, y1 + 1, z), "glass");    // ground-floor window
-          this.blocks.set(World.key(x, slabY + 2, z), "glass"); // upstairs window
+          set(x, y1 + 1, z, "glass");    // ground-floor window
+          set(x, slabY + 2, z, "glass"); // upstairs window
         }
       }
     }
@@ -2032,12 +2248,12 @@
     for (let dx = -HX + 1; dx <= HX - 1; dx++) {
       for (let dz = -HZ + 1; dz <= HZ - 1; dz++) {
         if (dx === HX - 1 && dz >= -2 && dz <= 1) continue; // stairwell stays open
-        this.blocks.set(World.key(cx + dx, slabY, cz + dz), "dark_planks");
+        set(cx + dx, slabY, cz + dz, "dark_planks");
       }
     }
     // A straight flight of stairs up the +x wall (walk straight up, no jumps).
     for (let i = 0; i <= 4; i++) {
-      this.blocks.set(World.key(cx + HX - 1, y1 + i, cz - 2 + i), "stairs");
+      set(cx + HX - 1, y1 + i, cz - 2 + i, "stairs");
     }
 
     // 4) A steep stepped roof, capped with a dark-wood ridge beam.
@@ -2048,34 +2264,74 @@
         for (let dz = -zHalf; dz <= zHalf; dz++) {
           const x = cx + dx, z = cz + dz;
           if (!inBounds(x, z)) continue;
-          const mat = (L === 3 && dz === 0) ? beam : wall;
-          this.blocks.set(World.key(x, top2 + 1 + L, z), mat);
+          set(x, top2 + 1 + L, z, (L === 3 && dz === 0) ? beam : wall);
         }
       }
     }
 
-    // 5) Furnishings: torches in every corner of both floors, a work corner
+    // 5) The portal room: the second floor's far end is walled off, and the
+    //    DORMANT End Portal waits inside behind a locked door. Only the Gold
+    //    Key — a gift from the mansion's own villager — opens it.
+    const px = cx - 4;
+    for (let dz = -HZ + 1; dz <= HZ - 1; dz++) {
+      const z = cz + dz;
+      if (dz === 0) {
+        set(px, slabY + 1, z, "locked_door_4");             // slabY+2 stays open
+        for (let y = slabY + 3; y <= top2; y++) set(px, y, z, wall);
+      } else {
+        for (let y = slabY + 1; y <= top2; y++) set(px, y, z, wall);
+      }
+    }
+    this.buildEndGate(cx - 6, slabY + 1, cz);
+
+    // 6) Furnishings: torches in every corner of both floors, a work corner
     //    with a crafting table and furnace, beds, and the two treasure chests.
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
-      this.blocks.set(World.key(cx + sx * (HX - 2), y1, cz + sz * (HZ - 2)), "torch");
-      this.blocks.set(World.key(cx + sx * (HX - 2), slabY + 1, cz + sz * (HZ - 2)), "torch");
+      set(cx + sx * (HX - 2), y1, cz + sz * (HZ - 2), "torch");
+      set(cx + sx * (HX - 2), slabY + 1, cz + sz * (HZ - 2), "torch");
     });
-    this.blocks.set(World.key(cx - 3, y1, cz + HZ - 2), "crafting_table");
-    this.blocks.set(World.key(cx - 2, y1, cz + HZ - 2), "furnace");
-    this.blocks.set(World.key(cx + 2, y1, cz + HZ - 2), "bed");
-    this.blocks.set(World.key(cx + 4, y1, cz + HZ - 2), "bed");
+    set(cx - 3, y1, cz + HZ - 2, "crafting_table");
+    set(cx - 2, y1, cz + HZ - 2, "furnace");
+    set(cx + 2, y1, cz + HZ - 2, "bed");
+    set(cx + 4, y1, cz + HZ - 2, "bed");
     // Torches flanking the front doors outside, so the mansion glows at night.
     this.blocks.set(World.key(cx - 2, y1, cz - HZ - 1), "torch");
     this.blocks.set(World.key(cx + 2, y1, cz - HZ - 1), "torch");
 
     this.mansionChests = [];
     const c1 = { x: cx - HX + 2, y: y1, z: cz + HZ - 2 };        // ground floor
-    const c2 = { x: cx - HX + 2, y: slabY + 1, z: cz - HZ + 2 }; // upstairs
+    const c2 = { x: cx - HX + 2, y: slabY + 1, z: cz - HZ + 2 }; // in the portal room
     [c1, c2].forEach((c) => {
-      this.blocks.set(World.key(c.x, c.y, c.z), "chest");
+      set(c.x, c.y, c.z, "chest");
       this.mansionChests.push(c);
     });
     this.mansion = { x: cx, y: floorY, z: cz };
+
+    // 7) The LAST villager of the quest lives on the mansion's second floor,
+    //    and gives away the Gold Key that opens the portal room beside him.
+    const v = makeVillager();
+    v.position.set(cx + 2.5, slabY + 1, cz + 0.5);
+    v.userData.home = { x: cx + 2.5, z: cz + 0.5 };
+    v.userData.roam = 2;
+    v.userData.floorY = slabY + 1;
+    v.userData.dir = 0;
+    v.userData.timer = 2;
+    v.userData.moving = false;
+    v.userData.house = 4;
+    v.userData.quest = { gives: "key4" };
+    this.questVillagers.push(v);
+    this.animals.push(v);
+
+    // 8) The vindicator: stands guard before the front doors all day, and at
+    //    night goes in to sleep on one of the beds.
+    const vin = makeVindicator();
+    vin.userData.guardPost = { x: cx + 0.5, y: y1, z: cz - HZ - 1.5 };
+    vin.userData.bedSpot = { x: cx + 2.5, y: y1 + 0.55, z: cz + HZ - 2 + 0.4 };
+    vin.userData.asleep = false;
+    vin.position.set(vin.userData.guardPost.x, vin.userData.guardPost.y, vin.userData.guardPost.z);
+    vin.rotation.y = Math.PI;                     // face the path up to the doors
+    this.vindicator = vin;
+    this.animals.push(vin);
   };
 
   // Try to light a Nether portal from an obsidian block struck with flint &
@@ -2643,6 +2899,7 @@
       if (Game.S && Game.S.riding === a) continue; // the rider drives this one
       if (a.userData.kind === "monkey") { this.updateMonkey(a, dt); continue; }
       if (a.userData.kind === "villager") { this.updateVillager(a, dt); continue; }
+      if (a.userData.kind === "vindicator") { this.updateVindicator(a); continue; }
       // Ghasts, piglins and the wither are driven by updateNether.
       if (a.userData.kind === "ghast" || a.userData.kind === "piglin" ||
           a.userData.kind === "wither") continue;
@@ -2789,6 +3046,23 @@
     });
   };
 
+  // The vindicator guards the mansion's front doors by day; at nightfall he
+  // heads in to sleep flat on one of the beds (and at dawn he's back on
+  // watch). He can't be fought or moved — tap him for a hint instead.
+  World.prototype.updateVindicator = function (a) {
+    const u = a.userData;
+    const night = !!(Game.isNight && Game.isNight());
+    if (u.asleep === night) return;               // nothing changed
+    u.asleep = night;
+    if (night) {
+      a.position.set(u.bedSpot.x, u.bedSpot.y, u.bedSpot.z);
+      a.rotation.set(-Math.PI / 2, 0, 0);         // lying down, axe and all
+    } else {
+      a.position.set(u.guardPost.x, u.guardPost.y, u.guardPost.z);
+      a.rotation.set(0, Math.PI, 0);              // back on watch, facing out
+    }
+  };
+
   // Villagers mostly stand around their settlement, only occasionally taking a
   // slow, short stroll — and never wandering past their roam radius from home.
   World.prototype.updateVillager = function (a, dt) {
@@ -2811,7 +3085,11 @@
         u.dir += Math.PI; u.moving = false; // turn back toward the settlement
       }
     }
-    const sy = this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
+    // Indoor villagers stand on their own floor — surfaceY would count the
+    // roof over their head and slowly hoist them onto it.
+    const sy = (u.floorY !== undefined)
+      ? u.floorY
+      : this.surfaceY(Math.floor(a.position.x), Math.floor(a.position.z)) + 1;
     a.position.y += (sy - a.position.y) * Math.min(1, dt * 8);
   };
 

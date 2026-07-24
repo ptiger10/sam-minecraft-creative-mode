@@ -2,18 +2,18 @@
 
 A kid-friendly open-world sandbox game in the browser, inspired by Minecraft's
 creative mode. Everything is blocky — the world, the trees, the animals and
-you. Each world is a big patchwork of biomes: sunny forests, sandy deserts,
-snowy hills with frozen ponds you can walk across, and a dark **roofed forest**
-hiding a two-storey **woodland mansion** stuffed with treasure — including the
-🗿 **Totem of Undying**, a one-of-a-kind charm that brings you back to life
-once if you would die while carrying it. Finding the mansion is never required
-to win — it's a side adventure with a legendary reward. Punch trees, dig up
+you. The **Expanded World** is one long journey: the 🟨 **yellow brick road**
+leads from the sunny **forest** into the sandy **desert**, up into the **snowy
+mountains**, and finally into the dark **roofed forest** — where a two-storey
+**woodland mansion** guards the way to The End (and treasure like the 🗿
+**Totem of Undying**, a one-of-a-kind charm that brings you back to life once
+if you would die while carrying it). The exact layout is different in every
+world, but the journey's biomes always come in that order. Punch trees, dig up
 ores, craft tools and build whatever you like. 🌳🏜️❄️🏰
 
-The title-screen choice (Forest / Desert) picks the biome you *start* in —
-wander far enough and you'll cross into all the others. Prefer the cosy
-original? **New World — Classic map** starts a fresh world on the old 40×40
-layout, with one biome, the soaring settlement spires and the original
+The title screen offers two ways to play (plus your save slots): **Expanded
+World** — the full biome journey — or **Classic (one biome)**, a fresh world on
+the old cosy 40×40 layout with the soaring settlement spires and the original
 three-key quest. Worlds saved before the big-world update still load exactly
 as they were.
 
@@ -86,7 +86,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
 
 ## ✨ What's in the game
 
-- 🌍 An open, fully blocky world you spawn into — **forest** or **desert**.
+- 🌍 An open, fully blocky world. In the Expanded World you spawn in the
+  **forest**, with the desert, the snowy mountains and the roofed forest
+  waiting further down the road.
 - 👤 First-person view with a blocky character (you can see the item in your hand).
 - 🌳 **Punch trees** to collect wood. Apple trees dangle red apples down low —
   aim the crosshair at one and tap to pick it (even with a block in your hand).
@@ -96,10 +98,10 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   top corner — red for health, tan for food — in keeping with the pixel look.
   Food drips down *slowly* — eat apples or watermelons so you don't starve. If
   your food runs out you start losing health.
-- 🌗 **Day & night.** Every **6 minutes of daylight** is followed by **2
+- 🌗 **Day & night.** Every **3½ minutes of daylight** is followed by **1½
   minutes of night**, when the sky darkens and the world dims — then day
-  returns. After dark the monsters come out: a **🏹 skeleton archer** roams the
-  surface loosing **arrows in random directions**, and **🧟 three zombies**
+  returns. After dark the monsters come out: **🏹 skeleton archers** roam the
+  surface loosing **arrows in random directions**, and **🧟 zombies**
   shamble about at random — **bump into one and it bites you** (a heart's worth).
   All of them **vanish again at daybreak**. Craft and **wear** some armour or a
   shield (see below) and the skeleton's arrows just **bounce off**.
@@ -120,43 +122,47 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   ground animal to climb on and ride it** — then **steer it with the normal
   controls** (drag to look, ⬆ to walk, 🤸 to jump); tap again to hop off. Build a
   **fence** around a field and the animals stay penned inside it.
-- 🧑‍🌾 **Villagers** live in **walled settlements** with torch-topped corner
-  towers, scattered far and wide across the world — follow the **yellow brick
-  road** to find them all. **Tap one to trade** — they take 💚 **emeralds**
-  (smelt emerald ore in a furnace) and sell you paints and other goodies to
-  decorate your house.
-- 🟨 **A four-settlement adventure on a yellow brick road.** A bright **yellow
-  brick road** starts near where you spawn and winds from settlement to
-  settlement — one tucked into each corner of the world, each grander than the
-  last:
-  - The **first villager** trades you a 🗝️ **key** to the **locked house** where
-    the **second villager** lives.
-  - The second villager hands you the **key to the third house** — also locked.
-  - Inside the third house is a 🔥 **portal to the Nether**, a fiery red cavern
+- 🧑‍🌾 **Villagers** live at every stop on the road. **Tap one to trade** —
+  they take 💚 **emeralds** (smelt emerald ore in a furnace) and sell you
+  paints and other goodies to decorate your house.
+- 🟨 **A biome journey on a yellow brick road.** The bright **yellow brick
+  road** starts near where you spawn and winds through every biome in order,
+  with a **biome-appropriate settlement** at each stop:
+  - **The forest village** — a walled starter town with a crafting corner, a
+    melon patch, a stocked chest and a friendly villager who trades you the
+    🗝️ **Bronze Key** to the next stop.
+  - **The desert temple** — a stepped sandstone ziggurat out in the dunes. Its
+    door is locked (the Bronze Key opens it); inside, the desert villager hands
+    over the 🗝️ **Silver Key**, and a treasure chest sweetens the visit.
+  - **The igloo** — up in the **snowy mountains**, behind the Silver Key's
+    locked door. Inside glows a 🔥 **portal to the Nether**, a fiery red cavern
     where **👻 ghasts float overhead and spit fireballs** — a hit costs you
-    **two hearts**, and each ghast only fires **once per visit** (it goes quiet
-    until you leave and come back). Down there a **🐷 piglin** snuffles around
-    the floor: **trade it a gold ingot** and it hands back a random **💎 diamond,
-    💚 emerald, or 🖤 netherite**. The brick **Nether fortress** is a
-    **two-storey keep**: climb the **brick stairs** to the **second floor**,
-    where the loot chest holds the **🧿 8 Eyes of Ender**, plus **netherite,
-    diamonds, emeralds and good building blocks** (glowstone, obsidian, gold).
-    But it's **guarded by 💀 the Wither**
-    — a floating, three-headed, legless menace that **flings wither skulls in
-    random directions**. If a skull hits you, you get the **wither effect**: the
-    screen darkens and you **lose a heart every few seconds for 6 seconds**
+    **two hearts**, and each ghast only fires **once per visit**. Down there a
+    **🐷 piglin** snuffles around the floor: **trade it a gold ingot** and it
+    hands back a random **💎 diamond, 💚 emerald, or 🖤 netherite**. The brick
+    **Nether fortress** is a **two-storey keep**: climb the **brick stairs** to
+    the **second floor**, where the loot chest holds the **🧿 8 Eyes of
+    Ender**, plus **netherite, diamonds, emeralds and good building blocks**
+    (glowstone, obsidian, gold). But it's **guarded by 💀 the Wither** — a
+    floating, three-headed, legless menace that **flings wither skulls in
+    random directions**. If a skull hits you, you get the **wither effect**:
+    the screen darkens and you **lose a heart every few seconds for 6 seconds**
     before it wears off.
-  - The **fourth house isn't locked at all** — its door swings open. Inside
-    stands a **dormant End Portal**: an arch of 8 frame blocks, each with an
-    **empty eye socket**. **Tap a socket while carrying an 🧿 Eye of Ender** to
-    set it in — when the **8th eye clicks into place, the portal lights up**.
-    Tap any eye to **pop it back out** (the portal fades dark again), but the
-    frame itself is ancient magic — **it can never be mined**.
-  - Villagers give their key **only once**. You can **mine your way into
-    the first three houses** if you'd rather not chase the keys — but the
-    **End-portal house is sealed** (walls, roof and floor), so the portal room
-    always stands.
-- ✨ **The End — the finale.** Step through the fourth house's dark, starry
+  - **The woodland mansion** — the road's end, deep in the roofed forest. A
+    🪓 **vindicator stands guard** in front of its doors all day (tap him and
+    you're told to *try coming back when he's asleep*) — at night he goes in to
+    **sleep on one of the beds**, and that's your moment to slip inside. The
+    mansion is **ancient magic — none of it can be mined**. Upstairs lives the
+    **last villager**, who gives you the 🗝️ **Gold Key** to the **locked
+    portal room** beside him. Behind that door waits a **dormant End Portal**:
+    an arch of 8 frame blocks, each with an **empty eye socket**. **Tap a
+    socket while carrying an 🧿 Eye of Ender** to set it in — when the **8th
+    eye clicks into place, the portal lights up**. Tap any eye to **pop it
+    back out** (the portal fades dark again), but the frame can never be mined.
+  - Villagers give their key **only once**. You can **mine your way into the
+    village, the temple and the igloo** if you'd rather not chase the keys —
+    but the **mansion is sealed tight**, so the portal room always stands.
+- ✨ **The End — the finale.** Step through the mansion's dark, starry
   portal into **The End**: a pale island floating in an endless void.
   - A 🐉 **Ender Dragon with glowing purple eyes** wheels overhead and **breathes
     purple fire** at you — but you're handed a suit of **armour** on arrival, so
@@ -268,7 +274,7 @@ js/game.js            ties it together: inventory, crafting, controls, saving, l
 vendor/three.min.js   the Three.js 3D library (bundled so it runs offline)
 test/smoke.mjs        an automated headless browser test
 test/verify-features.mjs  headless tests for the newer gameplay features
-test/verify-quest.mjs     headless tests for the four-settlement Nether quest
+test/verify-quest.mjs     headless tests for the biome-journey quest
 tools/make-icons.mjs  regenerates the app icons from media/icon.svg
 ```
 
@@ -293,8 +299,8 @@ PW_ROOT="$(npm root -g)" node test/verify-features.mjs
 PW_ROOT="$(npm root -g)" node test/verify-quest.mjs
 ```
 
-The smoke test prints a checklist and writes `test/screenshot.png` (forest) and
-`test/screenshot-desert.png` (desert).
+The smoke test prints a checklist and writes `test/screenshot.png` and
+`test/screenshot-expanded.png`.
 
 ---
 

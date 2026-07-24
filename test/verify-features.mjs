@@ -52,8 +52,8 @@ const afterToggle = await page.evaluate(() => window.Game.S.invertLook);
 check("toggling the setting turns inverted look OFF", afterToggle === false);
 await page.click("#btn-invert-look"); // back to default for the rest of the run
 
-// --- Start a forest world ---
-await page.click("#btn-new-forest");
+// --- Start an expanded world ---
+await page.click("#btn-new-expanded");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(300);
 

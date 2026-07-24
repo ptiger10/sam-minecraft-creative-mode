@@ -880,6 +880,11 @@
     if (!animal) return false;
     const kind = animal.userData.kind;
     if (kind === "villager") openTrade(animal);
+    else if (kind === "vindicator") {
+      toast(animal.userData.asleep
+        ? "🤫 Shh! The vindicator is fast asleep on his bed."
+        : "🪓 Try coming back when he's asleep.");
+    }
     else if (kind === "piglin") tradePiglin(animal);
     else if (kind === "wither") toast("💀 The Wither! Keep your distance from its skulls.");
     else if (kind === "skeleton") toast("🏹 A skeleton archer! Armour or a shield blocks its arrows.");
@@ -979,7 +984,9 @@
     if (countItem(keyId) > 0) {
       removeItems({ [keyId]: 1 });
       S.world.setBlock(block.x, block.y, block.z, "door_open");
-      if (houseNum === 4) toast("🔓 The Gold Key opens the fourth house — a portal to The End glows within! ✨");
+      if (houseNum === 4) toast(S.world.legacy
+        ? "🔓 The Gold Key opens the fourth house — a portal to The End glows within! ✨"
+        : "🔓 The Gold Key turns — the End Portal's room is open! ✨");
       else toast("🔓 Unlocked with the " + Game.itemName(keyId) + "!");
     } else {
       toast("🔒 Locked! Trade a villager for the " + Game.itemName(keyId) + ".");
@@ -1119,6 +1126,24 @@
       loot.forEach((it, j) => { arr[j] = it; });
       S.chests[key] = arr;
     });
+  }
+
+  // The desert temple's treasure chest: a little hoard for braving the sands.
+  function prefillTempleChest(world) {
+    const c = world.templeChest;
+    if (!c) return;
+    const key = c.x + "," + c.y + "," + c.z;
+    if (key in S.chests) return;
+    const loot = [
+      { id: "emerald", count: 4 },
+      { id: "gold_ingot", count: 2 },
+      { id: "sandstone", count: 12 },
+      { id: "apple", count: 3 },
+      { id: "torch", count: 4 }
+    ];
+    const arr = new Array(CHEST_SIZE).fill(null);
+    loot.forEach((it, i) => { arr[i] = it; });
+    S.chests[key] = arr;
   }
 
   // The first settlement's starter chest: a friendly welcome kit.
@@ -1419,13 +1444,13 @@
     // Clouds float far out of reach and can't be broken — just a puff of air.
     if (id === "cloud") { toast("☁️ You can't mine the clouds — they're just fluffy sky!"); return; }
 
-    // Only the final house is sealed: its walls, roof and floor can't be mined.
-    // (In legacy worlds that keeps the winning screen behind the last key; in
-    // new worlds it keeps the End Portal's room standing.)
+    // Sealed quest fixtures can't be mined. In legacy worlds that's the final
+    // Hall-of-Fame house; in expanded worlds it's the whole woodland mansion
+    // (and the portal room inside it) — the only way in is the front doors.
     if (S.world.isProtected(hit.block.x, hit.block.y, hit.block.z)) {
       toast(S.world.legacy
         ? "🏆 This is the Hall of Fame — win the last key to get in, not a pickaxe."
-        : "🏆 The fourth house is ancient magic — its walls can't be mined.");
+        : "🏚️ The mansion's dark timbers are ancient magic — they can't be mined.");
       return;
     }
 
@@ -1964,6 +1989,7 @@
     // chest the player already opened — their contents live in the save).
     prefillMansionChests(world);
     prefillStarterChest(world);
+    prefillTempleChest(world);
 
     // A fresh world starts with NO save slot — nothing saves until the player
     // presses Save and picks one. (loadGame re-binds the slot right after.)
@@ -2027,19 +2053,21 @@
     return (Math.random() * 0xffffffff) >>> 0;
   }
 
-  function newWorld(biome) {
-    // "Surprise me" rolls a fresh biome AND a fresh seed every single time.
-    if (biome === "random") biome = (randomSeed() & 1) ? "forest" : "desert";
+  // The Expanded World: the four-biome journey. You spawn in the forest and
+  // the yellow brick road leads on through the desert and the snowy mountains
+  // to the roofed forest — and the woodland mansion waiting inside it. The
+  // exact layout is random every time; the order of the biomes never changes.
+  function newWorld() {
     const seed = randomSeed();
     // Fresh worlds are always full-size (a legacy save may have shrunk C.WORLD).
     Game.CONST.WORLD = DEFAULT_WORLD_SIZE;
-    const world = new Game.World(null, seed, biome);
+    const world = new Game.World(null, seed, "forest");
     world.generate();
     startWorld(world, null);
   }
 
-  // The Classic map: a brand-new world on the original cosy 40x40 layout —
-  // one biome throughout, sky-high settlement spires on the centre axes, and
+  // The Classic version: a brand-new world on the original cosy 40x40 layout —
+  // ONE biome throughout, sky-high settlement spires on the centre axes, and
   // the original key quest (the gold key opens the fourth house's lit portal).
   function newLegacyWorld() {
     const biome = (randomSeed() & 1) ? "forest" : "desert";
@@ -2073,7 +2101,7 @@
     // return to, so loading never drops you into the (regenerated) Nether.
     const pos = S.inNether ? (S.questPortalExit || ow.spawn) : S.player.pos;
     const data = {
-      version: 3,        // v3: big multi-biome worlds (v2: the brick-item split)
+      version: 4,        // v4: the biome-journey worlds (v3: multi-biome, v2: bricks)
       worldSize: Game.CONST.WORLD,
       legacy: !!ow.legacy, // an old 40-block world stays its old self forever
       seed: ow.seed,
@@ -2116,8 +2144,11 @@
   function slotLabel(slot) {
     const m = slotMeta(slot);
     if (!m) return "Slot " + slot + " — empty";
-    const b = m.biome === "desert" ? "🏜️ Desert" : "🌳 Forest";
-    return "Slot " + slot + " — " + b + (m.legacy ? " (classic 40×40)" : "");
+    if (m.legacy) {
+      const b = m.biome === "desert" ? "🏜️ Desert" : "🌳 Forest";
+      return "Slot " + slot + " — 🕰️ Classic " + b;
+    }
+    return "Slot " + slot + " — 🌍 Expanded World";
   }
 
   // The in-game picker shown the first time Save is pressed (or via the Save
@@ -2260,9 +2291,7 @@
     });
 
     // Start panel buttons
-    tapButton($("btn-new-forest"), () => newWorld("forest"));
-    tapButton($("btn-new-desert"), () => newWorld("desert"));
-    tapButton($("btn-new-random"), () => newWorld("random"));
+    tapButton($("btn-new-expanded"), () => newWorld());
     tapButton($("btn-new-legacy"), () => newLegacyWorld());
     // Three continue buttons on the title screen, one per save slot.
     [1, 2, 3].forEach((n) => {
