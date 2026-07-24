@@ -12,7 +12,8 @@
  * changes — the next online visit picks it up automatically.
  */
 
-const CACHE_NAME = "blocky-world";
+// v2: flushes caches that may hold redirect-flagged responses Safari rejects.
+const CACHE_NAME = "blocky-world-v2";
 
 // Everything the game needs to run. Keep this list in sync with the files
 // referenced from index.html.
@@ -31,9 +32,36 @@ const ASSETS = [
   "./icons/apple-touch-icon.png",
 ];
 
+// Safari refuses to display a page when a service worker answers a
+// navigation with a response that was produced via an HTTP redirect
+// ("Response served by service worker has redirections"). GitHub Pages
+// redirects some URLs (e.g. a missing trailing slash), so any response we
+// cache or hand back could carry the `redirected` flag. Re-wrapping the
+// body in a fresh Response drops that flag.
+async function cleanResponse(response) {
+  if (!response || !response.redirected) return response;
+  const body = await response.blob();
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await Promise.all(
+        ASSETS.map(async (url) => {
+          const response = await fetch(url, { cache: "no-cache" });
+          if (!response.ok) {
+            throw new Error(`Failed to cache ${url}: ${response.status}`);
+          }
+          await cache.put(url, await cleanResponse(response));
+        })
+      );
+    })()
   );
   // Take over from any older service worker right away.
   self.skipWaiting();
@@ -63,7 +91,13 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       try {
-        const fresh = await fetch(request);
+        // For navigations, fetch by URL: a navigation Request uses redirect
+        // mode "manual", and passing it straight to fetch() can yield a
+        // redirected response that Safari then rejects. Fetching the URL
+        // follows redirects normally, and cleanResponse() strips the flag.
+        const fresh = await cleanResponse(
+          request.mode === "navigate" ? await fetch(request.url) : await fetch(request)
+        );
         // Keep the cache up to date for the next offline session.
         if (fresh && fresh.ok) {
           const cache = await caches.open(CACHE_NAME);
