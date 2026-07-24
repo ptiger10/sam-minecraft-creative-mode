@@ -178,11 +178,14 @@
     }
 
     // --- Water: there's no swimming or diving — you wade straight across the
-    // TOP of any pond. If your feet dip into a water cell, pop up to the
-    // surface and stand there as if it were solid ground. ---
-    if (this.inWaterAt(this.pos.y + 0.05)) {
+    // TOP of any pond, standing on the surface as if it were solid ground.
+    // The probe looks just BELOW the feet: standing exactly on the surface
+    // still counts as "on water", so gravity's tiny dip is undone in the very
+    // same frame it happens. (Probing above the feet let you sink a fraction
+    // first and snap back a few frames later — an uncomfortable vibration.)
+    if (this.inWaterAt(this.pos.y - 0.05)) {
       const fx = Math.floor(this.pos.x), fz = Math.floor(this.pos.z);
-      let wy = Math.floor(this.pos.y + 0.05);
+      let wy = Math.floor(this.pos.y - 0.05);
       while (this.world.get(fx, wy + 1, fz) === "water") wy++;
       if (!this.collides(this.pos.x, wy + 1, this.pos.z)) {
         this.pos.y = wy + 1;

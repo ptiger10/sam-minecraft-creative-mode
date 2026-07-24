@@ -133,6 +133,39 @@ check("an empty bucket scoops one water (and empties)", water.afterScoop.waters 
 check("water bucket collected 131 waters (indefinite, past 99)", water.waters === 131);
 check("the water count lives in a single bucket", water.stacks === 1);
 
+// --- Wading across water is glassy smooth: you stand ON the surface with no
+//     sink-and-snap bobbing (the old probe let you dip a fraction each frame) ---
+const wade = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  // Build a small deep pond in a quiet corner: stone rim, 2 water deep.
+  const bx = 5, bz = 86, wy = 8;
+  for (let dx = -1; dx <= 3; dx++) {
+    for (let dz = -1; dz <= 3; dz++) {
+      for (let y = wy - 2; y <= wy + 4; y++) W.blocks.delete(key(bx + dx, y, bz + dz));
+      W.blocks.set(key(bx + dx, wy - 2, bz + dz), "stone");
+      W.blocks.set(key(bx + dx, wy - 1, bz + dz), "water");
+      W.blocks.set(key(bx + dx, wy, bz + dz), "water");
+    }
+  }
+  W.buildMeshes();
+  // Drop in from just above: you should land ON the surface, never sink.
+  p.pos.set(bx + 1.5, wy + 1.6, bz + 0.5); p.vel.set(0, 0, 0);
+  p.yaw = Math.PI; p.pitch = 0; p.fallPeak = p.pos.y;
+  for (let i = 0; i < 30; i++) p.update(1 / 60, { forward: false });
+  // Stand still for a second and record every frame's height.
+  const still = [];
+  for (let i = 0; i < 60; i++) { p.update(1 / 60, { forward: false }); still.push(p.pos.y); }
+  // Then wade forward across the pond for half a second.
+  const walk = [];
+  for (let i = 0; i < 30; i++) { p.update(1 / 60, { forward: true }); walk.push(p.pos.y); }
+  const span = (a) => Math.max(...a) - Math.min(...a);
+  return { surfaceY: still[0], top: wy + 1, stillWobble: span(still), walkWobble: span(walk) };
+});
+check("you stand right on the water's surface", Math.abs(wade.surfaceY - wade.top) < 0.001);
+check("standing on water is perfectly steady", wade.stillWobble < 0.001);
+check("wading across water is glassy smooth", wade.walkWobble < 0.001);
+
 // --- Smelting iron ingots with coal fuel yields steel ---
 const smelt = await page.evaluate(() => {
   const S = window.Game.S, G = window.Game, FUR = S.furnace;
