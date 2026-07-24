@@ -291,7 +291,11 @@ window.Game = window.Game || {};
   // End Portal frame's sockets in the fourth settlement to light the portal.
   Game.ItemDefs.eye_of_ender = { name: "Eye of Ender", emoji: "🧿", placeable: false,
     desc: "Tap an empty End Portal Frame socket to set it in. All 8 light the portal to The End; tap one to take it back out." };
-  // The three keys, each opening one locked house door.
+  // The Journey Map: the first villager sells it for one emerald. Hold it and
+  // tap Place (or the world) to unfold it — it paints the whole journey.
+  Game.ItemDefs.map = { name: "Journey Map", emoji: "🗺️", placeable: false,
+    desc: "Shows how the yellow brick road winds through the biomes, with every stop numbered in order. Hold it and tap Place to unfold it." };
+  // The keys, each opening one locked door along the road.
   Game.ItemDefs.key2 = { name: "Bronze Key", emoji: "🗝️", placeable: false, opens: 2, desc: "Opens the locked door at the yellow brick road's second stop." };
   Game.ItemDefs.key3 = { name: "Silver Key", emoji: "🗝️", placeable: false, opens: 3, desc: "Opens the locked door at the yellow brick road's third stop." };
   Game.ItemDefs.key4 = { name: "Gold Key",   emoji: "🗝️", placeable: false, opens: 4, desc: "Opens the door to the End Portal's room." };
@@ -451,9 +455,10 @@ window.Game = window.Game || {};
     // Glass over wood -> a door with a window.
     { id: "door_window", gives: { id: "door_window", count: 1 }, table: true,
       pattern: [[G, G], [W, W], [W, W]] },
-    // Three stone in a V -> a bucket (for scooping up water).
-    { id: "bucket", gives: { id: "bucket", count: 1 }, table: true,
-      pattern: [[T, null, T], [null, T, null]] },
+    // Three stone in a little scoop -> a bucket (for scooping up water).
+    // Just 3 stone, and it fits the 2x2 grid — no crafting table needed.
+    { id: "bucket", gives: { id: "bucket", count: 1 },
+      pattern: [[T, null], [T, T]] },
     // Three sugar canes in a row -> 3 paper.
     { id: "paper", gives: { id: "paper", count: 3 }, table: true,
       pattern: [["sugarcane", "sugarcane", "sugarcane"]] },

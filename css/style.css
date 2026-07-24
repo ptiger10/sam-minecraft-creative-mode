@@ -871,3 +871,33 @@ body.menu-open #crosshair { display: none; }
   #top-buttons { gap: 4px; }
   .menu-btn { font-size: 12px; padding: 6px 8px; min-height: 40px; }
 }
+
+/* ---------- The Journey Map ---------- */
+/* The map canvas is drawn at one blocky pixel-per-block scale; pixelated
+   rendering keeps its edges crisp when stretched to fit the panel. */
+#map-canvas {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  border: 3px solid #7a5230;
+  border-radius: 8px;
+  background: #58a24a;
+}
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  justify-content: center;
+  margin: 8px 0 12px;
+  font-size: 13px;
+  color: #444;
+}
+.map-chip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  margin-right: 5px;
+  vertical-align: -1px;
+}

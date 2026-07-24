@@ -151,10 +151,34 @@
       <h2>📦 Chest</h2>
       <p class="hint">Tap an item in the chest to take it out, or tap one of your
         items to store it.</p>
+      <div class="inv-title" id="chest-title">
+        <span class="inv-title-name">Tap an item to see what it is</span>
+      </div>
       <h3 class="craft-label">Chest</h3>
       <div class="inv-grid chest-grid" id="chest-grid"></div>
       <h3 class="craft-label">Your backpack</h3>
       <div class="inv-grid" id="chest-inv-grid"></div>
+      <button class="big-btn close-btn">Close</button>
+    </div>
+  </div>
+
+  <!-- ============ Journey Map panel ============
+       Bought from the first villager for one emerald. Hold the map and tap
+       Place (or the world) to unfold it: the biomes, the yellow brick road,
+       and every stop numbered in journey order. -->
+  <div class="panel-overlay hidden" id="map-panel">
+    <div class="panel">
+      <h2>🗺️ Journey Map</h2>
+      <p class="hint">Follow the yellow brick road through the biomes — the
+        numbers show the order of the stops. The red dot is you!</p>
+      <canvas id="map-canvas" width="384" height="384"></canvas>
+      <div class="map-legend">
+        <span><span class="map-chip" style="background:#58a24a"></span>Forest</span>
+        <span><span class="map-chip" style="background:#e0d18f"></span>Desert</span>
+        <span><span class="map-chip" style="background:#eef3f7"></span>Snowy Mountains</span>
+        <span><span class="map-chip" style="background:#2e5b2e"></span>Roofed Forest</span>
+        <span><span class="map-chip" style="background:#f2cf3b"></span>Yellow Brick Road</span>
+      </div>
       <button class="big-btn close-btn">Close</button>
     </div>
   </div>

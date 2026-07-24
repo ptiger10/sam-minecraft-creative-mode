@@ -100,7 +100,9 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   your food runs out you start losing health.
 - 🌗 **Day & night.** Every **3½ minutes of daylight** is followed by **1½
   minutes of night**, when the sky darkens and the world dims — then day
-  returns. After dark the monsters come out: **🏹 skeleton archers** roam the
+  returns. A blocky **☀️ sun** rises in the east, sails overhead and sets in
+  the west as night falls — then a pale **🌙 moon** takes the same arc across
+  the night sky until sunrise. After dark the monsters come out: **🏹 skeleton archers** roam the
   surface loosing **arrows in random directions**, and **🧟 zombies**
   shamble about at random — **bump into one and it bites you** (a heart's worth).
   All of them **vanish again at daybreak**. Craft and **wear** some armour or a
@@ -129,10 +131,13 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   road** starts near where you spawn and winds through every biome in order,
   with a **biome-appropriate settlement** at each stop:
   - **The forest village** — a walled starter town with a crafting corner, a
-    melon patch, a stocked chest and a friendly villager who trades you the
-    🗝️ **Bronze Key** to the next stop.
+    melon patch, a stocked chest and a friendly villager who sells you the
+    🗺️ **Journey Map** for **1 emerald**: it paints the whole journey — the
+    biome regions, the ponds, the yellow brick road winding through them, and
+    **every stop numbered in order**, plus a red *you-are-here* dot. Hold the
+    map and tap **Place** (or the world) to unfold it.
   - **The desert temple** — a stepped sandstone ziggurat out in the dunes. Its
-    door is locked (the Bronze Key opens it); inside, the desert villager hands
+    door swings open (the map shows the way); inside, the desert villager hands
     over the 🗝️ **Silver Key**, and a treasure chest sweetens the visit.
   - **The igloo** — up in the **snowy mountains**, behind the Silver Key's
     locked door. Inside glows a 🔥 **portal to the Nether**, a fiery red cavern
@@ -223,7 +228,8 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   Nether. To make flint & steel: **chip flint from a piece of coal**, **smelt an
   iron ingot into steel**, then **craft the two together**.
 - 🚪 **Doors & windows** you can **tap to open and close**, **🛏️ beds**, **🔦
-  torches**, and a **📦 chest** that stores lots of extra items.
+  torches**, and a **📦 chest** that stores lots of extra items — the chest
+  screen names (and describes) whatever item you tap.
 - 🎒 An **inventory** + hotbar with distinctive material icons and a title that
   names whatever you tap. Whatever you select goes into your hand — hold a block
   and place it; hold a pickaxe and mine.
@@ -234,6 +240,7 @@ coloured outline (gold for food) so you can tell what you're pointing at.
   - **Planks** (×4) = 1 wood · **Stick** = 2 wood stacked
   - **Crafting Table** = 4 wood in a square · **Furnace** = 4 stone in a square
   - **Bricks** block = 4 🧱 bricks in a square (smelt clay for the bricks)
+  - **Bucket** = just 3 stone — it fits the small 2×2 grid, no table needed
   - **Torch** (×4) = coal on top of a stick
   - **Wooden / Stone Pickaxe**, **Ladder**, **Stairs**, **Fence**, **Battery**,
     **Bed**, **Chest**, **Window**, **Door** and a **Door with a window**

@@ -1791,8 +1791,9 @@
   };
 
   // The desert settlement: a stepped sandstone temple (a little ziggurat) with
-  // red-clay corners and apex. Its door is locked (Bronze Key); the desert
-  // villager inside hands over the Silver Key, and a treasure chest waits.
+  // red-clay corners and apex. Its door swings open — the first villager's
+  // Journey Map is what leads you here — and inside, the desert villager
+  // hands over the Silver Key while a treasure chest sweetens the visit.
   World.prototype.buildDesertTemple = function (cx, cz) {
     const R = 5;
     const floorY = this.surfaceY(cx, cz);
@@ -1826,13 +1827,13 @@
     }
     this.blocks.set(World.key(cx, floorY + 6, cz), "red_clay"); // the apex
 
-    // The entrance tunnel on the -z side: a locked door, then a clear walk in
+    // The entrance tunnel on the -z side: an open door, then a clear walk in
     // under a little sandstone lintel.
     for (let z = cz - R; z <= cz - 2; z++) {
       this.blocks.delete(World.key(cx, floorY + 1, z));
       this.blocks.delete(World.key(cx, floorY + 2, z));
     }
-    this.blocks.set(World.key(cx, floorY + 1, cz - R), "locked_door_2");
+    this.blocks.set(World.key(cx, floorY + 1, cz - R), "door");
     this.blocks.set(World.key(cx, floorY + 3, cz - R + 1), "sandstone");
 
     // Torches and a treasure chest inside.
@@ -2111,10 +2112,15 @@
       v.userData.timer = 1 + num;
       v.userData.moving = false;
       v.userData.house = num;
-      // The trade that advances the quest. In legacy worlds the third villager
-      // sells the gold key for netherite; in new worlds the fourth house is
-      // open, so the third villager is an ordinary (emerald-loving) trader.
-      if (num === 1) v.userData.quest = { gives: "key2" };
+      // The trade that advances the quest. In legacy worlds the first villager
+      // gives the bronze key and the third sells the gold key for netherite.
+      // In expanded worlds the first villager instead sells the JOURNEY MAP
+      // for one emerald — the road (and the map) shows the way onward.
+      if (num === 1) {
+        v.userData.quest = this.legacy
+          ? { gives: "key2" }
+          : { gives: "map", cost: { id: "emerald", count: 1 } };
+      }
       else if (num === 2) v.userData.quest = { gives: "key3" };
       else if (num === 3 && this.legacy) v.userData.quest = { gives: "key4", cost: { id: "netherite", count: 1 } };
       this.questVillagers.push(v);

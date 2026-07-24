@@ -218,10 +218,9 @@
     setViewmodel(selectedSlot() ? selectedSlot().id : null);
   }
 
-  // The little title bar in the inventory panel that names (and describes)
-  // whatever you last clicked on.
-  function updateInvTitle(id) {
-    const t = $("inv-title");
+  // The little title bar that names (and describes) whatever you last tapped.
+  // The inventory and the chest panel each have one.
+  function renderItemTitle(t, id) {
     if (!t) return;
     if (!id) {
       t.innerHTML = '<span class="inv-title-name">Tap an item to see what it is</span>';
@@ -232,6 +231,8 @@
       '<span class="inv-title-text"><b>' + Game.itemName(id) + "</b>" +
       (def && def.desc ? '<br><small>' + def.desc + "</small>" : "") + "</span>";
   }
+  function updateInvTitle(id) { renderItemTitle($("inv-title"), id); }
+  function updateChestTitle(id) { renderItemTitle($("chest-title"), id); }
 
   function buildSlotEl(i) {
     const el = document.createElement("div");
@@ -727,9 +728,11 @@
   function openChest(pos) {
     S.openChestKey = pos.x + "," + pos.y + "," + pos.z;
     chestArr();
+    updateChestTitle(null);
     renderChest();
     showPanel("chest-panel");
   }
+  Game._openChest = openChest; // (used by the tests)
 
   // Tip a broken chest's contents into your inventory so nothing is lost.
   function dumpChest(pos) {
@@ -740,11 +743,13 @@
 
   function chestTake(i) {
     const a = chestArr(); const s = a[i]; if (!s) return;
+    updateChestTitle(s.id);          // name what was tapped
     const fit = addItem(s.id, s.count); s.count -= fit; if (s.count <= 0) a[i] = null;
     renderChest();
   }
   function chestPut(i) {
     const s = S.inv[i]; if (!s) return;
+    updateChestTitle(s.id);          // name what was tapped
     const a = chestArr(); const fit = stackInto(a, s.id, s.count);
     s.count -= fit; if (s.count <= 0) S.inv[i] = null;
     renderHotbar(); renderChest();
@@ -798,8 +803,9 @@
     }
     if (q.cost) removeItems({ [q.cost.id]: q.cost.count });
     addItem(q.gives, 1);
-    S.questKeysGiven[q.gives] = true;   // remember it: one key per villager, ever
-    toast("Traded for the " + Game.itemName(q.gives) + "! 🗝️");
+    S.questKeysGiven[q.gives] = true;   // remember it: one per villager, ever
+    const def = Game.itemDef(q.gives);
+    toast("Traded for the " + Game.itemName(q.gives) + "! " + ((def && def.emoji) || "🗝️"));
     renderTrades();
   }
   Game._buyQuest = buyQuest; // (used by the quest test)
@@ -821,9 +827,10 @@
         ? "already received — one per villager"
         : (q.cost ? ("needs " + q.cost.count + " " + Game.itemName(q.cost.id))
                    : "a gift — just take it!");
+      const qDef = Game.itemDef(q.gives);
       btn.innerHTML =
         '<span class="rb-icon">' + iconHTML(q.gives) + "</span>" +
-        '<span class="rb-text"><b>🗝️ ' + Game.itemName(q.gives) +
+        '<span class="rb-text"><b>' + ((qDef && qDef.emoji) || "🗝️") + " " + Game.itemName(q.gives) +
         (claimed ? " ✓" : "") + "</b><br><small>" + costText + "</small></span>";
       btn.addEventListener("click", () => buyQuest(q));
       list.appendChild(btn);
@@ -992,6 +999,70 @@
       toast("🔒 Locked! Trade a villager for the " + Game.itemName(keyId) + ".");
     }
   }
+
+  // ===============================================================
+  //  The Journey Map — sold by the first villager for one emerald
+  // ===============================================================
+  // Paints the whole overworld: the biome regions, the ponds, the yellow
+  // brick road winding through them, and every stop numbered in order
+  // (1 the village, 2 the temple, 3 the igloo, 4 the mansion) — plus a red
+  // "you are here" dot while you're in the overworld.
+  const MAP_BIOME_COLORS = { forest: "#58a24a", desert: "#e0d18f", snow: "#eef3f7", roofed: "#2e5b2e" };
+  function drawJourneyMap() {
+    const canvas = $("map-canvas");
+    const ow = S.overworld;
+    if (!canvas || !ow) return;
+    const W = Game.CONST.WORLD;
+    const sc = canvas.width / W;                    // canvas pixels per block
+    const ctx = canvas.getContext("2d");
+
+    // The land, coloured by biome, with the ponds in blue.
+    for (let x = 0; x < W; x++) {
+      for (let z = 0; z < W; z++) {
+        ctx.fillStyle = (ow._isWater && ow._isWater(x, z))
+          ? "#3f7fd8"
+          : (MAP_BIOME_COLORS[ow.biomeAt(x, z)] || "#58a24a");
+        ctx.fillRect(x * sc, z * sc, sc, sc);
+      }
+    }
+
+    // The yellow brick road on top.
+    ctx.fillStyle = "#f2cf3b";
+    for (const [k, id] of ow.blocks) {
+      if (id !== "yellow_brick") continue;
+      const c1 = k.indexOf(","), c2 = k.lastIndexOf(",");
+      ctx.fillRect(+k.slice(0, c1) * sc, +k.slice(c2 + 1) * sc, sc, sc);
+    }
+
+    // The stops, numbered in journey order (the mansion is the last number).
+    const stops = (ow.questSites || []).map((s, i) => ({ x: s.cx, z: s.cz, n: i + 1, c: "#2b2b33" }));
+    if (ow.mansion) stops.push({ x: ow.mansion.x, z: ow.mansion.z, n: stops.length + 1, c: "#4a2350" });
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold " + Math.round(sc * 3.2) + "px sans-serif";
+    stops.forEach((st) => {
+      const x = st.x * sc, z = st.z * sc;
+      ctx.fillStyle = st.c;
+      ctx.beginPath(); ctx.arc(x, z, sc * 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(st.n), x, z + 1);
+    });
+
+    // You are here (only meaningful while you're in the overworld).
+    if (!S.inNether && !S.inEnd && S.player) {
+      const px = S.player.pos.x * sc, pz = S.player.pos.z * sc;
+      ctx.fillStyle = "#e33b32";
+      ctx.beginPath(); ctx.arc(px, pz, sc * 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.stroke();
+    }
+  }
+
+  function showMap() {
+    drawJourneyMap();
+    showPanel("map-panel");
+  }
+  Game._showMap = showMap; // (used by the tests)
 
   function showCredits(ending) {
     S.creditsEnding = !!ending;
@@ -1396,6 +1467,13 @@
       return;
     }
 
+    // The Journey Map: using it unfolds it rather than placing anything.
+    if (s && s.id === "map") {
+      S.swing = 0.18;
+      showMap();
+      return;
+    }
+
     // Holding a placeable block -> build.
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) {
       if (!hit) { toast("Aim at a block to build on."); return; }
@@ -1562,8 +1640,9 @@
     }
     const s = selectedSlot();
     // Flint & steel is a "use" tool, not a mining one — a tap should light a
-    // portal frame, never try to break the obsidian it's aimed at.
-    if (s && s.id === "flint_and_steel") { doUse(); return; }
+    // portal frame, never try to break the obsidian it's aimed at. The map is
+    // the same: a tap while holding it unfolds it.
+    if (s && (s.id === "flint_and_steel" || s.id === "map")) { doUse(); return; }
     if (s && Game.itemDef(s.id) && Game.itemDef(s.id).placeable) doUse();
     else doHit();
   }
@@ -1633,10 +1712,12 @@
       battery: 0xd8c24a, paint_red: 0xc0392b, paint_blue: 0x2f6fd8, paint_green: 0x2ecc71,
       paint_yellow: 0xe6c34a, iron_ingot: 0xd0d3da, bucket: 0x9aa0a8, water_bucket: 0x3a6ff0,
       redstone: 0xc0392b, gold_ingot: 0xe6c34a, steel: 0xc7ccd4, flint: 0x3a3a40,
-      flint_and_steel: 0xb0b4bc, book: 0xb5843a,
+      flint_and_steel: 0xb0b4bc, book: 0xb5843a, map: 0xe4d6ab,
       diamond: 0x4fe3d8, paper: 0xf2efe4,
       netherite: 0x0a0a0c, key2: 0xb87333, key3: 0xb8c0c8, key4: 0xf2c14e };
-    const size = id === "stick" ? [0.06, 0.4, 0.06] : [0.25, 0.25, 0.25];
+    const size = id === "stick" ? [0.06, 0.4, 0.06]
+      : id === "map" ? [0.4, 0.5, 0.03]          // a flat unrolled sheet
+      : [0.25, 0.25, 0.25];
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]),
       new THREE.MeshLambertMaterial({ color: colors[id] || 0xcccccc }));
     vm.add(mesh);
@@ -1686,10 +1767,21 @@
     const fill = new THREE.DirectionalLight(0xffffff, 0.25);
     fill.position.set(-0.5, 0.6, -0.4);
     scene.add(fill);
+    // A blocky sun and moon hang in the sky. They ignore the fog (so they
+    // glow at any distance) and updateDayNight arcs them across the sky:
+    // the sun from sunrise to sunset, then the moon through the night.
+    const sunMesh = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3),
+      new THREE.MeshBasicMaterial({ color: 0xffd23b, fog: false }));
+    const moonMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.4, 2.4),
+      new THREE.MeshBasicMaterial({ color: 0xe8ecf2, fog: false }));
+    moonMesh.visible = false;                 // worlds start at dawn
+    scene.add(sunMesh);
+    scene.add(moonMesh);
     // Remember what the surface looks like by day so the day/night cycle can
     // dim it down toward night and back.
     scene.userData.dayNight = { ambient: ambient, sun: sun, fill: fill, daySky: sky,
-      baseAmbient: 0.72, baseSun: 0.85, baseFill: 0.25 };
+      baseAmbient: 0.72, baseSun: 0.85, baseFill: 0.25,
+      sunMesh: sunMesh, moonMesh: moonMesh };
     return scene;
   }
 
@@ -1788,6 +1880,23 @@
     dn.ambient.intensity = dn.baseAmbient * (1 - 0.60 * n);
     dn.sun.intensity = dn.baseSun * (1 - 0.72 * n);
     dn.fill.intensity = dn.baseFill * (1 - 0.50 * n);
+
+    // Arc the sun (by day) and the moon (by night) across the sky: each rises
+    // in the east at its start, sails overhead, and sets in the west as its
+    // half of the cycle runs out. They keep pace with the player so they
+    // always hang the same distance away, like a real sky.
+    if (dn.sunMesh && S.player) {
+      const t = ((S.worldClock % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
+      const day = t < DAY_LEN;
+      const frac = day ? t / DAY_LEN : (t - DAY_LEN) / NIGHT_LEN;
+      const a = Math.PI * frac;               // 0 = east horizon, PI/2 = overhead
+      const p = S.player.pos;
+      const body = day ? dn.sunMesh : dn.moonMesh;
+      dn.sunMesh.visible = day;
+      dn.moonMesh.visible = !day;
+      body.position.set(p.x + Math.cos(a) * 40, 3 + Math.sin(a) * 26, p.z - 22);
+      body.rotation.y += dt * 0.15;           // a slow, gentle twinkle-spin
+    }
   }
 
   // Is the player wearing any armour or holding a shield right now? Only EQUIPPED

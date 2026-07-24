@@ -99,6 +99,7 @@ const structures = await page.evaluate(() => {
   return {
     sandstone: near(s[1].cx, s[1].cz, "sandstone"),
     door2: near(s[1].cx, s[1].cz, "locked_door_2"),
+    templeDoor: near(s[1].cx, s[1].cz, "door"),
     snow: near(s[2].cx, s[2].cz, "snow"),
     ice: near(s[2].cx, s[2].cz, "ice"),
     door3: near(s[2].cx, s[2].cz, "locked_door_3"),
@@ -106,14 +107,15 @@ const structures = await page.evaluate(() => {
   };
 });
 check("the desert temple is built of sandstone", structures.sandstone > 40);
-check("the temple's door is locked (bronze key)", structures.door2 === 1);
+check("the temple's door opens freely (the map shows the way)", structures.door2 === 0 && structures.templeDoor >= 1);
 check("the igloo is built of snow", structures.snow > 30);
 check("the igloo has ice windows", structures.ice >= 2);
 check("the igloo's door is locked (silver key)", structures.door3 === 1);
 check("the Nether portal glows inside the igloo", structures.portalInIgloo >= 2);
 
-// --- Villagers 1-2 offer the bronze & silver keys; the igloo villager is an
-//     ordinary trader; the LAST villager (mansion, 2nd floor) gives the gold key ---
+// --- Villager 1 sells the journey map; villager 2 gives the silver key; the
+//     igloo villager is an ordinary trader; the LAST villager (mansion, 2nd
+//     floor) gives the gold key ---
 const trades = await page.evaluate(() => {
   const W = window.Game.S.world;
   return W.questVillagers
@@ -122,7 +124,8 @@ const trades = await page.evaluate(() => {
       gives: v.userData.quest ? v.userData.quest.gives : null,
       cost: v.userData.quest ? (v.userData.quest.cost || null) : null }));
 });
-check("villager 1 gives the bronze key", trades[0] && trades[0].gives === "key2" && !trades[0].cost);
+check("villager 1 sells the journey map for 1 emerald", trades[0] && trades[0].gives === "map" &&
+  trades[0].cost && trades[0].cost.id === "emerald" && trades[0].cost.count === 1);
 check("villager 2 gives the silver key", trades[1] && trades[1].gives === "key3" && !trades[1].cost);
 check("villager 3 has no key quest (the igloo trader)", trades[2] && trades[2].gives === null);
 check("the mansion villager gives the gold key", trades[3] && trades[3].house === 4 && trades[3].gives === "key4" && !trades[3].cost);
@@ -176,30 +179,30 @@ check("he stands watch in front of the doors by day", vind.dayAtPost && vind.day
 check("at night he sleeps on one of the beds", vind.nightAsleep && vind.nightAtBed && vind.onABed);
 check("he lies down flat to sleep", vind.lying);
 
-// --- Doors 2-4 are locked; a key unlocks the matching door ---
+// --- Doors 3-4 are locked (the temple is open); a key unlocks its door ---
 const locks = await page.evaluate(() => {
   const W = window.Game.S.world;
   const found = { 2: false, 3: false, 4: false };
   let lockBlock = null;
   for (const [k, id] of W.blocks) {
     const n = window.Game.LOCKED[id];
-    if (n) { found[n] = true; if (n === 2) lockBlock = k.split(",").map(Number); }
+    if (n) { found[n] = true; if (n === 3) lockBlock = k.split(",").map(Number); }
   }
-  // Unlock door 2 by handing the player the bronze key and tapping it.
+  // Line up the igloo's silver-key door for the unlock drive below.
   let unlocked = false;
   if (lockBlock) {
-    window.Game.S.inv[0] = { id: "key2", count: 1 };
+    window.Game.S.inv[0] = { id: "key3", count: 1 };
     // Call the same path a tap takes on a locked door.
     const S = window.Game.S;
     const before = S.world.get(lockBlock[0], lockBlock[1], lockBlock[2]);
     // Reach into the trade/unlock by simulating the interaction helper.
     S.world.setBlock; // no-op ref
     window.__tapLock = lockBlock;
-    unlocked = before && window.Game.LOCKED[before] === 2;
+    unlocked = before && window.Game.LOCKED[before] === 3;
   }
   return { found, lockBlock: lockBlock, unlocked };
 });
-check("the desert temple has a locked door", locks.found[2]);
+check("no bronze-key door exists any more", locks.found[2] === false);
 check("the igloo has a locked door", locks.found[3]);
 check("the mansion's portal room has a locked door", locks.found[4]);
 
@@ -207,9 +210,9 @@ check("the mansion's portal room has a locked door", locks.found[4]);
 const unlock = await page.evaluate(() => {
   const S = window.Game.S, W = S.world, lb = window.__tapLock;
   if (!lb) return { ok: false };
-  S.inv[0] = { id: "key2", count: 1 };
+  S.inv[0] = { id: "key3", count: 1 };
   // Mimic tryUnlock: it removes the key and swaps to an open door.
-  const keyHad = S.inv[0] && S.inv[0].id === "key2";
+  const keyHad = S.inv[0] && S.inv[0].id === "key3";
   W.setBlock(lb[0], lb[1], lb[2], "door_open");
   const now = W.get(lb[0], lb[1], lb[2]);
   return { ok: keyHad && now === "door_open" };
@@ -393,31 +396,66 @@ await page.waitForTimeout(350);
 const backOut = await page.evaluate(() => window.Game.S.inNether);
 check("walking into the return portal leaves the Nether", stepBack && backOut === false);
 
-// --- A villager hands over each key only once ---
+// --- The first villager sells the map once, for exactly one emerald ---
 const oneTime = await page.evaluate(() => {
   const Game = window.Game, S = Game.S, W = S.world;
-  // Start from a clean slate for villager 1 (the free Bronze Key).
+  // Start from a clean slate for villager 1 (the 1-emerald Journey Map).
   S.questKeysGiven = {};
-  for (let i = 0; i < S.inv.length; i++) if (S.inv[i] && S.inv[i].id === "key2") S.inv[i] = null;
+  for (let i = 0; i < S.inv.length; i++) if (S.inv[i] && S.inv[i].id === "map") S.inv[i] = null;
   const v1 = W.questVillagers.find((v) => v.userData.house === 1);
   const q = v1.userData.quest;
-  const count = () => S.inv.reduce((n, s) => n + (s && s.id === "key2" ? s.count : 0), 0);
-  Game._buyQuest(q);            // first trade — should hand over the key
-  const afterFirst = count();
+  const count = (id) => S.inv.reduce((n, s) => n + (s && s.id === id ? s.count : 0), 0);
+  // Broke: no emeralds -> no map.
+  Game._buyQuest(q);
+  const broke = count("map");
+  // With emeralds: the first trade hands over the map and takes ONE emerald.
+  S.inv[0] = { id: "emerald", count: 3 };
+  Game._buyQuest(q);            // first trade — should hand over the map
+  const afterFirst = count("map");
+  const emeraldsLeft = count("emerald");
   Game._buyQuest(q);            // second attempt — must be refused
   Game._buyQuest(q);            // ...even a third time
-  const afterMore = count();
-  return { afterFirst, afterMore, remembered: !!S.questKeysGiven.key2 };
+  const afterMore = count("map");
+  return { broke, afterFirst, emeraldsLeft, afterMore, remembered: !!S.questKeysGiven.map };
 });
-check("trading gives the key the first time", oneTime.afterFirst === 1);
-check("the same key can't be obtained again", oneTime.afterMore === 1);
-check("the granted key is remembered", oneTime.remembered === true);
+check("no emeralds -> no map", oneTime.broke === 0);
+check("one emerald buys the journey map", oneTime.afterFirst === 1 && oneTime.emeraldsLeft === 2);
+check("the same map can't be bought twice", oneTime.afterMore === 1);
+check("the granted map is remembered", oneTime.remembered === true);
 
-// The trade UI also shows the key as already-claimed (button disabled).
+// --- Unfolding the map paints the biomes, the road and the numbered stops ---
+const mapView = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  Game._showMap();
+  const panel = document.getElementById("map-panel");
+  const shown = !!panel && !panel.classList.contains("hidden");
+  const canvas = document.getElementById("map-canvas");
+  const img = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  const counts = { forest: 0, desert: 0, snow: 0, roofed: 0, road: 0, water: 0 };
+  const match = (i, r, g, b) => img[i] === r && img[i + 1] === g && img[i + 2] === b;
+  for (let i = 0; i < img.length; i += 4) {
+    if (match(i, 0x58, 0xa2, 0x4a)) counts.forest++;
+    else if (match(i, 0xe0, 0xd1, 0x8f)) counts.desert++;
+    else if (match(i, 0xee, 0xf3, 0xf7)) counts.snow++;
+    else if (match(i, 0x2e, 0x5b, 0x2e)) counts.roofed++;
+    else if (match(i, 0xf2, 0xcf, 0x3b)) counts.road++;
+    else if (match(i, 0x3f, 0x7f, 0xd8)) counts.water++;
+  }
+  document.querySelector("#map-panel .close-btn").click();
+  return { shown, counts };
+});
+check("using the map unfolds the map panel", mapView.shown);
+check("the map paints all four biome regions",
+  mapView.counts.forest > 400 && mapView.counts.desert > 200 &&
+  mapView.counts.snow > 200 && mapView.counts.roofed > 100);
+check("the yellow brick road is drawn on the map", mapView.counts.road > 100);
+check("the ponds show on the map too", mapView.counts.water > 10);
+
+// The trade UI also shows the map as already-claimed (button disabled).
 const claimedUI = await page.evaluate(() => {
   const Game = window.Game, S = Game.S, W = S.world;
   const v1 = W.questVillagers.find((v) => v.userData.house === 1);
-  Game._openTrade(v1); // questKeysGiven.key2 is still set from the test above
+  Game._openTrade(v1); // questKeysGiven.map is still set from the test above
   const btn = document.querySelector("#trade-list .quest-trade");
   const disabled = btn ? btn.disabled : null;
   const closeBtn = document.querySelector("#trade-panel .close-btn");
@@ -660,6 +698,35 @@ check("it is day early in the cycle", dayNight.day === false);
 check("day is 3.5 minutes, then night falls", dayNight.night === true);
 check("day returns after the 1.5-minute night", dayNight.backToDay === false);
 check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
+
+// --- A sun and moon arc across the sky with the time of day ---
+const skyBodies = await page.evaluate(async () => {
+  const S = window.Game.S;
+  const dn = S.scene.userData.dayNight;
+  if (!dn || !dn.sunMesh || !dn.moonMesh) return { ok: false };
+  const at = async (t) => {
+    S.worldClock = t;
+    await new Promise((r) => setTimeout(r, 140));   // let the loop reposition them
+    return { sun: dn.sunMesh.visible, moon: dn.moonMesh.visible,
+      sx: dn.sunMesh.position.x, sy: dn.sunMesh.position.y,
+      my: dn.moonMesh.position.y };
+  };
+  const p = S.player.pos;
+  const morning = await at(10);                 // just after sunrise
+  const noon = await at(3.5 * 60 / 2);          // the middle of the day
+  const evening = await at(3.5 * 60 - 15);      // just before sunset
+  const night = await at(4 * 60);               // the middle of the night
+  S.worldClock = 60;                            // leave it daytime
+  return { ok: true, morning, noon, evening, night,
+    noonOverhead: Math.abs(noon.sx - p.x) < 6 };
+});
+check("a sun shines in the daytime sky", skyBodies.ok && skyBodies.morning.sun && !skyBodies.morning.moon);
+check("the sun climbs from sunrise to noon", skyBodies.noon.sy > skyBodies.morning.sy + 10);
+check("noon puts the sun overhead", skyBodies.noonOverhead);
+check("the sun sinks again toward sunset", skyBodies.evening.sy < skyBodies.noon.sy - 10);
+check("the sun crosses the sky east to west", Math.abs(skyBodies.evening.sx - skyBodies.morning.sx) > 40);
+check("at night the moon replaces the sun", skyBodies.night.moon && !skyBodies.night.sun);
+check("the night moon rides high", skyBodies.night.my > skyBodies.morning.sy);
 
 // --- Craftable armour & shields in three tiers ---
 const armor = await page.evaluate(() => {
