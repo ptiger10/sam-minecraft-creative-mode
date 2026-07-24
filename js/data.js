@@ -280,7 +280,9 @@ window.Game = window.Game || {};
   Game.ItemDefs.apple   = { name: "Apple", emoji: "🍎", placeable: false, food: 6, desc: "Eat it to fill your food bar." };
   Game.ItemDefs.coal    = { name: "Coal", emoji: "⚫", placeable: false, fuel: 10, desc: "Burns in a furnace — smelts 10 items. Makes torches too." };
   Game.ItemDefs.battery = { name: "Battery", emoji: "🔋", placeable: false, fuel: 32, desc: "A long-lasting furnace fuel." };
-  Game.ItemDefs.emerald = { name: "Emerald", emoji: "💚", placeable: false, desc: "Shiny money. Villagers love these." };
+  // The emerald draws as a proper faceted gem (see gemIconHTML), not an emoji.
+  Game.ItemDefs.emerald = { name: "Emerald", gem: true, swatch: 0x2ecc71, swatchSide: 0x15803f,
+    placeable: false, desc: "A sparkling green gem — shiny money. Villagers love these." };
   // Netherite: a rare metal you mine in the Nether and trade for the gold key.
   Game.ItemDefs.netherite = { name: "Netherite", swatch: 0x0a0a0c, swatchSide: 0x050506, placeable: false, desc: "A rare, pitch-black metal. Found in a Nether fortress chest, traded from a piglin, or (rarely) mined. The third villager prizes it." };
   // The Totem of Undying: the woodland mansion's one-of-a-kind treasure. Not
@@ -393,6 +395,25 @@ window.Game = window.Game || {};
 
   // Any pickaxe can mine stone & ores.
   Game.isPickaxe = (id) => id === "pickaxe" || id === "stone_pickaxe";
+
+  // ---- Multi-hit mining ------------------------------------------
+  // Sturdy blocks crack before they break. How many Mine taps a block takes
+  // depends on what's in your hand:
+  //  - Wood blocks: 2 bare-handed punches (a crack shows after the first),
+  //    or just 1 swing with any pickaxe.
+  //  - Stone & ores: 3 swings of the wooden pickaxe (the crack spreads with
+  //    each hit), or 2 with the sturdier stone pickaxe. A pickaxe is still
+  //    REQUIRED to mine them at all — that rule is unchanged.
+  //  - Everything else still breaks in a single hit.
+  const WOOD_BLOCKS = ["wood", "dark_wood", "planks", "dark_planks",
+    "wood_red", "wood_blue", "wood_green", "wood_yellow"];
+  const ROCK_BLOCKS = ["stone", "sandstone", "coal_ore", "iron_ore", "gold_ore",
+    "redstone_ore", "diamond_ore", "emerald_ore", "netherite_ore"];
+  Game.hitsToMine = function (id, held) {
+    if (WOOD_BLOCKS.indexOf(id) !== -1) return Game.isPickaxe(held) ? 1 : 2;
+    if (ROCK_BLOCKS.indexOf(id) !== -1) return held === "stone_pickaxe" ? 2 : 3;
+    return 1;
+  };
 
   Game.itemName = (id) => (Game.ItemDefs[id] ? Game.ItemDefs[id].name : id);
   Game.itemDef = (id) => Game.ItemDefs[id];

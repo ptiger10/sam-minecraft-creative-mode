@@ -434,6 +434,41 @@
     ]);
   }
 
+  // Crack overlays for multi-hit mining: thin dark fissures that poke just
+  // through every face of the block being broken. Stage 1 is a hairline
+  // crack; stage 2 (sturdy stone & ores) means one more hit shatters it.
+  const crackGeomCache = {};
+  function crackGeometry(stage) {
+    if (crackGeomCache[stage]) return crackGeomCache[stage];
+    const c = new THREE.Color(0x17120d);
+    const D = 1.04;                 // long axis: pokes out of both faces
+    const parts = [];
+    const bar = (axis, w, off1, off2, tilt) => {
+      // A thin slanted bar running THROUGH the block along `axis`, so it
+      // shows as a crack line on that axis's two opposite faces.
+      let g;
+      if (axis === "z") { g = new THREE.BoxGeometry(w, 0.8, D); g.rotateZ(tilt); }
+      else if (axis === "x") { g = new THREE.BoxGeometry(D, 0.8, w); g.rotateX(tilt); }
+      else { g = new THREE.BoxGeometry(w, D, 0.8); g.rotateY(tilt); }
+      const p = { g: g, c: c, x: 0, y: 0, z: 0 };
+      if (axis === "z") { p.x = off1; p.y = off2; }
+      else if (axis === "x") { p.z = off1; p.y = off2; }
+      else { p.x = off1; p.z = off2; }
+      parts.push(p);
+    };
+    // Stage 1: one hairline fissure across each pair of faces.
+    bar("z", 0.06, 0.12, 0.02, 0.5);
+    bar("x", 0.06, -0.1, 0.0, 0.45);
+    bar("y", 0.06, 0.08, -0.1, 0.55);
+    if (stage >= 2) {
+      // Stage 2: the cracks spread — a second, crossing fissure everywhere.
+      bar("z", 0.08, -0.18, -0.06, -0.65);
+      bar("x", 0.08, 0.16, 0.08, -0.6);
+      bar("y", 0.08, -0.14, 0.14, -0.5);
+    }
+    return (crackGeomCache[stage] = mergeColoredBoxes(parts));
+  }
+
   function blockGeometry(id) {
     if (geomCache[id]) return geomCache[id];
     if (id === "nether_portal") return (geomCache[id] = netherPortalGeometry());
@@ -496,6 +531,8 @@
     this.animals = [];
     this.trees = [];                 // trunk tops, so monkeys can swing in them
     this.protectedCells = new Set(); // quest-house shells you can't mine through
+    this.mineDamage = new Map();     // "x,y,z" -> hits landed on a sturdy block
+    this._crackMeshes = new Map();   // "x,y,z" -> the crack overlay mesh shown
   }
 
   World.key = (x, y, z) => x + "," + y + "," + z;
@@ -1085,12 +1122,40 @@
     this.trees.push({ x: x, z: z, top: top });
   };
 
+  // ---- Multi-hit mining damage ------------------------------------
+  // Record a hit landed on a sturdy block and show/update its crack overlay.
+  World.prototype.setMineDamage = function (x, y, z, hits) {
+    const k = World.key(x, y, z);
+    this.mineDamage.set(k, hits);
+    const stage = Math.min(2, hits);
+    let m = this._crackMeshes.get(k);
+    if (m && m.userData.stage === stage) return;
+    if (m && this.scene) this.scene.remove(m);
+    m = new THREE.Mesh(crackGeometry(stage), this.material);
+    m.userData.stage = stage;
+    m.position.set(x + 0.5, y + 0.5, z + 0.5);
+    if (this.scene) this.scene.add(m);
+    this._crackMeshes.set(k, m);
+  };
+
+  // Wipe a block's crack damage (it broke, or was replaced by an edit).
+  World.prototype.clearMineDamage = function (x, y, z) {
+    const k = World.key(x, y, z);
+    this.mineDamage.delete(k);
+    const m = this._crackMeshes.get(k);
+    if (m) {
+      if (this.scene) this.scene.remove(m);
+      this._crackMeshes.delete(k);
+    }
+  };
+
   // ---- Editing ---------------------------------------------------
   World.prototype.setBlock = function (x, y, z, id, record) {
     const k = World.key(x, y, z);
     if (id) { this.blocks.set(k, id); this.indexAdd(k, x, z); }
     else { this.blocks.delete(k); this.indexRemove(k, x, z); }
     if (record !== false) this.changes.set(k, id || null);
+    if (this.mineDamage.size || this._crackMeshes.size) this.clearMineDamage(x, y, z);
     this.markDirty(x, y, z);
   };
 
@@ -1842,7 +1907,8 @@
     this.templeChest = { x: cx - 2, y: floorY + 1, z: cz + 2 };
     this.blocks.set(World.key(this.templeChest.x, this.templeChest.y, this.templeChest.z), "chest");
 
-    // The desert villager, keeper of the Silver Key.
+    // The desert villager, keeper of the Silver Key — one emerald buys it
+    // (the temple's own treasure chest holds a few, for the unprepared).
     const v = makeVillager();
     v.position.set(cx + 0.5, floorY + 1, cz + 0.5);
     v.userData.home = { x: cx + 0.5, z: cz + 0.5 };
@@ -1852,7 +1918,7 @@
     v.userData.timer = 2;
     v.userData.moving = false;
     v.userData.house = 2;
-    v.userData.quest = { gives: "key3" };
+    v.userData.quest = { gives: "key3", cost: { id: "emerald", count: 1 } };
     this.questVillagers.push(v);
     this.animals.push(v);
   };

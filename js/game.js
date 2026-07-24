@@ -102,10 +102,28 @@
     return '<span class="' + cls + '" style="background-image:' + armorSvgURI(def.slot, light, dark) + '"></span>';
   }
 
+  // A faceted gem silhouette (for the emerald): a six-sided cut stone with a
+  // brighter table facet and a little sparkle, tinted by the item's colours.
+  function gemSvgURI(light, mid, dark) {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+      '<path d="M12 1.6 L21 8.4 L17.4 21.8 L6.6 21.8 L3 8.4 Z" fill="' + mid + '" stroke="' + dark + '" stroke-width="1.5" stroke-linejoin="round"/>' +
+      '<path d="M12 5.6 L16.7 9.7 L14.8 17 L9.2 17 L7.3 9.7 Z" fill="' + light + '" stroke="' + dark + '" stroke-width="0.7" stroke-linejoin="round"/>' +
+      '<path d="M8.6 4.8 L5.9 8.9" stroke="#eafff2" stroke-width="1.4" stroke-linecap="round"/>' +
+      "</svg>";
+    return "url('data:image/svg+xml," + encodeURIComponent(svg) + "')";
+  }
+  function gemIconHTML(def) {
+    const mid = hex(def.swatch);
+    const dark = hex(def.swatchSide !== undefined ? def.swatchSide : Game.mix(def.swatch, 0x000000, 0.45));
+    const light = hex(Game.mix(def.swatch, 0xffffff, 0.45));
+    return '<span class="swatch armor-swatch" style="background-image:' + gemSvgURI(light, mid, dark) + '"></span>';
+  }
+
   function iconHTML(id) {
     const def = Game.itemDef(id);
     if (!def) return "";
     if (def.equip && def.slot) return armorIconHTML(def, false);
+    if (def.gem) return gemIconHTML(def);
     if (def.emoji) return '<span class="emoji">' + def.emoji + "</span>";
     if (def.swatch !== undefined) {
       const top = hex(def.swatch);
@@ -1572,6 +1590,21 @@
     if (def.tool === "pickaxe" && !holdingPick) {
       toast("You need a pickaxe to mine " + def.name + "!");
       return;
+    }
+
+    // Multi-hit mining: sturdy blocks crack before they break. Wood takes two
+    // bare-handed punches (one with any pickaxe); stone & ores take three
+    // swings of the wooden pickaxe — the crack spreading with each hit — or
+    // two with the stone pickaxe. Anything else still breaks in one.
+    const heldId = selectedSlot() ? selectedSlot().id : null;
+    const needed = Game.hitsToMine(id, heldId);
+    if (needed > 1) {
+      const dk = hit.block.x + "," + hit.block.y + "," + hit.block.z;
+      const done = (S.world.mineDamage.get(dk) || 0) + 1;
+      if (done < needed) {
+        S.world.setMineDamage(hit.block.x, hit.block.y, hit.block.z, done);
+        return;
+      }
     }
 
     // A broken chest spills its contents back to you.

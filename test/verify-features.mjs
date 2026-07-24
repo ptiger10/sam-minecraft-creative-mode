@@ -133,6 +133,94 @@ check("an empty bucket scoops one water (and empties)", water.afterScoop.waters 
 check("water bucket collected 131 waters (indefinite, past 99)", water.waters === 131);
 check("the water count lives in a single bucket", water.stacks === 1);
 
+// --- Wading across water is glassy smooth: you stand ON the surface with no
+//     sink-and-snap bobbing (the old probe let you dip a fraction each frame) ---
+const wade = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  // Build a small deep pond in a quiet corner: stone rim, 2 water deep.
+  const bx = 5, bz = 86, wy = 8;
+  for (let dx = -1; dx <= 3; dx++) {
+    for (let dz = -1; dz <= 3; dz++) {
+      for (let y = wy - 2; y <= wy + 4; y++) W.blocks.delete(key(bx + dx, y, bz + dz));
+      W.blocks.set(key(bx + dx, wy - 2, bz + dz), "stone");
+      W.blocks.set(key(bx + dx, wy - 1, bz + dz), "water");
+      W.blocks.set(key(bx + dx, wy, bz + dz), "water");
+    }
+  }
+  W.buildMeshes();
+  // Drop in from just above: you should land ON the surface, never sink.
+  p.pos.set(bx + 1.5, wy + 1.6, bz + 0.5); p.vel.set(0, 0, 0);
+  p.yaw = Math.PI; p.pitch = 0; p.fallPeak = p.pos.y;
+  for (let i = 0; i < 30; i++) p.update(1 / 60, { forward: false });
+  // Stand still for a second and record every frame's height.
+  const still = [];
+  for (let i = 0; i < 60; i++) { p.update(1 / 60, { forward: false }); still.push(p.pos.y); }
+  // Then wade forward across the pond for half a second.
+  const walk = [];
+  for (let i = 0; i < 30; i++) { p.update(1 / 60, { forward: true }); walk.push(p.pos.y); }
+  const span = (a) => Math.max(...a) - Math.min(...a);
+  return { surfaceY: still[0], top: wy + 1, stillWobble: span(still), walkWobble: span(walk) };
+});
+check("you stand right on the water's surface", Math.abs(wade.surfaceY - wade.top) < 0.001);
+check("standing on water is perfectly steady", wade.stillWobble < 0.001);
+check("wading across water is glassy smooth", wade.walkWobble < 0.001);
+
+// --- Multi-hit mining: wood and stone crack before they break ---
+const cracks = await page.evaluate(async () => {
+  const S = window.Game.S, W = S.world, p = S.player;
+  const key = (x, y, z) => x + "," + y + "," + z;
+  const savedAnimals = W.animals;
+  W.animals = [];                        // so a stray animal can't eat the tap
+  const place = (id) => {
+    p.pitch = 0; p.yaw = 0; p.vel.set(0, 0, 0); p.syncCamera();
+    const eye = p.eyePosition(), dir = p.lookDir();
+    for (let i = 0; i <= 5; i++) W.blocks.delete(key(Math.floor(eye.x + dir.x * i), Math.floor(eye.y + dir.y * i), Math.floor(eye.z + dir.z * i)));
+    const bx = Math.floor(eye.x + dir.x * 3), by = Math.floor(eye.y + dir.y * 3), bz = Math.floor(eye.z + dir.z * 3);
+    W.blocks.set(key(bx, by, bz), id);
+    W.buildMeshes();
+    return { bx: bx, by: by, bz: bz, k: key(bx, by, bz) };
+  };
+  const mine = () => new Promise((r) => { document.getElementById("btn-mine").click(); setTimeout(r, 40); });
+  const at = (c) => W.blocks.get(c.k);
+
+  // Wood bare-handed: two punches, visibly cracked in between.
+  S.inv.fill(null); document.querySelectorAll("#hotbar .slot")[0].click();
+  const w = place("wood");
+  await mine();
+  const woodCracked = at(w) === "wood" && W.mineDamage.get(w.k) === 1 && W._crackMeshes.has(w.k);
+  await mine();
+  const woodGone = at(w) === undefined && !W._crackMeshes.has(w.k);
+
+  // Wood with a pickaxe: one swing fells it.
+  S.inv[0] = { id: "pickaxe", count: 1 }; document.querySelectorAll("#hotbar .slot")[0].click();
+  const w2 = place("wood");
+  await mine();
+  const woodOneWithPick = at(w2) === undefined;
+
+  // Stone with the STONE pickaxe: cracks on the first swing, mined in two.
+  S.inv[0] = { id: "stone_pickaxe", count: 1 }; document.querySelectorAll("#hotbar .slot")[0].click();
+  const st = place("stone");
+  await mine();
+  const stoneCracked = at(st) === "stone" && W.mineDamage.get(st.k) === 1;
+  await mine();
+  const stoneGoneInTwo = at(st) === undefined;
+
+  // Bare hands still can't mine stone at all — the pickaxe rule is unchanged.
+  S.inv[0] = null; document.querySelectorAll("#hotbar .slot")[0].click();
+  const st2 = place("stone");
+  await mine();
+  const handRefused = at(st2) === "stone" && !W.mineDamage.get(st2.k);
+  W.setBlock(st2.bx, st2.by, st2.bz, null);
+  W.animals = savedAnimals;
+  return { woodCracked, woodGone, woodOneWithPick, stoneCracked, stoneGoneInTwo, handRefused };
+});
+check("a bare-hand punch only cracks wood (crack overlay shows)", cracks.woodCracked);
+check("the second punch fells it and clears the crack", cracks.woodGone);
+check("a pickaxe fells wood in a single swing", cracks.woodOneWithPick);
+check("the stone pickaxe cracks stone in one hit, mines it in two", cracks.stoneCracked && cracks.stoneGoneInTwo);
+check("stone still can't be mined bare-handed", cracks.handRefused);
+
 // --- Smelting iron ingots with coal fuel yields steel ---
 const smelt = await page.evaluate(() => {
   const S = window.Game.S, G = window.Game, FUR = S.furnace;

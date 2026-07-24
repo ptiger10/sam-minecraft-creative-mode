@@ -126,7 +126,8 @@ const trades = await page.evaluate(() => {
 });
 check("villager 1 sells the journey map for 1 emerald", trades[0] && trades[0].gives === "map" &&
   trades[0].cost && trades[0].cost.id === "emerald" && trades[0].cost.count === 1);
-check("villager 2 gives the silver key", trades[1] && trades[1].gives === "key3" && !trades[1].cost);
+check("villager 2 sells the silver key for 1 emerald", trades[1] && trades[1].gives === "key3" &&
+  trades[1].cost && trades[1].cost.id === "emerald" && trades[1].cost.count === 1);
 check("villager 3 has no key quest (the igloo trader)", trades[2] && trades[2].gives === null);
 check("the mansion villager gives the gold key", trades[3] && trades[3].house === 4 && trades[3].gives === "key4" && !trades[3].cost);
 
@@ -796,6 +797,7 @@ const icons = await page.evaluate(() => {
     helmetSvg: html("iron_helmet").includes("svg") && html("iron_helmet").includes("armor-swatch"),
     bootsSvg: html("diamond_boots").includes("svg"),
     shieldSvg: html("wood_shield").includes("svg"),
+    emeraldGem: html("emerald").includes("svg") && !html("emerald").includes("💚"),
     // Different pieces produce different shapes.
     distinctShapes: html("iron_helmet") !== html("iron_boots")
   };
@@ -804,6 +806,7 @@ check("the inventory has an equipment row", icons.hasEquipRow);
 check("armour renders shaped SVG icons (not plain squares)",
   icons.helmetSvg && icons.bootsSvg && icons.shieldSvg);
 check("each armour piece has its own shape", icons.distinctShapes);
+check("the emerald icon is a faceted gem, not a heart", icons.emeraldGem);
 
 // End-to-end: tapping an armour item in the backpack UI wears it.
 const equipUI = await page.evaluate(() => {
