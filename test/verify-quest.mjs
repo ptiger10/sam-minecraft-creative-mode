@@ -1,8 +1,10 @@
-// Verifies the four-settlement quest: the yellow brick road, the key/locked-door
-// chain, the Nether (portal, netherite, ghasts that scorch you for two hearts),
-// and the End (the fourth house's portal, the Ender Dragon with purple eyes and
-// purple fire, four spiral staircases crowned with End Crystals, the crafted
-// Exit Portal, winning back to the Home Screen, and no saving in The End).
+// Verifies the biome-journey quest: the yellow brick road from the forest
+// village through the desert temple and the igloo to the woodland mansion,
+// the key/locked-door chain, the unminable mansion with its vindicator guard,
+// the Nether (portal, netherite, ghasts that scorch you for two hearts),
+// and the End (the mansion's portal room, the Ender Dragon with purple eyes
+// and purple fire, four spiral staircases crowned with End Crystals, the
+// crafted Exit Portal, winning back to the Home Screen, and no saving there).
 // Run alongside the other tests.
 import { createServer } from "http";
 import { readFile } from "fs/promises";
@@ -41,11 +43,11 @@ page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 
 await page.goto(base, { waitUntil: "load" });
 await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
-await page.click("#btn-new-forest");
+await page.click("#btn-new-expanded");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(300);
 
-// --- Four settlements joined by a yellow brick road starting near spawn ---
+// --- Three settlements + the mansion, joined by a road starting at spawn ---
 const layout = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
   const sc = Math.floor(window.Game.CONST.WORLD / 2);
@@ -56,15 +58,64 @@ const layout = await page.evaluate(() => {
     const p = k.split(",");
     if (Math.abs(+p[0] - sc) <= 3 && Math.abs(+p[2] - sc) <= 3) brickNearSpawn = true;
   }
-  return { sites: (W.questSites || []).length, villagers: (W.questVillagers || []).length, brick, brickNearSpawn };
+  return { sites: (W.questSites || []).length, villagers: (W.questVillagers || []).length,
+    brick, brickNearSpawn, mansion: !!W.mansion };
 });
-check("four settlements were built", layout.sites === 4);
-check("three quest villagers exist", layout.villagers === 3);
+check("three settlements were built", layout.sites === 3);
+check("the woodland mansion was built", layout.mansion);
+check("four quest villagers exist", layout.villagers === 4);
 check("a yellow brick road was laid", layout.brick > 20);
 check("the road starts near the spawn point", layout.brickNearSpawn);
 
-// --- Villagers 1-2 offer keys; the fourth house needs no key at all now, so
-//     villager 3 is an ordinary emerald trader ---
+// --- The journey's biomes run forest -> desert -> snow -> roofed forest ---
+const journey = await page.evaluate(() => {
+  const W = window.Game.S.world;
+  const s = W.questSites, g = W._grove;
+  return {
+    b1: W.biomeAt(s[0].cx, s[0].cz),
+    b2: W.biomeAt(s[1].cx, s[1].cz),
+    b3: W.biomeAt(s[2].cx, s[2].cz),
+    b4: W.biomeAt(g.x, g.z)
+  };
+});
+check("stop 1 (the village) is in the forest", journey.b1 === "forest");
+check("stop 2 (the temple) is in the desert", journey.b2 === "desert");
+check("stop 3 (the igloo) is in the snowy mountains", journey.b3 === "snow");
+check("the mansion's grove is roofed forest", journey.b4 === "roofed");
+
+// --- Biome-appropriate settlements: a sandstone temple and a snow igloo ---
+const structures = await page.evaluate(() => {
+  const W = window.Game.S.world, C = window.Game.CONST;
+  const s = W.questSites;
+  const near = (cx, cz, id, r) => {
+    r = r || 6;
+    let n = 0;
+    for (let dx = -r; dx <= r; dx++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let y = 0; y <= C.MAX_Y; y++)
+          if (W.get(cx + dx, y, cz + dz) === id) n++;
+    return n;
+  };
+  return {
+    sandstone: near(s[1].cx, s[1].cz, "sandstone"),
+    door2: near(s[1].cx, s[1].cz, "locked_door_2"),
+    templeDoor: near(s[1].cx, s[1].cz, "door"),
+    snow: near(s[2].cx, s[2].cz, "snow"),
+    ice: near(s[2].cx, s[2].cz, "ice"),
+    door3: near(s[2].cx, s[2].cz, "locked_door_3"),
+    portalInIgloo: near(s[2].cx, s[2].cz, "nether_portal")
+  };
+});
+check("the desert temple is built of sandstone", structures.sandstone > 40);
+check("the temple's door opens freely (the map shows the way)", structures.door2 === 0 && structures.templeDoor >= 1);
+check("the igloo is built of snow", structures.snow > 30);
+check("the igloo has ice windows", structures.ice >= 2);
+check("the igloo's door is locked (silver key)", structures.door3 === 1);
+check("the Nether portal glows inside the igloo", structures.portalInIgloo >= 2);
+
+// --- Villager 1 sells the journey map; villager 2 gives the silver key; the
+//     igloo villager is an ordinary trader; the LAST villager (mansion, 2nd
+//     floor) gives the gold key ---
 const trades = await page.evaluate(() => {
   const W = window.Game.S.world;
   return W.questVillagers
@@ -73,51 +124,102 @@ const trades = await page.evaluate(() => {
       gives: v.userData.quest ? v.userData.quest.gives : null,
       cost: v.userData.quest ? (v.userData.quest.cost || null) : null }));
 });
-check("villager 1 gives the bronze key", trades[0] && trades[0].gives === "key2" && !trades[0].cost);
+check("villager 1 sells the journey map for 1 emerald", trades[0] && trades[0].gives === "map" &&
+  trades[0].cost && trades[0].cost.id === "emerald" && trades[0].cost.count === 1);
 check("villager 2 gives the silver key", trades[1] && trades[1].gives === "key3" && !trades[1].cost);
-check("villager 3 has no key quest (the fourth house is open)", trades[2] && trades[2].gives === null);
+check("villager 3 has no key quest (the igloo trader)", trades[2] && trades[2].gives === null);
+check("the mansion villager gives the gold key", trades[3] && trades[3].house === 4 && trades[3].gives === "key4" && !trades[3].cost);
 
-// --- Houses 2-4 are locked; a key unlocks the matching door ---
+// --- The mansion villager lives on the SECOND floor, and the gold key's
+//     locked door (with the dormant End Portal behind it) is up there too ---
+const upstairs = await page.evaluate(() => {
+  const W = window.Game.S.world;
+  const m = W.mansion, gate = W.endGate;
+  const v4 = W.questVillagers.find((v) => v.userData.house === 4);
+  let door4 = null;
+  for (const [k, id] of W.blocks) if (id === "locked_door_4") door4 = k.split(",").map(Number);
+  return {
+    villagerUp: !!v4 && v4.position.y > m.y + 4,
+    gateUp: !!gate && gate.y > m.y + 4,
+    door4Up: !!door4 && door4[1] > m.y + 4,
+    door4NearMansion: !!door4 && Math.abs(door4[0] - m.x) <= 9 && Math.abs(door4[2] - m.z) <= 7,
+    gateNearMansion: !!gate && Math.abs(gate.x - m.x) <= 9 && Math.abs(gate.z - m.z) <= 7
+  };
+});
+check("the last villager lives on the mansion's second floor", upstairs.villagerUp);
+check("the locked gold-key door is on that floor", upstairs.door4Up && upstairs.door4NearMansion);
+check("the dormant End Portal waits behind it", upstairs.gateUp && upstairs.gateNearMansion);
+
+// --- The vindicator: guards the doors by day, sleeps on a bed at night ---
+const vind = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world;
+  const v = W.vindicator;
+  if (!v) return { ok: false };
+  S.worldClock = 60;                       // broad daylight
+  W.updateAnimals(0.05);
+  const dayAtPost = Math.abs(v.position.x - v.userData.guardPost.x) < 0.01 &&
+                    Math.abs(v.position.z - v.userData.guardPost.z) < 0.01;
+  const dayAwake = v.userData.asleep === false;
+  S.worldClock = 4 * 60;                   // deep night
+  W.updateAnimals(0.05);
+  const nightAsleep = v.userData.asleep === true;
+  const nightAtBed = Math.abs(v.position.x - v.userData.bedSpot.x) < 0.01 &&
+                     Math.abs(v.position.z - v.userData.bedSpot.z) < 0.01;
+  const lying = Math.abs(v.rotation.x) > 1;
+  // The bed he sleeps on really is one of the mansion's beds.
+  const bx = Math.floor(v.userData.bedSpot.x), bz = Math.floor(v.userData.bedSpot.z);
+  const onABed = W.get(bx, Math.floor(v.userData.bedSpot.y), bz) === "bed";
+  S.worldClock = 60;                       // back to daytime for later tests
+  W.updateAnimals(0.05);
+  const guardsInFront = v.userData.guardPost.z < W.mansion.z; // before the -z doors
+  return { ok: true, dayAtPost, dayAwake, nightAsleep, nightAtBed, lying, onABed, guardsInFront };
+});
+check("a vindicator guards the mansion", vind.ok);
+check("he stands watch in front of the doors by day", vind.dayAtPost && vind.dayAwake && vind.guardsInFront);
+check("at night he sleeps on one of the beds", vind.nightAsleep && vind.nightAtBed && vind.onABed);
+check("he lies down flat to sleep", vind.lying);
+
+// --- Doors 3-4 are locked (the temple is open); a key unlocks its door ---
 const locks = await page.evaluate(() => {
   const W = window.Game.S.world;
   const found = { 2: false, 3: false, 4: false };
   let lockBlock = null;
   for (const [k, id] of W.blocks) {
     const n = window.Game.LOCKED[id];
-    if (n) { found[n] = true; if (n === 2) lockBlock = k.split(",").map(Number); }
+    if (n) { found[n] = true; if (n === 3) lockBlock = k.split(",").map(Number); }
   }
-  // Unlock door 2 by handing the player the bronze key and tapping it.
+  // Line up the igloo's silver-key door for the unlock drive below.
   let unlocked = false;
   if (lockBlock) {
-    window.Game.S.inv[0] = { id: "key2", count: 1 };
+    window.Game.S.inv[0] = { id: "key3", count: 1 };
     // Call the same path a tap takes on a locked door.
     const S = window.Game.S;
     const before = S.world.get(lockBlock[0], lockBlock[1], lockBlock[2]);
     // Reach into the trade/unlock by simulating the interaction helper.
     S.world.setBlock; // no-op ref
     window.__tapLock = lockBlock;
-    unlocked = before && window.Game.LOCKED[before] === 2;
+    unlocked = before && window.Game.LOCKED[before] === 3;
   }
   return { found, lockBlock: lockBlock, unlocked };
 });
-check("the second house has a locked door", locks.found[2]);
-check("the third house has a locked door", locks.found[3]);
-check("the fourth house is NOT locked (its door opens freely)", locks.found[4] === false);
+check("no bronze-key door exists any more", locks.found[2] === false);
+check("the igloo has a locked door", locks.found[3]);
+check("the mansion's portal room has a locked door", locks.found[4]);
 
 // Drive a real unlock through the world API (key consumed -> door opens).
 const unlock = await page.evaluate(() => {
   const S = window.Game.S, W = S.world, lb = window.__tapLock;
   if (!lb) return { ok: false };
-  S.inv[0] = { id: "key2", count: 1 };
+  S.inv[0] = { id: "key3", count: 1 };
   // Mimic tryUnlock: it removes the key and swaps to an open door.
-  const keyHad = S.inv[0] && S.inv[0].id === "key2";
+  const keyHad = S.inv[0] && S.inv[0].id === "key3";
   W.setBlock(lb[0], lb[1], lb[2], "door_open");
   const now = W.get(lb[0], lb[1], lb[2]);
   return { ok: keyHad && now === "door_open" };
 });
 check("a key opens its locked door", unlock.ok);
 
-// --- The Nether portal lives inside the third house ---
+// --- The Nether portal lives inside the igloo ---
 const portal = await page.evaluate(() => {
   const W = window.Game.S.world;
   let portals = 0;
@@ -200,8 +302,8 @@ const fire = await page.evaluate(() => {
 check("a ghast fireball deals two hearts of damage", fire.before - fire.after === 4);
 check("wearing armour blocks a ghast fireball", fire.afterArmored === fire.max);
 
-// --- The fourth house holds a DORMANT End Portal frame: 8 empty eye sockets,
-//     no portal until every Eye of Ender is set in place ---
+// --- The mansion's portal room holds a DORMANT End Portal frame: 8 empty eye
+//     sockets, no portal until every Eye of Ender is set in place ---
 const gate = await page.evaluate(() => {
   const S = window.Game.S, W = S.world, G = window.Game;
   let endPortals = 0, frames = 0, plaque = false;
@@ -294,31 +396,66 @@ await page.waitForTimeout(350);
 const backOut = await page.evaluate(() => window.Game.S.inNether);
 check("walking into the return portal leaves the Nether", stepBack && backOut === false);
 
-// --- A villager hands over each key only once ---
+// --- The first villager sells the map once, for exactly one emerald ---
 const oneTime = await page.evaluate(() => {
   const Game = window.Game, S = Game.S, W = S.world;
-  // Start from a clean slate for villager 1 (the free Bronze Key).
+  // Start from a clean slate for villager 1 (the 1-emerald Journey Map).
   S.questKeysGiven = {};
-  for (let i = 0; i < S.inv.length; i++) if (S.inv[i] && S.inv[i].id === "key2") S.inv[i] = null;
+  for (let i = 0; i < S.inv.length; i++) if (S.inv[i] && S.inv[i].id === "map") S.inv[i] = null;
   const v1 = W.questVillagers.find((v) => v.userData.house === 1);
   const q = v1.userData.quest;
-  const count = () => S.inv.reduce((n, s) => n + (s && s.id === "key2" ? s.count : 0), 0);
-  Game._buyQuest(q);            // first trade — should hand over the key
-  const afterFirst = count();
+  const count = (id) => S.inv.reduce((n, s) => n + (s && s.id === id ? s.count : 0), 0);
+  // Broke: no emeralds -> no map.
+  Game._buyQuest(q);
+  const broke = count("map");
+  // With emeralds: the first trade hands over the map and takes ONE emerald.
+  S.inv[0] = { id: "emerald", count: 3 };
+  Game._buyQuest(q);            // first trade — should hand over the map
+  const afterFirst = count("map");
+  const emeraldsLeft = count("emerald");
   Game._buyQuest(q);            // second attempt — must be refused
   Game._buyQuest(q);            // ...even a third time
-  const afterMore = count();
-  return { afterFirst, afterMore, remembered: !!S.questKeysGiven.key2 };
+  const afterMore = count("map");
+  return { broke, afterFirst, emeraldsLeft, afterMore, remembered: !!S.questKeysGiven.map };
 });
-check("trading gives the key the first time", oneTime.afterFirst === 1);
-check("the same key can't be obtained again", oneTime.afterMore === 1);
-check("the granted key is remembered", oneTime.remembered === true);
+check("no emeralds -> no map", oneTime.broke === 0);
+check("one emerald buys the journey map", oneTime.afterFirst === 1 && oneTime.emeraldsLeft === 2);
+check("the same map can't be bought twice", oneTime.afterMore === 1);
+check("the granted map is remembered", oneTime.remembered === true);
 
-// The trade UI also shows the key as already-claimed (button disabled).
+// --- Unfolding the map paints the biomes, the road and the numbered stops ---
+const mapView = await page.evaluate(() => {
+  const Game = window.Game, S = Game.S;
+  Game._showMap();
+  const panel = document.getElementById("map-panel");
+  const shown = !!panel && !panel.classList.contains("hidden");
+  const canvas = document.getElementById("map-canvas");
+  const img = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  const counts = { forest: 0, desert: 0, snow: 0, roofed: 0, road: 0, water: 0 };
+  const match = (i, r, g, b) => img[i] === r && img[i + 1] === g && img[i + 2] === b;
+  for (let i = 0; i < img.length; i += 4) {
+    if (match(i, 0x58, 0xa2, 0x4a)) counts.forest++;
+    else if (match(i, 0xe0, 0xd1, 0x8f)) counts.desert++;
+    else if (match(i, 0xee, 0xf3, 0xf7)) counts.snow++;
+    else if (match(i, 0x2e, 0x5b, 0x2e)) counts.roofed++;
+    else if (match(i, 0xf2, 0xcf, 0x3b)) counts.road++;
+    else if (match(i, 0x3f, 0x7f, 0xd8)) counts.water++;
+  }
+  document.querySelector("#map-panel .close-btn").click();
+  return { shown, counts };
+});
+check("using the map unfolds the map panel", mapView.shown);
+check("the map paints all four biome regions",
+  mapView.counts.forest > 400 && mapView.counts.desert > 200 &&
+  mapView.counts.snow > 200 && mapView.counts.roofed > 100);
+check("the yellow brick road is drawn on the map", mapView.counts.road > 100);
+check("the ponds show on the map too", mapView.counts.water > 10);
+
+// The trade UI also shows the map as already-claimed (button disabled).
 const claimedUI = await page.evaluate(() => {
   const Game = window.Game, S = Game.S, W = S.world;
   const v1 = W.questVillagers.find((v) => v.userData.house === 1);
-  Game._openTrade(v1); // questKeysGiven.key2 is still set from the test above
+  Game._openTrade(v1); // questKeysGiven.map is still set from the test above
   const btn = document.querySelector("#trade-list .quest-trade");
   const disabled = btn ? btn.disabled : null;
   const closeBtn = document.querySelector("#trade-panel .close-btn");
@@ -327,7 +464,7 @@ const claimedUI = await page.evaluate(() => {
 });
 check("the claimed key trade is disabled in the UI", claimedUI.disabled === true);
 
-// --- You can't mine through the walls of a locked house ---
+// --- You can't mine through the mansion's protected walls ---
 const sealed = await page.evaluate(async () => {
   const Game = window.Game, S = Game.S, W = S.world;
   if (!W.protectedCells || W.protectedCells.size === 0) return { ok: false };
@@ -562,6 +699,35 @@ check("day is 3.5 minutes, then night falls", dayNight.night === true);
 check("day returns after the 1.5-minute night", dayNight.backToDay === false);
 check("the world darkens at night", dayNight.nightBright < dayNight.dayBright - 0.1);
 
+// --- A sun and moon arc across the sky with the time of day ---
+const skyBodies = await page.evaluate(async () => {
+  const S = window.Game.S;
+  const dn = S.scene.userData.dayNight;
+  if (!dn || !dn.sunMesh || !dn.moonMesh) return { ok: false };
+  const at = async (t) => {
+    S.worldClock = t;
+    await new Promise((r) => setTimeout(r, 140));   // let the loop reposition them
+    return { sun: dn.sunMesh.visible, moon: dn.moonMesh.visible,
+      sx: dn.sunMesh.position.x, sy: dn.sunMesh.position.y,
+      my: dn.moonMesh.position.y };
+  };
+  const p = S.player.pos;
+  const morning = await at(10);                 // just after sunrise
+  const noon = await at(3.5 * 60 / 2);          // the middle of the day
+  const evening = await at(3.5 * 60 - 15);      // just before sunset
+  const night = await at(4 * 60);               // the middle of the night
+  S.worldClock = 60;                            // leave it daytime
+  return { ok: true, morning, noon, evening, night,
+    noonOverhead: Math.abs(noon.sx - p.x) < 6 };
+});
+check("a sun shines in the daytime sky", skyBodies.ok && skyBodies.morning.sun && !skyBodies.morning.moon);
+check("the sun climbs from sunrise to noon", skyBodies.noon.sy > skyBodies.morning.sy + 10);
+check("noon puts the sun overhead", skyBodies.noonOverhead);
+check("the sun sinks again toward sunset", skyBodies.evening.sy < skyBodies.noon.sy - 10);
+check("the sun crosses the sky east to west", Math.abs(skyBodies.evening.sx - skyBodies.morning.sx) > 40);
+check("at night the moon replaces the sun", skyBodies.night.moon && !skyBodies.night.sun);
+check("the night moon rides high", skyBodies.night.my > skyBodies.morning.sy);
+
 // --- Craftable armour & shields in three tiers ---
 const armor = await page.evaluate(() => {
   const Game = window.Game;
@@ -676,24 +842,31 @@ check("no shield equipped -> empty hand", shieldHand.emptyWhenNone);
 check("an equipped shield appears in your hand", shieldHand.showsWhenEquipped);
 check("holding a shield renders it in your hand", shieldHand.heldShows);
 
-// --- Villager houses are mineable, except the final End-portal house ---
+// --- Settlements 1-3 are mineable; the mansion (and its portal room) is not ---
 const houses = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
   let endPortal = null;
   for (const [k, id] of W.blocks) if (id === "end_portal") endPortal = k.split(",").map(Number);
   let villagerWallSealed = false;
   W.questVillagers.forEach((v) => {
+    if (v.userData.house === 4) return;   // the mansion villager — sealed on purpose
     const hx = Math.round(v.userData.home.x - 0.5), hz = Math.round(v.userData.home.z - 0.5);
     for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
       if (W.isProtected(hx + dx, y, hz + dz)) villagerWallSealed = true;
   });
+  let mansionSealed = false;
+  const m = W.mansion;
+  for (let dx = -8; dx <= 8; dx++) for (let dz = -6; dz <= 6; dz++) {
+    if (W.isProtected(m.x + dx, m.y + 1, m.z + dz)) mansionSealed = true;
+  }
   let hallSealed = false;
   if (endPortal) for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 0; y < 20; y++)
     if (W.isProtected(endPortal[0] + dx, y, endPortal[2] + dz)) hallSealed = true;
-  return { villagerWallSealed, hallSealed, hasEndPortal: !!endPortal };
+  return { villagerWallSealed, mansionSealed, hallSealed, hasEndPortal: !!endPortal };
 });
-check("villager houses 1-3 can be mined into", houses.villagerWallSealed === false);
-check("the final End-portal house stays sealed", houses.hasEndPortal && houses.hallSealed);
+check("settlements 1-3 can be mined into", houses.villagerWallSealed === false);
+check("the woodland mansion is NOT mineable", houses.mansionSealed);
+check("the End-portal room stays sealed", houses.hasEndPortal && houses.hallSealed);
 
 // --- Night skeleton archer: hidden by day, shoots at night ---
 const archer = await page.evaluate(() => {
@@ -874,7 +1047,7 @@ check("the Ender Dragon breathes purple fire", dragonFire.purple === true);
 check("the dragon's purple fire costs two hearts undefended", dragonFire.dmg === 4);
 check("armour blocks the dragon's purple fire", dragonFire.afterArmored === dragonFire.max);
 
-// --- Live: stepping into the fourth house's portal enters The End ---
+// --- Live: stepping into the mansion's lit portal enters The End ---
 const enterEnd = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
   let best = null;
@@ -897,7 +1070,7 @@ const inEnd = await page.evaluate(() => {
   return { inEnd: S.inEnd, biome: S.world.biome, defended: window.Game.hasDefense(),
     crystals: (S.world.endCrystals || []).length };
 });
-check("stepping into the fourth house's portal enters The End", enterEnd.ok && inEnd.inEnd === true && inEnd.biome === "end");
+check("stepping into the mansion's portal enters The End", enterEnd.ok && inEnd.inEnd === true && inEnd.biome === "end");
 check("The End hands you armour so the dragon's fire can't hurt you", inEnd.defended === true);
 check("the live End has its four crystal spires", inEnd.crystals === 4);
 

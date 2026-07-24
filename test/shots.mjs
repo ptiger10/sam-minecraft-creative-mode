@@ -28,7 +28,7 @@ const browser = await chromium.launch({ args: ["--use-gl=swiftshader", "--no-san
 const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 await page.goto(base, { waitUntil: "load" });
 await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
-await page.click("#btn-new-forest");
+await page.click("#btn-new-expanded");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(300);
 

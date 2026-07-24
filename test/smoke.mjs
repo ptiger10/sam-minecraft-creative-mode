@@ -73,8 +73,8 @@ page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
 await page.goto(base, { waitUntil: "load" });
 await page.waitForFunction(() => window.Game && window.Game.S, { timeout: 8000 });
 
-// --- Start a forest world ---
-await page.click("#btn-new-forest");
+// --- Start an expanded world (spawns in the forest) ---
+await page.click("#btn-new-expanded");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(400);
 
@@ -275,24 +275,33 @@ check("loaded world is a forest", loaded.biome === "forest");
 check("loaded world kept its edits", loaded.changes >= 1 && loaded.changes === cBefore);
 check("loaded inventory restored (pickaxe present)", loaded.hasPickaxe);
 
-// --- Desert biome ---
+// --- The expanded world's biome journey: forest, desert, snow, roofed ---
 await page.click("#btn-menu");
 await page.waitForTimeout(150);
-await page.click("#btn-new-desert");
-await page.waitForFunction(() => window.Game.S.running && window.Game.S.world.biome === "desert", { timeout: 8000 });
+await page.click("#btn-new-expanded");
+await page.waitForFunction(() => window.Game.S.running && window.Game.S.world.biome === "forest", { timeout: 8000 });
 await page.waitForTimeout(400);
-const desert = await page.evaluate(() => {
-  const S = window.Game.S;
-  let sand = false;
-  for (const id of S.world.blocks.values()) { if (id === "sand") { sand = true; break; } }
-  return { biome: S.world.biome, sand: sand, animals: S.world.animals.length,
+const biomes = await page.evaluate(() => {
+  const S = window.Game.S, W = S.world, C = window.Game.CONST;
+  const found = new Set();
+  for (let x = 2; x < C.WORLD - 2; x += 3)
+    for (let z = 2; z < C.WORLD - 2; z += 3) found.add(W.biomeAt(x, z));
+  let sand = false, snow = false;
+  for (const id of W.blocks.values()) {
+    if (id === "sand") sand = true;
+    else if (id === "snow") snow = true;
+    if (sand && snow) break;
+  }
+  return { all: ["forest", "desert", "snow", "roofed"].every((b) => found.has(b)),
+    sand, snow, animals: W.animals.length,
     stuck: S.player.collides(S.player.pos.x, S.player.pos.y, S.player.pos.z) };
 });
-check("desert world generated", desert.biome === "desert");
-check("desert has sand", desert.sand);
-check("desert has animals", desert.animals > 0);
-check("desert spawn not stuck", desert.stuck === false);
-await page.screenshot({ path: new URL("./screenshot-desert.png", import.meta.url).pathname });
+check("the expanded world holds all four biomes", biomes.all);
+check("the desert region has sand", biomes.sand);
+check("the snowy mountains have snow", biomes.snow);
+check("expanded world has animals", biomes.animals > 0);
+check("expanded spawn not stuck", biomes.stuck === false);
+await page.screenshot({ path: new URL("./screenshot-expanded.png", import.meta.url).pathname });
 
 // --- Fall damage -> death -> respawn ---
 await page.evaluate(() => {

@@ -52,8 +52,8 @@ const afterToggle = await page.evaluate(() => window.Game.S.invertLook);
 check("toggling the setting turns inverted look OFF", afterToggle === false);
 await page.click("#btn-invert-look"); // back to default for the rest of the run
 
-// --- Start a forest world ---
-await page.click("#btn-new-forest");
+// --- Start an expanded world ---
+await page.click("#btn-new-expanded");
 await page.waitForFunction(() => window.Game.S.running && window.Game.S.world, { timeout: 8000 });
 await page.waitForTimeout(300);
 
@@ -369,6 +369,40 @@ const furRecipes = await page.evaluate(() => {
 });
 check("furnace panel lists the smelting recipes", furRecipes.rows >= 5);
 check("tapping a furnace recipe loads the ingredient", furRecipes.loaded.input === "sand" && furRecipes.loaded.inputN === 3);
+
+// --- The chest panel names whatever item you tap ---
+const chestTitle = await page.evaluate(() => {
+  const G = window.Game, S = G.S;
+  const arr = new Array(27).fill(null);
+  arr[0] = { id: "apple", count: 2 };
+  S.chests["2,9,2"] = arr;
+  G._openChest({ x: 2, y: 9, z: 2 });
+  const titleEl = document.getElementById("chest-title");
+  const before = titleEl ? titleEl.textContent : "";
+  document.querySelector("#chest-grid .slot").click();      // take the apples
+  const afterTake = titleEl.textContent;
+  // Store something back and the title names that too.
+  const slot = S.inv.findIndex((s) => s && s.id === "apple");
+  document.querySelectorAll("#chest-inv-grid .slot")[slot].click();
+  const afterPut = titleEl.textContent;
+  document.querySelector("#chest-panel .close-btn").click();
+  return { hasTitle: !!titleEl, before, afterTake, afterPut };
+});
+check("the chest panel has an item-name title bar", chestTitle.hasTitle && /Tap an item/.test(chestTitle.before));
+check("taking a chest item shows its name", /Apple/.test(chestTitle.afterTake));
+check("storing an item shows its name too", /Apple/.test(chestTitle.afterPut));
+
+// --- A bucket costs exactly 3 stone, and no crafting table ---
+const bucket = await page.evaluate(() => {
+  const G = window.Game;
+  const r = G.Recipes.find((x) => x.id === "bucket");
+  const cost = {};
+  r.pattern.forEach((row) => row.forEach((id) => { if (id) cost[id] = (cost[id] || 0) + 1; }));
+  return { stone: cost.stone || 0, kinds: Object.keys(cost).length, table: !!r.table,
+    fits2x2: r.pattern.length <= 2 && Math.max(...r.pattern.map((row) => row.length)) <= 2 };
+});
+check("a bucket costs exactly 3 stone", bucket.stone === 3 && bucket.kinds === 1);
+check("the bucket needs no crafting table (fits the 2x2 grid)", !bucket.table && bucket.fits2x2);
 
 // --- A take-a-break can't be dodged by reloading the page ---
 // Clear any leftover break state, then force a break to begin.
