@@ -161,8 +161,12 @@ window.Game = window.Game || {};
     end_crystal:  { name: "End Crystal", all: 0xd06bff, top: 0xe6a8ff, tool: "hand", drop: "end_crystal", harvestOnTap: true },
     // The dark, starry portal (in the 4th house) that carries you into The End.
     end_portal:   { name: "End Portal", all: 0x0a0a1e, top: 0x2a2a6a, tool: "hand", drop: null, solid: false },
-    // The dormant portal's arch: 8 frame blocks, each with an eye socket. Place
-    // all 8 Eyes of Ender to light the portal; the frame itself can't be mined.
+    // The same starry portal lying FLAT on the floor — the surface that fills
+    // the mansion's horizontal portal ring once every eye is in place.
+    end_portal_flat: { name: "End Portal", all: 0x0a0a1e, top: 0x2a2a6a, tool: "hand", drop: null, solid: false },
+    // The dormant portal's ring: 12 frame blocks laid flat on the floor (3 per
+    // side, none on the corners), each with an eye socket on top. Place all 12
+    // Eyes of Ender to light the portal; the frame itself can't be mined.
     end_frame:     { name: "End Portal Frame", top: 0xcede9a, side: 0x3a5b46, bottom: 0x2c4636, tool: "hand", drop: null },
     end_frame_eye: { name: "End Portal Frame (with eye)", top: 0xcede9a, side: 0x3a5b46, bottom: 0x2c4636, tool: "hand", drop: null },
     // The bright crystal portal you craft to leave The End and win the game.
@@ -261,7 +265,7 @@ window.Game = window.Game || {};
 
   // World-only blocks the player never carries or places (portals, locked doors,
   // the credits plaque) are hidden from the inventory and not placeable.
-  ["nether_portal", "end_portal", "end_frame", "end_frame_eye", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
+  ["nether_portal", "end_portal", "end_portal_flat", "end_frame", "end_frame_eye", "credits_block", "cloud", "locked_door_2", "locked_door_3", "locked_door_4"].forEach((id) => {
     if (Game.ItemDefs[id]) { Game.ItemDefs[id].hidden = true; Game.ItemDefs[id].placeable = false; }
   });
 
@@ -289,10 +293,10 @@ window.Game = window.Game || {};
   // needed to win — just wonderfully good to have in your backpack.
   Game.ItemDefs.totem = { name: "Totem of Undying", emoji: "🗿", placeable: false,
     desc: "The mansion's ancient treasure. If you would die while carrying it, it brings you back with full health — then crumbles. One life per totem." };
-  // The Eye of Ender: 8 wait in the Nether fortress chest. Tap them into the
-  // End Portal frame's sockets in the fourth settlement to light the portal.
+  // The Eye of Ender: 12 wait in the Nether fortress chest. Tap them into the
+  // End Portal frame's sockets in the mansion's portal room to light the portal.
   Game.ItemDefs.eye_of_ender = { name: "Eye of Ender", emoji: "🧿", placeable: false,
-    desc: "Tap an empty End Portal Frame socket to set it in. All 8 light the portal to The End; tap one to take it back out." };
+    desc: "Tap an empty End Portal Frame socket to set it in. All 12 light the portal to The End; tap one to take it back out." };
   // The Journey Map: the first villager sells it for one emerald. Hold it and
   // tap Place (or the world) to unfold it — it paints the whole journey.
   Game.ItemDefs.map = { name: "Journey Map", emoji: "🗺️", placeable: false,

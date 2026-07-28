@@ -943,7 +943,7 @@
     if (id === "furnace") { openFurnace(); return true; }
     if (id === "chest") { openChest(hit.block); return true; }
     if (id === "credits_block") { showCredits(); return true; }
-    if (id === "nether_portal" || id === "end_portal") { return true; } // step in to travel
+    if (id === "nether_portal" || id === "end_portal" || id === "end_portal_flat") { return true; } // step in to travel
     if (id === "end_frame") { insertEnderEye(hit.block); return true; }
     if (id === "end_frame_eye") { removeEnderEye(hit.block); return true; }
     if (Game.LOCKED[id]) { tryUnlock(hit.block); return true; }
@@ -956,24 +956,25 @@
   }
 
   // ===============================================================
-  //  The End Gate: 8 Eyes of Ender light the portal in the 4th house
+  //  The End Gate: 12 Eyes of Ender light the portal ring lying flat
+  //  on the mansion's portal-room floor
   // ===============================================================
   // Tap an empty frame socket while carrying an Eye of Ender to set it in.
-  // When the 8th eye clicks into place, the portal blazes to life.
+  // When the 12th eye clicks into place, the portal blazes to life.
   function insertEnderEye(block) {
     S.swing = 0.18;
     if (countItem("eye_of_ender") < 1) {
-      toast("🧿 An empty eye socket… an Eye of Ender would fit. They say a Nether fortress chest holds eight of them.");
+      toast("🧿 An empty eye socket… an Eye of Ender would fit. They say a Nether fortress chest holds twelve of them.");
       return;
     }
     removeItems({ eye_of_ender: 1 });
     S.world.setBlock(block.x, block.y, block.z, "end_frame_eye");
     const n = S.world.endGateEyes();
-    if (n >= 8) {
+    if (n >= 12) {
       S.world.setEndGateActive(true);
-      toast("✨ The 8th Eye clicks into place — the End Portal roars to life! Step through when you're ready…");
+      toast("✨ The 12th Eye clicks into place — the End Portal roars to life! Step in when you're ready…");
     } else {
-      toast("🧿 Eye of Ender placed — " + n + " of 8.");
+      toast("🧿 Eye of Ender placed — " + n + " of 12.");
     }
     renderHotbar(); updateHand();
   }
@@ -981,14 +982,14 @@
   // Tap a filled socket to pop its eye back out — and darken the portal.
   function removeEnderEye(block) {
     S.swing = 0.18;
-    const wasLit = S.world.endGateEyes() >= 8;
+    const wasLit = S.world.endGateEyes() >= 12;
     S.world.setBlock(block.x, block.y, block.z, "end_frame");
     addItem("eye_of_ender", 1);
     if (wasLit) {
       S.world.setEndGateActive(false);
-      toast("🧿 The Eye pops out and the portal fades dark — " + S.world.endGateEyes() + " of 8.");
+      toast("🧿 The Eye pops out and the portal fades dark — " + S.world.endGateEyes() + " of 12.");
     } else {
-      toast("🧿 Took the Eye of Ender back — " + S.world.endGateEyes() + " of 8.");
+      toast("🧿 Took the Eye of Ender back — " + S.world.endGateEyes() + " of 12.");
     }
     renderHotbar(); updateHand();
   }
@@ -1170,9 +1171,9 @@
       const key = c.x + "," + c.y + "," + c.z;
       if (key in S.chests) return;
       // Loot: netherite, gems, and a spread of good blocks to build with — and
-      // in the open worlds, the 8 Eyes of Ender that light the End Portal.
+      // in the open worlds, the 12 Eyes of Ender that light the End Portal.
       const loot = [];
-      if (!S.overworld.legacy) loot.push({ id: "eye_of_ender", count: 8 });
+      if (!S.overworld.legacy) loot.push({ id: "eye_of_ender", count: 12 });
       loot.push(
         { id: "netherite", count: 3 },
         { id: "diamond", count: 5 },
@@ -1356,7 +1357,7 @@
     // The crafted Exit Portal ends the game; the End portal carries you into The
     // End (there's no reverse — the End has no portal home).
     if (pid === "exit_portal") { winTheGame(); return; }
-    if (pid === "end_portal") { if (!S.inEnd) travelToEnd(); return; }
+    if (pid === "end_portal" || pid === "end_portal_flat") { if (!S.inEnd) travelToEnd(); return; }
     if (pid !== "nether_portal") return;
     const id = Game.World.portalId(S.world.portalCellsFrom(bx, by, bz));
     if (!S.inNether) {
@@ -1533,7 +1534,7 @@
     // The End Gate: a mining swing pops an eye out, but the frame and the
     // portal itself can never be broken.
     if (id === "end_frame_eye") { removeEnderEye(hit.block); return; }
-    if (id === "end_frame" || id === "end_portal") {
+    if (id === "end_frame" || id === "end_portal" || id === "end_portal_flat") {
       toast("🧿 The End Portal frame is ancient magic — only Eyes of Ender go in and out.");
       return;
     }
@@ -2341,6 +2342,43 @@
     });
   }
 
+  // The End Gate used to be an upright 8-eye arch; now it's a ring of 12 frame
+  // blocks lying flat on the portal room's floor. Loading an older save:
+  // (1) drop gate edits that don't belong to the new ring — eyes placed on the
+  // vanished arch come back to the player — and (2) since the old fortress
+  // chest only ever held 8 eyes, top an already-looted save up to the 12 the
+  // ring now needs. (0 eyes anywhere = chest not looted: it will stock 12.)
+  function migrateEndGate(data, world) {
+    const gate = world.endGate;
+    if (!gate || !data) return;
+    const atSocket = (c) => gate.sockets.some((s) => s.x === c.x && s.y === c.y && s.z === c.z);
+    let refund = 0;
+    data.changes = (data.changes || []).filter((c) => {
+      if (!c) return false;
+      if (c.id === "end_portal") return false;             // the old arch's portal
+      if (c.id === "end_frame" || c.id === "end_frame_eye") {
+        if (atSocket(c)) return true;                      // the new ring's own edits
+        if (c.id === "end_frame_eye") refund++;            // an eye from the old arch
+        return false;
+      }
+      return true;
+    });
+    // Count every eye the save knows about: carried, stored, or set in the ring.
+    const inStacks = (arr) => (arr || []).reduce((n, s) => n + (s && s.id === "eye_of_ender" ? s.count : 0), 0);
+    let eyes = refund + inStacks(data.inventory);
+    Object.keys(data.chests || {}).forEach((k) => { eyes += inStacks(data.chests[k]); });
+    data.changes.forEach((c) => { if (c.id === "end_frame_eye") eyes++; });
+    if (eyes > 0 && eyes < 12) refund += 12 - eyes;
+    if (refund > 0) {
+      const inv = data.inventory = data.inventory || [];
+      const stack = inv.find((s) => s && s.id === "eye_of_ender");
+      if (stack) { stack.count += refund; return; }
+      let slot = inv.findIndex((s) => !s);
+      if (slot === -1 && inv.length < 36) slot = inv.length;
+      if (slot !== -1) inv[slot] = { id: "eye_of_ender", count: refund };
+    }
+  }
+
   function loadGame(slot) {
     let data;
     try { data = JSON.parse(localStorage.getItem(SLOT_KEYS[slot - 1])); } catch (e) { return false; }
@@ -2353,6 +2391,7 @@
     Game.CONST.WORLD = data.worldSize || (legacy ? 40 : DEFAULT_WORLD_SIZE);
     const world = new Game.World(null, data.seed, data.biome, legacy);
     world.generate();
+    migrateEndGate(data, world);                   // upgrade saves from the arch-shaped gate
     if (data.changes) world.applyChanges(data.changes);
     // make sure the inventory array is the right length
     const inv = new Array(36).fill(null);

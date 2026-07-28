@@ -149,7 +149,7 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     **🐷 piglin** snuffles around the floor: **trade it a gold ingot** and it
     hands back a random **💎 diamond, 💚 emerald, or 🖤 netherite**. The brick
     **Nether fortress** is a **two-storey keep**: climb the **brick stairs** to
-    the **second floor**, where the loot chest holds the **🧿 8 Eyes of
+    the **second floor**, where the loot chest holds the **🧿 12 Eyes of
     Ender**, plus **netherite, diamonds, emeralds and good building blocks**
     (glowstone, obsidian, gold). But it's **guarded by 💀 the Wither** — a
     floating, three-headed, legless menace that **flings wither skulls in
@@ -162,11 +162,13 @@ coloured outline (gold for food) so you can tell what you're pointing at.
     **sleep on one of the beds**, and that's your moment to slip inside. The
     mansion is **ancient magic — none of it can be mined**. Upstairs lives the
     **last villager**, who gives you the 🗝️ **Gold Key** to the **locked
-    portal room** beside him. Behind that door waits a **dormant End Portal**:
-    an arch of 8 frame blocks, each with an **empty eye socket**. **Tap a
-    socket while carrying an 🧿 Eye of Ender** to set it in — when the **8th
-    eye clicks into place, the portal lights up**. Tap any eye to **pop it
-    back out** (the portal fades dark again), but the frame can never be mined.
+    portal room** beside him. Behind that door waits a **dormant End Portal**,
+    lying **flat on the floor** just like the real thing: a ring of **12 frame
+    blocks** (3 per side, none on the corners) around a 3×3 portal bed, each
+    with an **empty eye socket** on top. **Tap a socket while carrying an 🧿
+    Eye of Ender** to set it in — when the **12th eye clicks into place, the
+    starry portal fills the ring**. Tap any eye to **pop it back out** (the
+    portal fades dark again), but the frame can never be mined.
   - Villagers give their key **only once**. You can **mine your way into the
     village, the temple and the igloo** if you'd rather not chase the keys —
     but the **mansion is sealed tight**, so the portal room always stands.
