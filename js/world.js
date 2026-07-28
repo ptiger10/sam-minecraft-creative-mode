@@ -378,6 +378,20 @@
     ]);
   }
 
+  // The End portal lying flat in the mansion's floor ring: a dark, starry
+  // pool whose surface sits just below the tops of the frame blocks around
+  // it, so it clearly fills the ring when you look at it.
+  function endPortalFlatGeometry() {
+    const a = new THREE.Color(0x151538), b = new THREE.Color(0x0a0a1e), star = new THREE.Color(0x9fe8ff);
+    return mergeColoredBoxes([
+      { g: Box(1.0, 0.9, 1.0), x: 0, y: -0.05, z: 0, c: b },       // the dark pool
+      { g: Box(0.72, 0.94, 0.72), x: 0, y: -0.04, z: 0, c: a },    // a lighter heart
+      { g: Box(0.12, 0.12, 0.12), x: 0.26, y: 0.42, z: -0.18, c: star },
+      { g: Box(0.1, 0.1, 0.1), x: -0.22, y: 0.42, z: 0.24, c: star },
+      { g: Box(0.1, 0.1, 0.1), x: -0.05, y: 0.42, z: -0.08, c: star }
+    ]);
+  }
+
   // An End Portal frame block: pale-green-capped dark stone with an eye socket
   // showing on its faces. Empty = a dark recessed socket; filled = a glowing
   // Eye of Ender bulging from the top and both broad faces of the arch.
@@ -473,6 +487,7 @@
     if (geomCache[id]) return geomCache[id];
     if (id === "nether_portal") return (geomCache[id] = netherPortalGeometry());
     if (id === "end_portal") return (geomCache[id] = endPortalGeometry());
+    if (id === "end_portal_flat") return (geomCache[id] = endPortalFlatGeometry());
     if (id === "exit_portal") return (geomCache[id] = exitPortalGeometry());
     if (id === "end_crystal") return (geomCache[id] = endCrystalGeometry());
     if (id === "end_frame") return (geomCache[id] = endFrameGeometry(false));
@@ -2129,7 +2144,7 @@
         if (dz === -hr && dx === 0) {
           // The doorway: a door at foot height, clear space above, a lintel up
           // top. In new worlds the FOURTH house isn't locked at all — the real
-          // challenge waits inside: an End Portal missing its 8 Eyes of Ender.
+          // challenge waits inside: an End Portal missing its 12 Eyes of Ender.
           const open = num === 1 || (num === 4 && !this.legacy);
           const doorId = open ? "door" : ("locked_door_" + num);
           this.blocks.set(World.key(x, floorY + 1, z), doorId);
@@ -2211,26 +2226,31 @@
   };
 
   // ================================================================
-  //  The End Gate: a dormant End Portal in the fourth house. Its arch
-  //  is made of 8 frame blocks, each with an empty eye socket — place
-  //  all 8 Eyes of Ender (from the Nether fortress chest) to light the
+  //  The End Gate: a dormant End Portal in the mansion's portal room.
+  //  It lies FLAT on the floor, just like the real thing: a ring of
+  //  12 frame blocks (3 per side, none on the corners) around a 3x3
+  //  portal bed. Place all 12 Eyes of Ender (from the Nether fortress
+  //  chest) in the sockets on top to fill the bed with the starry
   //  portal. Pop any eye back out and it falls dark again.
   // ================================================================
-  // The 8 sockets form an arch around the 1-wide, 2-tall doorway at (x, y..y+1):
-  // a sill in the floor, two side columns, and a three-block lintel row.
+  // (x, y, z) is the centre of the 3x3 portal bed, at floor-walk level: the
+  // frame ring sits ON the floor, so you hop over it to stand inside.
   World.prototype.buildEndGate = function (x, y, z) {
-    const sockets = [
-      { x: x, y: y - 1, z: z },                        // sill (flush with the floor)
-      { x: x - 1, y: y, z: z }, { x: x + 1, y: y, z: z },
-      { x: x - 1, y: y + 1, z: z }, { x: x + 1, y: y + 1, z: z },
-      { x: x - 1, y: y + 2, z: z }, { x: x, y: y + 2, z: z }, { x: x + 1, y: y + 2, z: z }
-    ];
+    const sockets = [];
+    for (let d = -1; d <= 1; d++) {
+      sockets.push({ x: x + d, y: y, z: z - 2 });      // near side
+      sockets.push({ x: x + d, y: y, z: z + 2 });      // far side
+      sockets.push({ x: x - 2, y: y, z: z + d });      // left side
+      sockets.push({ x: x + 2, y: y, z: z + d });      // right side
+    }
     sockets.forEach((c) => {
       this.blocks.set(World.key(c.x, c.y, c.z), "end_frame");
       this.markProtected(c.x, c.y, c.z);               // eyes go in and out; no mining
     });
-    this.markProtected(x, y, z);                       // the portal cells themselves
-    this.markProtected(x, y + 1, z);
+    // The 3x3 bed the portal fills (air until the 12th eye clicks in).
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) this.markProtected(x + dx, y, z + dz);
+    }
     this.endGate = { x: x, y: y, z: z, sockets: sockets };
   };
 
@@ -2242,13 +2262,17 @@
     return n;
   };
 
-  // Light (or darken) the portal inside the frame. Recorded as normal edits, so
-  // a saved game reloads with the portal exactly as the player left it.
+  // Light (or darken) the portal inside the frame ring: fill (or empty) the
+  // whole 3x3 bed. Recorded as normal edits, so a saved game reloads with the
+  // portal exactly as the player left it.
   World.prototype.setEndGateActive = function (on) {
     const g = this.endGate;
     if (!g) return;
-    this.setBlock(g.x, g.y, g.z, on ? "end_portal" : null);
-    this.setBlock(g.x, g.y + 1, g.z, on ? "end_portal" : null);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        this.setBlock(g.x + dx, g.y, g.z + dz, on ? "end_portal_flat" : null);
+      }
+    }
   };
 
   // ================================================================
@@ -2341,10 +2365,12 @@
       }
     }
 
-    // 5) The portal room: the second floor's far end is walled off, and the
-    //    DORMANT End Portal waits inside behind a locked door. Only the Gold
-    //    Key — a gift from the mansion's own villager — opens it.
-    const px = cx - 4;
+    // 5) The portal room: the second floor's whole west half is walled off,
+    //    and the DORMANT End Portal lies flat on its floor behind a locked
+    //    door — a 7-block-deep hall, roomy enough for the 5x5 frame ring with
+    //    walking space around it. Only the Gold Key — a gift from the
+    //    mansion's own villager — opens it.
+    const px = cx;
     for (let dz = -HZ + 1; dz <= HZ - 1; dz++) {
       const z = cz + dz;
       if (dz === 0) {
@@ -2354,7 +2380,7 @@
         for (let y = slabY + 1; y <= top2; y++) set(px, y, z, wall);
       }
     }
-    this.buildEndGate(cx - 6, slabY + 1, cz);
+    this.buildEndGate(cx - 4, slabY + 1, cz);
 
     // 6) Furnishings: torches in every corner of both floors, a work corner
     //    with a crafting table and furnace, beds, and the two treasure chests.

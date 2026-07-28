@@ -303,53 +303,75 @@ const fire = await page.evaluate(() => {
 check("a ghast fireball deals two hearts of damage", fire.before - fire.after === 4);
 check("wearing armour blocks a ghast fireball", fire.afterArmored === fire.max);
 
-// --- The mansion's portal room holds a DORMANT End Portal frame: 8 empty eye
-//     sockets, no portal until every Eye of Ender is set in place ---
+// --- The mansion's portal room holds a DORMANT End Portal frame lying flat
+//     on the floor: a ring of 12 empty eye sockets (3 per side, corners open)
+//     around a 3x3 bed, no portal until every Eye of Ender is set in place ---
 const gate = await page.evaluate(() => {
   const S = window.Game.S, W = S.world, G = window.Game;
   let endPortals = 0, frames = 0, plaque = false;
   for (const [, id] of W.blocks) {
-    if (id === "end_portal") endPortals++;
+    if (id === "end_portal" || id === "end_portal_flat") endPortals++;
     if (id === "end_frame") frames++;
     if (id === "credits_block") plaque = true;
   }
   const dormant = { endPortals, frames };
-  // The fortress chest holds the 8 Eyes of Ender (build + stock the real
+  // The whole ring lies at ONE height (flat on the floor), with 3 sockets on
+  // each side of the 5x5 ring and none on its corners.
+  const g = W.endGate, sockets = g.sockets;
+  const flatRing = sockets.every((c) => c.y === g.y);
+  const corners = [[-2, -2], [2, -2], [-2, 2], [2, 2]];
+  const cornersOpen = corners.every(([dx, dz]) =>
+    !sockets.some((c) => c.x === g.x + dx && c.z === g.z + dz));
+  const threePerSide = [
+    sockets.filter((c) => c.z === g.z - 2).length === 3,
+    sockets.filter((c) => c.z === g.z + 2).length === 3,
+    sockets.filter((c) => c.x === g.x - 2).length === 3,
+    sockets.filter((c) => c.x === g.x + 2).length === 3
+  ].every(Boolean);
+  // The lit portal fills the whole 3x3 bed inside the ring.
+  const bedIs = (id) => {
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      if (W.get(g.x + dx, g.y, g.z + dz) !== id) return false;
+    }
+    return true;
+  };
+  // The fortress chest holds the 12 Eyes of Ender (build + stock the real
   // Nether the same way stepping through a portal would).
   const nw = G._ensureNether();
   const fc = (nw.fortressChests || [])[0];
   const chest = S.chests[fc.x + "," + fc.y + "," + fc.z] || [];
   const eyesInChest = chest.reduce((n, s) => n + (s && s.id === "eye_of_ender" ? s.count : 0), 0);
-  // Place all 8 eyes through the real interaction path.
-  S.inv[0] = { id: "eye_of_ender", count: 8 };
-  const sockets = W.endGate.sockets;
-  let litAtSeven = false;
+  // Place all 12 eyes through the real interaction path.
+  S.inv[0] = { id: "eye_of_ender", count: 12 };
+  let litAtEleven = false;
   sockets.forEach((c, i) => {
-    if (i === 7) litAtSeven = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal";
+    if (i === 11) litAtEleven = W.get(g.x, g.y, g.z) === "end_portal_flat";
     G._insertEnderEye(c);
   });
-  const litAtEight = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal" &&
-                     W.get(W.endGate.x, W.endGate.y + 1, W.endGate.z) === "end_portal";
+  const litAtTwelve = bedIs("end_portal_flat");
   // Pop one back out: the portal must fade and the eye returns to the player.
   G._removeEnderEye(sockets[3]);
-  const darkAfterRemove = !W.get(W.endGate.x, W.endGate.y, W.endGate.z);
+  const darkAfterRemove = bedIs(null);
   const eyeBack = S.inv.reduce((n, s) => n + (s && s.id === "eye_of_ender" ? s.count : 0), 0);
   // The frame itself can never be mined away, even where the protection map is
   // consulted by the mining path.
   const frameProtected = sockets.every((c) => W.isProtected(c.x, c.y, c.z));
   // Put it back so the later End-entry checks find a lit portal.
   G._insertEnderEye(sockets[3]);
-  const relit = W.get(W.endGate.x, W.endGate.y, W.endGate.z) === "end_portal";
+  const relit = bedIs("end_portal_flat");
   const panel = document.getElementById("credits-panel");
   const text = panel ? panel.textContent : "";
-  return { dormant, eyesInChest, litAtSeven, litAtEight, darkAfterRemove, eyeBack,
+  return { dormant, flatRing, cornersOpen, threePerSide, eyesInChest, litAtEleven,
+    litAtTwelve, darkAfterRemove, eyeBack,
     frameProtected, relit, plaque, sam: /Sam Fort/.test(text), dave: /Dave Fort/.test(text) };
 });
 check("the portal starts dormant (no portal blocks)", gate.dormant.endPortals === 0);
-check("the frame has 8 empty eye sockets", gate.dormant.frames === 8);
-check("the Nether fortress chest holds the 8 Eyes of Ender", gate.eyesInChest === 8);
-check("7 eyes are not enough to light the portal", gate.litAtSeven === false);
-check("all 8 eyes light the End Portal", gate.litAtEight);
+check("the frame has 12 empty eye sockets", gate.dormant.frames === 12);
+check("the ring lies flat at one height", gate.flatRing);
+check("3 sockets per side, none on the corners", gate.threePerSide && gate.cornersOpen);
+check("the Nether fortress chest holds the 12 Eyes of Ender", gate.eyesInChest === 12);
+check("11 eyes are not enough to light the portal", gate.litAtEleven === false);
+check("all 12 eyes fill the ring with the End Portal", gate.litAtTwelve);
 check("removing any eye darkens the portal again", gate.darkAfterRemove);
 check("the removed eye goes back to the player", gate.eyeBack === 1);
 check("the portal frame can never be mined", gate.frameProtected);
@@ -852,7 +874,7 @@ check("holding a shield renders it in your hand", shieldHand.heldShows);
 const houses = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
   let endPortal = null;
-  for (const [k, id] of W.blocks) if (id === "end_portal") endPortal = k.split(",").map(Number);
+  for (const [k, id] of W.blocks) if (id === "end_portal_flat") endPortal = k.split(",").map(Number);
   let villagerWallSealed = false;
   W.questVillagers.forEach((v) => {
     if (v.userData.house === 4) return;   // the mansion villager — sealed on purpose
@@ -1058,7 +1080,7 @@ const enterEnd = await page.evaluate(() => {
   const S = window.Game.S, W = S.world;
   let best = null;
   for (const [k, id] of W.blocks) {
-    if (id !== "end_portal") continue;
+    if (id !== "end_portal_flat") continue;
     const p = k.split(",").map(Number);
     if (!best || p[1] < best[1]) best = p;
   }
